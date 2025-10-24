@@ -13,9 +13,10 @@ DEV_VMS=("integration-dev" "web-dev" "control-dev" "validation-dev")
 # Machine management directory
 MACHINE_DIR="/Users/davidxu/repos/univers-machine"
 
-# Get script directory and config path
+# Get script directory and config paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STYLE_CONFIG="$SCRIPT_DIR/../configs/machine-tmux-style.conf"
+DESKTOP_STYLE_CONFIG="$SCRIPT_DIR/../configs/machine-desktop-tmux-style.conf"
+MOBILE_STYLE_CONFIG="$SCRIPT_DIR/../configs/machine-mobile-tmux-style.conf"
 
 # Color codes
 GREEN='\033[0;32m'
@@ -73,12 +74,12 @@ create_desktop_view() {
     local first_vm="${DEV_VMS[0]}"
     tmux new-session -d -s machine-desktop-view -n "$first_vm"
 
-    # Apply style configuration
-    if [ -f "$STYLE_CONFIG" ]; then
-        tmux source-file "$STYLE_CONFIG"
-        print_info "已应用样式配置"
+    # Apply desktop style configuration
+    if [ -f "$DESKTOP_STYLE_CONFIG" ]; then
+        tmux source-file "$DESKTOP_STYLE_CONFIG"
+        print_info "已应用桌面视图样式配置"
     else
-        print_warning "样式配置文件未找到: $STYLE_CONFIG"
+        print_warning "样式配置文件未找到: $DESKTOP_STYLE_CONFIG"
     fi
 
     tmux send-keys -t "machine-desktop-view:$first_vm" "orbctl run --machine $first_vm tmux attach -t univers-desktop-view" C-m
@@ -112,12 +113,12 @@ create_mobile_view() {
     local first_vm="${DEV_VMS[0]}"
     tmux new-session -d -s machine-mobile-view -n "$first_vm"
 
-    # Apply style configuration
-    if [ -f "$STYLE_CONFIG" ]; then
-        tmux source-file "$STYLE_CONFIG"
-        print_info "已应用样式配置"
+    # Apply mobile style configuration (simplified)
+    if [ -f "$MOBILE_STYLE_CONFIG" ]; then
+        tmux source-file "$MOBILE_STYLE_CONFIG"
+        print_info "已应用移动视图样式配置（简化版）"
     else
-        print_warning "样式配置文件未找到: $STYLE_CONFIG"
+        print_warning "样式配置文件未找到: $MOBILE_STYLE_CONFIG"
     fi
 
     tmux send-keys -t "machine-mobile-view:$first_vm" "orbctl run --machine $first_vm tmux attach -t univers-mobile-view" C-m

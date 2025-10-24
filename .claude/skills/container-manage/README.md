@@ -87,12 +87,20 @@ Manage machine-level tmux sessions that aggregate VM tmux sessions.
 ```
 
 **Styling:**
-Machine-level sessions use a custom blue-themed style (defined in `configs/machine-tmux-style.conf`) to distinguish them from VM sessions (which use orange-yellow theme):
-- **Status bar**: Deep blue background with cyan text
+Machine-level sessions use custom blue-themed styles to distinguish them from VM sessions (which use orange-yellow theme):
+
+**Desktop View** (`machine-desktop-tmux-style.conf`):
+- **Status bar**: Full information display
 - **Left**: 🖥️ Machine | session-name |
 - **Right**: VM count, window info, date & time
 - **Active window**: Bright blue with ✓
 - **Inactive window**: Gray-blue
+
+**Mobile View** (`machine-mobile-tmux-style.conf`):
+- **Status bar**: Simplified - only window list
+- **Left**: (empty)
+- **Right**: (empty)
+- Focus on window navigation without distractions
 
 **What it does:**
 Creates machine-level tmux sessions on your physical Mac that aggregate all VM tmux sessions:
@@ -155,18 +163,27 @@ Simply mention container or VM management tasks, and Claude will use this skill 
 
 ## Configuration Files
 
-### `configs/machine-tmux-style.conf`
-Tmux style configuration for machine-level sessions. Automatically applied when creating machine-desktop-view and machine-mobile-view sessions.
+### `configs/machine-desktop-tmux-style.conf`
+Tmux style configuration for machine-desktop-view. Automatically applied when creating the desktop view session.
 
 **Features:**
 - Blue color scheme (distinguishes from VM's orange-yellow theme)
-- Custom status bar with machine identifier
+- Full status bar with machine identifier, VM count, time, etc.
 - Window navigation shortcuts (Ctrl+Y/U, Alt+0-4)
 - Scroll shortcuts (Ctrl+J/K)
 
+### `configs/machine-mobile-tmux-style.conf`
+Tmux style configuration for machine-mobile-view. Simplified version for focused window navigation.
+
+**Features:**
+- Blue color scheme (consistent with desktop view)
+- Minimal status bar - only window list (no left/right info)
+- Same navigation shortcuts as desktop view
+- Optimized for distraction-free window switching
+
 **Customization:**
-You can edit this file to change:
-- Colors (see color reference in the file)
+You can edit these files to change:
+- Colors (see color reference in the files)
 - Status bar content and format
 - Key bindings
 - Other tmux options
