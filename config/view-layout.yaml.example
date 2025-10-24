@@ -1,0 +1,99 @@
+# View Layout Configuration Example
+# 虚拟机 tmux 视图布局配置示例
+#
+# 使用方法:
+# 1. 复制此文件为 view-layout.yaml
+#    cp config/view-layout.yaml.example config/view-layout.yaml
+# 2. 根据需要修改 view-layout.yaml
+# 3. view-layout.yaml 不会被 git 同步（已在 .gitignore 中）
+#
+# 注意:
+# - 这个配置定义了每个虚拟机内部的 desktop-view 和 mobile-view 窗口布局
+# - 修改后需要在虚拟机内重启视图会话才能生效
+
+# Desktop View 配置
+# 桌面聚合视图 - 分屏布局
+desktop-view:
+  session-name: univers-desktop-view
+  base-index: 1
+
+  windows:
+    # Window 1: workbench (4 panes 分屏)
+    - name: workbench
+      layout: split
+      panes:
+        - session: univers-developer
+          position: left        # 占据左侧
+          width: 55%           # 占 55% 宽度
+        - session: univers-server
+          position: top-right   # 右上
+        - session: univers-ui
+          position: mid-right   # 右中
+        - session: univers-web
+          position: bottom-right # 右下
+
+    # Window 2: operation (1 pane)
+    - name: operation
+      layout: single
+      panes:
+        - session: univers-operator
+
+    # Window 3: manager (1 pane)
+    - name: manager
+      layout: single
+      panes:
+        - session: univers-manager
+
+# Mobile View 配置
+# 移动聚合视图 - 多窗口切换布局
+mobile-view:
+  session-name: univers-mobile-view
+  base-index: 1
+
+  windows:
+    # Window 1: dev (1 pane)
+    - name: dev
+      layout: single
+      panes:
+        - session: univers-developer
+
+    # Window 2: service (3 panes 竖向排列)
+    - name: service
+      layout: vertical-stack
+      panes:
+        - session: univers-server
+        - session: univers-ui
+        - session: univers-web
+
+    # Window 3: ops (1 pane)
+    - name: ops
+      layout: single
+      panes:
+        - session: univers-operator
+
+    # Window 4: manager (1 pane)
+    - name: manager
+      layout: single
+      panes:
+        - session: univers-manager
+
+# 可选: 自定义视图
+# 你可以添加自定义视图配置
+# custom-views:
+#   my-view:
+#     session-name: univers-my-view
+#     base-index: 1
+#     windows:
+#       - name: custom1
+#         layout: single
+#         panes:
+#           - session: univers-developer
+
+# 依赖会话说明
+# 以下会话需要在视图启动前运行:
+# - univers-developer: 开发工具会话
+# - univers-server: 服务器会话
+# - univers-ui: UI 开发会话
+# - univers-web: Web 开发会话
+# - univers-operator: 运维工具会话
+# - univers-manager: 容器管理会话
