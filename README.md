@@ -4,11 +4,11 @@
 
 ## 功能特性
 
-### 🐳 容器和虚拟机管理 (Container Management)
+### 🐳 机器管理 (Machine Management)
 - VM 生命周期管理（清理、克隆、批量操作）
 - 资源监控和统计
 - 批量命令执行
-- 详见 [.claude/skills/container-manage/](.claude/skills/container-manage/)
+- 详见 [.claude/skills/machine-manage/](.claude/skills/machine-manage/)
 
 ### 🖥️ 机器层面的 Tmux 聚合视图 (Machine-Level Views)
 - **machine-desktop-view**: 聚合所有虚拟机的桌面视图
@@ -26,12 +26,12 @@
 
 ```
 univers-machine/
-├── .claude/skills/container-manage/  # 容器管理 skill
+├── .claude/skills/machine-manage/    # 机器管理 skill
 │   ├── configs/                      # Tmux 样式配置
 │   ├── scripts/                      # 管理脚本
 │   └── README.md                     # 详细文档
 ├── config/                           # 配置文件目录
-│   ├── view-layout.yaml.example      # 视图布局示例（同步）
+│   ├── vms.yaml.example              # VM 配置示例（同步）
 │   └── README.md                     # 配置说明
 └── README.md                         # 本文件
 ```
@@ -42,35 +42,35 @@ univers-machine/
 
 ```bash
 # 启动 machine-level 聚合视图
-.claude/skills/container-manage/scripts/machine-view-manager.sh start
+machine-manager start
 
 # 连接到桌面视图（完整信息显示）
-.claude/skills/container-manage/scripts/machine-view-manager.sh attach desktop
+machine-manager attach desktop
 
 # 连接到移动视图（简化显示）
-.claude/skills/container-manage/scripts/machine-view-manager.sh attach mobile
+machine-manager attach mobile
 
 # 查看所有虚拟机资源使用情况
-.claude/skills/container-manage/scripts/list-resources.sh
+.claude/skills/machine-manage/scripts/list-resources.sh
 
 # 清理虚拟机缓存
-.claude/skills/container-manage/scripts/cleanup-dev.sh ubuntu
+.claude/skills/machine-manage/scripts/cleanup-dev.sh ubuntu
 
 # 克隆虚拟机
-.claude/skills/container-manage/scripts/clone-vm.sh ubuntu new-vm --cleanup
+.claude/skills/machine-manage/scripts/clone-vm.sh ubuntu new-vm --cleanup
 ```
 
-### 2. 配置视图布局
+### 2. 配置虚拟机列表
 
 ```bash
 # 复制配置示例
-cp config/view-layout.yaml.example config/view-layout.yaml
+cp config/vms.yaml.example config/vms.yaml
 
-# 编辑配置
-vim config/view-layout.yaml
+# 编辑配置（设置哪些 VM 显示在聚合视图中）
+vim config/vms.yaml
 
-# 应用配置（TODO: 待实现）
-# ./scripts/apply-view-layout.sh <vm-name>
+# 重启 machine views 使配置生效
+machine-manager restart
 ```
 
 ## 虚拟机列表

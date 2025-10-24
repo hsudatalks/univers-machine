@@ -1,6 +1,6 @@
-# Container Management Skill
+# Machine Management Skill
 
-This skill provides comprehensive container and VM management for OrbStack on this physical machine.
+This skill provides comprehensive machine-level management for this physical server, including OrbStack VM lifecycle, tmux session aggregation, and resource monitoring.
 
 ## Capabilities
 
