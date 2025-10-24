@@ -1,0 +1,114 @@
+# Virtual Machines Configuration
+# 虚拟机配置文件
+#
+# 使用方法:
+# 1. 复制此文件为 vms.yaml
+#    cp config/vms.yaml.example config/vms.yaml
+# 2. 根据实际情况修改 vms.yaml
+# 3. vms.yaml 不会被 git 同步（已在 .gitignore 中）
+
+# 虚拟机列表
+# 这些虚拟机将自动出现在 machine-desktop-view 和 machine-mobile-view 中
+vms:
+  # 集成测试开发环境
+  integration-dev:
+    enabled: true              # 是否启用
+    ip: 192.168.139.231
+    os: ubuntu
+    purpose: 集成测试开发环境
+    repos:
+      - hvac-workbench
+      - hvac-operation
+      - univers-container
+    views:
+      desktop: univers-desktop-view
+      mobile: univers-mobile-view
+
+  # Web 开发环境
+  web-dev:
+    enabled: true
+    ip: 192.168.139.64
+    os: ubuntu
+    purpose: Web 开发环境
+    repos:
+      - hvac-workbench
+      - hvac-operation
+      - univers-container
+    views:
+      desktop: univers-desktop-view
+      mobile: univers-mobile-view
+
+  # 控制系统开发环境
+  control-dev:
+    enabled: true
+    ip: 192.168.139.14
+    os: ubuntu
+    purpose: 控制系统开发环境
+    repos:
+      - hvac-workbench
+      - hvac-operation
+      - univers-container
+    views:
+      desktop: univers-desktop-view
+      mobile: univers-mobile-view
+
+  # 验证测试环境
+  validation-dev:
+    enabled: true
+    ip: 192.168.139.204
+    os: ubuntu
+    purpose: 验证测试环境
+    repos:
+      - hvac-workbench
+      - hvac-operation
+      - univers-container
+    views:
+      desktop: univers-desktop-view
+      mobile: univers-mobile-view
+
+# 基础镜像（不包含在聚合视图中）
+base-images:
+  ubuntu:
+    ip: 192.168.139.224
+    os: ubuntu
+    purpose: 基础镜像模板
+    note: 用于克隆新的开发虚拟机
+
+# 其他虚拟机（可选）
+# 如果你有其他虚拟机，可以在这里添加
+# other-vms:
+#   eu2:
+#     enabled: false
+#     ip: 192.168.139.90
+#     purpose: 欧洲区域测试
+#   sg1:
+#     enabled: false
+#     ip: 192.168.139.130
+#     purpose: 新加坡区域测试
+
+# Machine 管理会话配置
+machine-manage:
+  enabled: true               # 是否在聚合视图中包含 machine-manage 窗口
+  session: univers-machine-manage
+  working-dir: /Users/davidxu/repos/univers-machine
+
+# 显示顺序
+# machine-desktop-view 和 machine-mobile-view 的窗口顺序
+display-order:
+  - integration-dev
+  - web-dev
+  - control-dev
+  - validation-dev
+  # machine-manage 会自动添加到最后（如果 enabled: true）
+
+# 窗口创建规则
+window-creation:
+  # 只为 enabled: true 的虚拟机创建窗口
+  require-enabled: true
+
+  # 是否检查虚拟机是否运行
+  check-running: false        # false 表示不管虚拟机是否运行都创建窗口
+
+  # 连接命令模板
+  desktop-command: "orbctl run --machine {vm_name} tmux attach -t {desktop_view}"
+  mobile-command: "orbctl run --machine {vm_name} tmux attach -t {mobile_view}"

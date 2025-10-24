@@ -7,9 +7,6 @@ set -e
 
 COMMAND="${1:-status}"
 
-# VM list for dev machines
-DEV_VMS=("integration-dev" "web-dev" "control-dev" "validation-dev")
-
 # Machine management directory
 MACHINE_DIR="/Users/davidxu/repos/univers-machine"
 
@@ -17,6 +14,47 @@ MACHINE_DIR="/Users/davidxu/repos/univers-machine"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DESKTOP_STYLE_CONFIG="$SCRIPT_DIR/../configs/machine-desktop-tmux-style.conf"
 MOBILE_STYLE_CONFIG="$SCRIPT_DIR/../configs/machine-mobile-tmux-style.conf"
+VMS_CONFIG="$MACHINE_DIR/config/vms.yaml"
+
+# Load VM list from config or use defaults
+load_vm_list() {
+    local vms=()
+
+    if [ -f "$VMS_CONFIG" ]; then
+        # Parse YAML config to get enabled VMs in display-order
+        # First try to get display-order
+        local order_vms=$(grep -A 20 "^display-order:" "$VMS_CONFIG" | grep "^  - " | sed 's/^  - //' | grep -v "^#")
+
+        if [ -n "$order_vms" ]; then
+            while IFS= read -r vm; do
+                # Check if VM is enabled
+                local enabled=$(grep -A 5 "^  $vm:" "$VMS_CONFIG" | grep "enabled:" | awk '{print $2}')
+                if [ "$enabled" = "true" ]; then
+                    vms+=("$vm")
+                fi
+            done <<< "$order_vms"
+        else
+            # Fallback: get all enabled VMs
+            local vm_names=$(grep -E "^  [a-z-]+:" "$VMS_CONFIG" | sed 's/://g' | sed 's/^  //' | grep -v "^#")
+            while IFS= read -r vm; do
+                local enabled=$(grep -A 5 "^  $vm:" "$VMS_CONFIG" | grep "enabled:" | awk '{print $2}')
+                if [ "$enabled" = "true" ]; then
+                    vms+=("$vm")
+                fi
+            done <<< "$vm_names"
+        fi
+    fi
+
+    # If no VMs loaded from config, use defaults
+    if [ ${#vms[@]} -eq 0 ]; then
+        vms=("integration-dev" "web-dev" "control-dev" "validation-dev")
+    fi
+
+    echo "${vms[@]}"
+}
+
+# VM list for dev machines (loaded dynamically)
+DEV_VMS=($(load_vm_list))
 
 # Color codes
 GREEN='\033[0;32m'
@@ -170,12 +208,14 @@ start_sessions() {
     echo "  tmux attach -t machine-mobile-view   # 移动视图"
     echo
     print_info "在 tmux 中切换窗口："
-    echo "  Ctrl+B 然后按数字键 (0-4) 切换窗口"
-    echo "    0: integration-dev"
-    echo "    1: web-dev"
-    echo "    2: control-dev"
-    echo "    3: validation-dev"
-    echo "    4: machine-manage (物理机管理)"
+    local total_windows=$((${#DEV_VMS[@]} + 1))
+    echo "  Ctrl+B 然后按数字键 (0-$((total_windows - 1))) 切换窗口"
+    local i=0
+    for vm in "${DEV_VMS[@]}"; do
+        echo "    $i: $vm"
+        i=$((i + 1))
+    done
+    echo "    $i: machine-manage (物理机管理)"
     echo "  Ctrl+B 然后按 w - 显示所有窗口列表"
     echo "  Ctrl+B 然后按 n - 下一个窗口"
     echo "  Ctrl+B 然后按 p - 上一个窗口"
