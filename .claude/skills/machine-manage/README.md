@@ -148,9 +148,15 @@ Each session has 5 windows:
 - Window 3: validation-dev (VM)
 - Window 4: machine-manage (物理机管理 - local session)
 
+**Features:**
+
+- **Dynamic Container Detection**: Automatically detects all running containers/VMs
+- **Intelligent Window Management**: Dynamically creates/removes windows based on running containers
+- **Live Refresh**: Update windows without exiting tmux using the `refresh` command
+
 **Examples:**
 ```bash
-# Start machine view sessions
+# Start machine view sessions (auto-detects containers)
 ./scripts/machine-view-manager.sh start
 
 # Check status
@@ -162,12 +168,28 @@ Each session has 5 windows:
 # Attach to mobile view
 ./scripts/machine-view-manager.sh attach mobile
 
+# Refresh windows while in tmux (without exiting)
+# In tmux, you can run:
+./scripts/machine-view-manager.sh refresh
+# Or via mm alias:
+mm refresh
+
 # Restart all sessions
 ./scripts/machine-view-manager.sh restart
 
 # Stop all sessions
 ./scripts/machine-view-manager.sh stop
 ```
+
+**Smart Window Management:**
+
+The machine-view-manager now automatically:
+- Detects all currently running containers/VMs
+- Creates one window per running container
+- Adds/removes windows dynamically when containers start/stop
+- Preserves the `machine-manage` window for physical machine management
+
+You can refresh windows without leaving tmux by running `mm refresh` from within a tmux session.
 
 **Tmux Navigation:**
 - `Ctrl+B` then `0-4` - Switch to specific window (0-3: VMs, 4: machine-manage)

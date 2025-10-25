@@ -52,38 +52,38 @@ case "$CONTAINER_SYSTEM" in
         ;;
 esac
 
-# Load VM list from config or use defaults
+# Load VM list dynamically from actual running containers/VMs
+# This detects real containers/VMs instead of relying on static config
 load_vm_list() {
     local vms=()
+    local container_system="$(detect_container_system)"
 
-    if [ -f "$VMS_CONFIG" ]; then
-        # Parse YAML config to get enabled VMs in display-order
-        # First try to get display-order
-        local order_vms=$(grep -A 20 "^display-order:" "$VMS_CONFIG" | grep "^  - " | sed 's/^  - //' | grep -v "^#")
+    # Get running containers from actual system (not config)
+    case "$container_system" in
+        lxd)
+            # Get running LXD containers, sorted by name
+            vms=($(lxc list --format=json 2>/dev/null | jq -r '.[] | select(.status == "Running") | .name' 2>/dev/null | sort))
+            ;;
+        orbstack)
+            # Get running OrbStack VMs, sorted by name
+            vms=($(orb list 2>/dev/null | grep " running " | awk '{print $1}' | sort))
+            ;;
+    esac
 
-        if [ -n "$order_vms" ]; then
-            while IFS= read -r vm; do
-                # Check if VM is enabled
-                local enabled=$(grep -A 5 "^  $vm:" "$VMS_CONFIG" | grep "enabled:" | awk '{print $2}')
-                if [ "$enabled" = "true" ]; then
-                    vms+=("$vm")
-                fi
-            done <<< "$order_vms"
-        else
-            # Fallback: get all enabled VMs
-            local vm_names=$(grep -E "^  [a-z-]+:" "$VMS_CONFIG" | sed 's/://g' | sed 's/^  //' | grep -v "^#")
-            while IFS= read -r vm; do
-                local enabled=$(grep -A 5 "^  $vm:" "$VMS_CONFIG" | grep "enabled:" | awk '{print $2}')
-                if [ "$enabled" = "true" ]; then
-                    vms+=("$vm")
-                fi
-            done <<< "$vm_names"
-        fi
-    fi
-
-    # If no VMs loaded from config, use defaults
+    # If no running containers found, return empty (caller will handle)
     if [ ${#vms[@]} -eq 0 ]; then
-        vms=("integration-dev" "web-dev" "control-dev" "validation-dev")
+        # Try to get from config as fallback
+        if [ -f "$VMS_CONFIG" ]; then
+            local order_vms=$(grep -A 20 "^display-order:" "$VMS_CONFIG" 2>/dev/null | grep "^  - " | sed 's/^  - //' | grep -v "^#")
+            if [ -n "$order_vms" ]; then
+                while IFS= read -r vm; do
+                    local enabled=$(grep -A 5 "^  $vm:" "$VMS_CONFIG" 2>/dev/null | grep "enabled:" | awk '{print $2}')
+                    if [ "$enabled" = "true" ]; then
+                        vms+=("$vm")
+                    fi
+                done <<< "$order_vms"
+            fi
+        fi
     fi
 
     echo "${vms[@]}"
@@ -365,6 +365,92 @@ attach_session() {
     fi
 }
 
+# Refresh windows in existing sessions to match current running containers
+refresh_windows() {
+    echo "=== 刷新 Machine View Sessions 窗口 ==="
+    echo
+
+    # Reload current VM list
+    DEV_VMS=($(load_vm_list))
+
+    if [ ${#DEV_VMS[@]} -eq 0 ]; then
+        print_warning "没有找到运行中的容器/虚拟机"
+        return 1
+    fi
+
+    echo "发现容器/虚拟机: ${DEV_VMS[@]}"
+    echo
+
+    # Refresh desktop view
+    if session_exists "machine-desktop-view"; then
+        print_info "刷新 machine-desktop-view..."
+
+        # Get current window list
+        local current_windows=$(tmux list-windows -t machine-desktop-view -F "#{window_name}" | head -n -1)
+
+        # Add missing windows
+        local last_window_index=0
+        for vm in "${DEV_VMS[@]}"; do
+            if ! echo "$current_windows" | grep -q "^$vm$"; then
+                print_info "  添加窗口: $vm"
+                tmux new-window -t machine-desktop-view -n "$vm"
+                tmux send-keys -t "machine-desktop-view:$vm" "orbctl run --machine $vm tmux attach -t univers-desktop-view 2>/dev/null || lxc exec $vm -- tmux attach -t univers-desktop-view 2>/dev/null || echo '会话不可用'" C-m
+            fi
+            last_window_index=$((last_window_index + 1))
+        done
+
+        # Remove old windows (except machine-manage)
+        local window_list=$(tmux list-windows -t machine-desktop-view -F "#{window_name}:#{window_index}")
+        while IFS=: read -r window_name window_index; do
+            if [ "$window_name" != "machine-manage" ]; then
+                if ! printf '%s\n' "${DEV_VMS[@]}" | grep -q "^$window_name$"; then
+                    print_info "  移除窗口: $window_name"
+                    tmux kill-window -t "machine-desktop-view:$window_index"
+                fi
+            fi
+        done <<< "$window_list"
+
+        print_success "machine-desktop-view 已刷新"
+    else
+        print_warning "machine-desktop-view 未运行，跳过"
+    fi
+
+    echo
+
+    # Refresh mobile view (same logic)
+    if session_exists "machine-mobile-view"; then
+        print_info "刷新 machine-mobile-view..."
+
+        # Similar logic for mobile view
+        local current_windows=$(tmux list-windows -t machine-mobile-view -F "#{window_name}" | head -n -1)
+
+        for vm in "${DEV_VMS[@]}"; do
+            if ! echo "$current_windows" | grep -q "^$vm$"; then
+                print_info "  添加窗口: $vm"
+                tmux new-window -t machine-mobile-view -n "$vm"
+                tmux send-keys -t "machine-mobile-view:$vm" "orbctl run --machine $vm tmux attach -t univers-mobile-view 2>/dev/null || lxc exec $vm -- tmux attach -t univers-mobile-view 2>/dev/null || echo '会话不可用'" C-m
+            fi
+        done
+
+        local window_list=$(tmux list-windows -t machine-mobile-view -F "#{window_name}:#{window_index}")
+        while IFS=: read -r window_name window_index; do
+            if [ "$window_name" != "machine-manage" ]; then
+                if ! printf '%s\n' "${DEV_VMS[@]}" | grep -q "^$window_name$"; then
+                    print_info "  移除窗口: $window_name"
+                    tmux kill-window -t "machine-mobile-view:$window_index"
+                fi
+            fi
+        done <<< "$window_list"
+
+        print_success "machine-mobile-view 已刷新"
+    else
+        print_warning "machine-mobile-view 未运行，跳过"
+    fi
+
+    echo
+    print_success "所有会话已刷新！可在 tmux 中按 Ctrl+B w 查看新的窗口列表"
+}
+
 # Main command handling
 case "$COMMAND" in
     start)
@@ -385,6 +471,9 @@ case "$COMMAND" in
         sleep 2
         start_sessions
         ;;
+    refresh)
+        refresh_windows
+        ;;
     -h|--help|help)
         echo "Machine View Manager - 机器层面 tmux 会话管理"
         echo "支持 LXD (Linux) 和 OrbStack (macOS)"
@@ -399,6 +488,7 @@ case "$COMMAND" in
         echo "  status        - 显示会话状态"
         echo "  attach <type> - 连接到指定会话 (desktop|mobile)"
         echo "  restart       - 重启所有会话"
+        echo "  refresh       - 刷新窗口以匹配当前运行的容器/VM（无需退出 tmux）"
         echo "  -h, --help    - 显示此帮助信息"
         echo
         echo "Examples:"
@@ -407,6 +497,7 @@ case "$COMMAND" in
         echo "  $0 attach mobile      # 连接移动视图"
         echo "  $0 status             # 查看状态"
         echo "  $0 restart            # 重启所有会话"
+        echo "  $0 refresh            # 刷新窗口（在 tmux 中运行）"
         echo
         echo "Machine Views:"
         echo "  machine-desktop-view  - 聚合所有容器/VM 的桌面视图（完整信息）"
