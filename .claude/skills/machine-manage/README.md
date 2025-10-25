@@ -1,10 +1,31 @@
-# Container Management Skill
+# Machine Management Skill
 
-This skill provides container and VM management capabilities for OrbStack.
+This skill provides comprehensive machine-level management for physical servers, including OrbStack VM lifecycle, tmux session aggregation, and resource monitoring.
+
+## Installation
+
+Run the installation script to set up the `machine-manager` command:
+
+```bash
+.claude/skills/machine-manage/install.sh
+```
+
+This will:
+- Create `/usr/local/bin/machine-manager` symlink for easy access
+- Initialize configuration file from example if not exists
+- Verify installation
+
+After installation, you can use `machine-manager` from anywhere:
+
+```bash
+machine-manager start    # 启动所有 machine view 会话
+machine-manager status   # 查看状态
+machine-manager attach desktop  # 连接桌面视图
+```
 
 ## What This Skill Does
 
-When you invoke the `container-manage` skill in Claude Code, it gives Claude specialized knowledge and tools to manage your OrbStack VMs efficiently.
+When you invoke the `machine-manage` skill in Claude Code, it gives Claude specialized knowledge and tools to manage your OrbStack VMs and machine-level tmux sessions efficiently.
 
 ## Available Scripts
 
@@ -195,7 +216,7 @@ Changes will apply to newly created sessions.
 You can also run the scripts directly from the terminal:
 
 ```bash
-cd .claude/skills/container-manage
+cd .claude/skills/machine-manage
 ./scripts/list-resources.sh
 ```
 
