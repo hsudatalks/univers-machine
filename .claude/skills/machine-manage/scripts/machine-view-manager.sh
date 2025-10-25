@@ -334,8 +334,10 @@ case "$COMMAND" in
         sleep 2
         start_sessions
         ;;
-    *)
-        echo "Usage: $0 <start|stop|status|attach|restart> [desktop|mobile]"
+    -h|--help|help)
+        echo "Machine View Manager - 机器层面 tmux 会话管理"
+        echo
+        echo "Usage: $0 <command> [options]"
         echo
         echo "Commands:"
         echo "  start         - 创建并启动 machine view 会话"
@@ -343,11 +345,28 @@ case "$COMMAND" in
         echo "  status        - 显示会话状态"
         echo "  attach <type> - 连接到指定会话 (desktop|mobile)"
         echo "  restart       - 重启所有会话"
+        echo "  -h, --help    - 显示此帮助信息"
         echo
         echo "Examples:"
-        echo "  $0 start"
-        echo "  $0 attach desktop"
-        echo "  $0 status"
+        echo "  $0 start              # 启动所有会话"
+        echo "  $0 attach desktop     # 连接桌面视图"
+        echo "  $0 attach mobile      # 连接移动视图"
+        echo "  $0 status             # 查看状态"
+        echo "  $0 restart            # 重启所有会话"
+        echo
+        echo "Machine Views:"
+        echo "  machine-desktop-view  - 聚合所有 VM 的桌面视图（完整信息）"
+        echo "  machine-mobile-view   - 聚合所有 VM 的移动视图（简化显示）"
+        echo "  univers-machine-manage - 物理机管理会话"
+        echo
+        echo "Configuration:"
+        echo "  VM list: $VMS_CONFIG"
+        exit 0
+        ;;
+    *)
+        echo "错误: 未知命令 '$COMMAND'"
+        echo
+        echo "使用 '$0 --help' 查看帮助"
         exit 1
         ;;
 esac
