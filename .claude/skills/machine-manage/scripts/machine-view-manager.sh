@@ -208,18 +208,14 @@ create_desktop_view() {
         print_warning "样式配置文件未找到: $DESKTOP_STYLE_CONFIG"
     fi
 
-    # Create command that properly handles cross-platform container access
-    # Use the loop script to maintain persistent connections
-    local attach_script="$SCRIPT_DIR/scripts/container-view-attach-loop.sh"
-
-    # Attach to first VM with persistent loop
-    tmux send-keys -t "machine-desktop-view:$first_vm" "bash $attach_script $first_vm univers-desktop-view univers-manager" C-m
+    # Attach to first VM's container session
+    # Note: --project is needed to ensure lxc commands access the correct project
+    tmux send-keys -t "machine-desktop-view:$first_vm" "lxc exec --project default $first_vm -- su ubuntu -c 'unset TMUX && exec tmux attach -t univers-desktop-view'" C-m
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-desktop-view -n "$vm"
-        # Use persistent loop attachment for all VMs
-        tmux send-keys -t "machine-desktop-view:$vm" "bash $attach_script $vm univers-desktop-view univers-manager" C-m
+        tmux send-keys -t "machine-desktop-view:$vm" "lxc exec --project default $vm -- su ubuntu -c 'unset TMUX && exec tmux attach -t univers-desktop-view'" C-m
     done
 
     # Add machine-manage window at the end
@@ -253,18 +249,14 @@ create_mobile_view() {
         print_warning "样式配置文件未找到: $MOBILE_STYLE_CONFIG"
     fi
 
-    # Create command that properly handles cross-platform container access
-    # Use the loop script to maintain persistent connections
-    local attach_script="$SCRIPT_DIR/scripts/container-view-attach-loop.sh"
-
-    # Attach to first VM with persistent loop
-    tmux send-keys -t "machine-mobile-view:$first_vm" "bash $attach_script $first_vm univers-mobile-view univers-manager" C-m
+    # Attach to first VM's container session
+    # Note: --project is needed to ensure lxc commands access the correct project
+    tmux send-keys -t "machine-mobile-view:$first_vm" "lxc exec --project default $first_vm -- su ubuntu -c 'unset TMUX && exec tmux attach -t univers-mobile-view'" C-m
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-mobile-view -n "$vm"
-        # Use persistent loop attachment for all VMs
-        tmux send-keys -t "machine-mobile-view:$vm" "bash $attach_script $vm univers-mobile-view univers-manager" C-m
+        tmux send-keys -t "machine-mobile-view:$vm" "lxc exec --project default $vm -- su ubuntu -c 'unset TMUX && exec tmux attach -t univers-mobile-view'" C-m
     done
 
     # Add machine-manage window at the end
@@ -453,14 +445,12 @@ refresh_windows() {
         local current_windows=$(tmux list-windows -t machine-desktop-view -F "#{window_name}" | head -n -1)
 
         # Add missing windows
-        local attach_script="$SCRIPT_DIR/scripts/container-view-attach-loop.sh"
         local last_window_index=0
         for vm in "${DEV_VMS[@]}"; do
             if ! echo "$current_windows" | grep -q "^$vm$"; then
                 print_info "  添加窗口: $vm"
                 tmux new-window -t machine-desktop-view -n "$vm"
-                # Use persistent loop attachment
-                tmux send-keys -t "machine-desktop-view:$vm" "bash $attach_script $vm univers-desktop-view univers-manager" C-m
+                tmux send-keys -t "machine-desktop-view:$vm" "lxc exec --project default $vm -- su ubuntu -c 'unset TMUX && exec tmux attach -t univers-desktop-view'" C-m
             fi
             last_window_index=$((last_window_index + 1))
         done
@@ -489,14 +479,12 @@ refresh_windows() {
 
         # Similar logic for mobile view
         local current_windows=$(tmux list-windows -t machine-mobile-view -F "#{window_name}" | head -n -1)
-        local attach_script="$SCRIPT_DIR/scripts/container-view-attach-loop.sh"
 
         for vm in "${DEV_VMS[@]}"; do
             if ! echo "$current_windows" | grep -q "^$vm$"; then
                 print_info "  添加窗口: $vm"
                 tmux new-window -t machine-mobile-view -n "$vm"
-                # Use persistent loop attachment
-                tmux send-keys -t "machine-mobile-view:$vm" "bash $attach_script $vm univers-mobile-view univers-manager" C-m
+                tmux send-keys -t "machine-mobile-view:$vm" "lxc exec --project default $vm -- su ubuntu -c 'unset TMUX && exec tmux attach -t univers-mobile-view'" C-m
             fi
         done
 
