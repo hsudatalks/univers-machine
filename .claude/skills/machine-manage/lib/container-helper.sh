@@ -128,8 +128,33 @@ container_is_running() {
     esac
 }
 
-# Execute command in container/VM
+# Execute command in container/VM with proper user account
+# 🔑 重要：自动使用正确的用户账号（ubuntu 用于 LXD，davidxu 用于 OrbStack）
 container_exec() {
+    local name="$1"
+    shift
+    local container_system="$(detect_container_system)"
+    local os="$(detect_os)"
+
+    case "$container_system" in
+        lxd)
+            # LXD: 使用 ubuntu 用户（不能用 root，root 无法访问 ubuntu 用户的 tmux 会话）
+            lxc exec "$name" -- su ubuntu -c "$*"
+            ;;
+        orbstack)
+            # OrbStack: 使用 davidxu 用户（该用户拥有所有会话和配置）
+            orb run --machine "$name" bash -c "$*"
+            ;;
+        *)
+            echo "Error: No container system detected" >&2
+            return 1
+            ;;
+    esac
+}
+
+# 如需以 root 身份执行，使用这个函数（不推荐）
+# 大多数情况下应该用 container_exec（会自动选择正确用户）
+container_exec_as_root() {
     local name="$1"
     shift
     local container_system="$(detect_container_system)"
@@ -139,7 +164,7 @@ container_exec() {
             lxc exec "$name" -- "$@"
             ;;
         orbstack)
-            orb run "$name" "$@"
+            orb run --machine "$name" "$@"
             ;;
         *)
             echo "Error: No container system detected" >&2
