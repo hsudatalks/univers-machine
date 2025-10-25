@@ -564,6 +564,19 @@ case "$COMMAND" in
     refresh)
         refresh_windows
         ;;
+    shell)
+        # mm shell <container> [command...]
+        # 如果有第 3 个参数，则执行命令；否则进入交互式 shell
+        container="$2"
+        shift 2  # 移除 shell 和 container 参数
+        if [ $# -gt 0 ]; then
+            # 执行命令
+            container_exec "$container" "$@"
+        else
+            # 进入交互式 shell
+            container_shell "$container"
+        fi
+        ;;
     -h|--help|help)
         echo "Machine View Manager - 机器层面 tmux 会话管理"
         echo "支持 LXD (Linux) 和 OrbStack (macOS)"
@@ -579,6 +592,7 @@ case "$COMMAND" in
         echo "  attach <type> - 连接到指定会话 (desktop|mobile)"
         echo "  restart       - 重启所有会话"
         echo "  refresh       - 刷新窗口以匹配当前运行的容器/VM（无需退出 tmux）"
+        echo "  shell <name> [cmd...]  - 进入容器或执行命令 (使用正确的用户账号)"
         echo "  -h, --help    - 显示此帮助信息"
         echo
         echo "Examples:"
@@ -588,6 +602,9 @@ case "$COMMAND" in
         echo "  $0 status             # 查看状态"
         echo "  $0 restart            # 重启所有会话"
         echo "  $0 refresh            # 刷新窗口（在 tmux 中运行）"
+        echo "  $0 shell hvac-dev     # 进入 hvac-dev 容器的交互式 shell"
+        echo "  $0 shell hvac-dev tmux list-sessions  # 在容器中执行命令"
+        echo "  $0 shell ubuntu 'ls -la ~'  # 在 ubuntu 容器执行命令"
         echo
         echo "Machine Views:"
         echo "  machine-desktop-view  - 聚合所有容器/VM 的桌面视图（完整信息）"
