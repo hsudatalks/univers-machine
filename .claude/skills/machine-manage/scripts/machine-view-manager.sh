@@ -200,9 +200,25 @@ create_desktop_view() {
     local first_vm="${DEV_VMS[0]}"
     tmux new-session -d -s machine-desktop-view -n "$first_vm"
 
-    # Apply desktop style configuration
+    # Apply desktop style configuration to the session
     if [ -f "$DESKTOP_STYLE_CONFIG" ]; then
-        tmux source-file "$DESKTOP_STYLE_CONFIG"
+        # Apply configuration line by line to the specific session
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Skip comments and empty lines
+            [[ "$line" =~ ^[[:space:]]*# ]] && continue
+            [[ -z "$line" ]] && continue
+
+            # Apply set-option and setw commands to the session
+            if [[ "$line" =~ ^set-option ]]; then
+                cmd="${line/set-option/set-option -t machine-desktop-view}"
+                eval "tmux $cmd" 2>/dev/null || true
+            elif [[ "$line" =~ ^setw ]]; then
+                cmd="setw -t machine-desktop-view ${line#setw }"
+                eval "tmux $cmd" 2>/dev/null || true
+            elif [[ "$line" =~ ^bind-key ]]; then
+                eval "tmux $line" 2>/dev/null || true
+            fi
+        done < "$DESKTOP_STYLE_CONFIG"
         print_info "已应用桌面视图样式配置"
     else
         print_warning "样式配置文件未找到: $DESKTOP_STYLE_CONFIG"
@@ -245,9 +261,25 @@ create_mobile_view() {
     local first_vm="${DEV_VMS[0]}"
     tmux new-session -d -s machine-mobile-view -n "$first_vm"
 
-    # Apply mobile style configuration (simplified)
+    # Apply mobile style configuration to the session
     if [ -f "$MOBILE_STYLE_CONFIG" ]; then
-        tmux source-file "$MOBILE_STYLE_CONFIG"
+        # Apply configuration line by line to the specific session
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Skip comments and empty lines
+            [[ "$line" =~ ^[[:space:]]*# ]] && continue
+            [[ -z "$line" ]] && continue
+
+            # Apply set-option and setw commands to the session
+            if [[ "$line" =~ ^set-option ]]; then
+                cmd="${line/set-option/set-option -t machine-mobile-view}"
+                eval "tmux $cmd" 2>/dev/null || true
+            elif [[ "$line" =~ ^setw ]]; then
+                cmd="setw -t machine-mobile-view ${line#setw }"
+                eval "tmux $cmd" 2>/dev/null || true
+            elif [[ "$line" =~ ^bind-key ]]; then
+                eval "tmux $line" 2>/dev/null || true
+            fi
+        done < "$MOBILE_STYLE_CONFIG"
         print_info "已应用移动视图样式配置（简化版）"
     else
         print_warning "样式配置文件未找到: $MOBILE_STYLE_CONFIG"
