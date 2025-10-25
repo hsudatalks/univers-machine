@@ -11,17 +11,25 @@ Run the installation script to set up the `machine-manager` command:
 ```
 
 This will:
-- Create `/usr/local/bin/machine-manager` symlink for easy access
+- Add `machine-manage.zsh` to your `~/.zshrc` (no sudo required)
 - Initialize configuration file from example if not exists
 - Verify installation
 
-After installation, you can use `machine-manager` from anywhere:
+After installation, reload your shell:
+
+```bash
+source ~/.zshrc
+```
+
+Then you can use `machine-manager` from anywhere:
 
 ```bash
 machine-manager start    # 启动所有 machine view 会话
 machine-manager status   # 查看状态
 machine-manager attach desktop  # 连接桌面视图
 ```
+
+**Note:** The command is registered as a zsh function, so it only works in zsh. Tab completion is also supported.
 
 ## What This Skill Does
 

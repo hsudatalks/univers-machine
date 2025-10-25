@@ -38,6 +38,15 @@ univers-machine/
 
 ## 快速开始
 
+### 0. 安装
+
+首次使用需要运行安装脚本：
+
+```bash
+.claude/skills/machine-manage/install.sh
+source ~/.zshrc  # 重新加载 shell 配置
+```
+
 ### 1. 管理虚拟机
 
 ```bash
