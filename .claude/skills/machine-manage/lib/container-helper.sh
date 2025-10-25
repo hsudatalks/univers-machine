@@ -250,16 +250,20 @@ container_delete() {
     esac
 }
 
-# Open shell in container/VM
+# Open shell in container/VM with correct user account
+# LXD: ubuntu user (不能用 root，root 无法访问 ubuntu 用户的 tmux 会话)
+# OrbStack: davidxu user (该用户拥有所有会话和配置)
 container_shell() {
     local name="$1"
     local container_system="$(detect_container_system)"
 
     case "$container_system" in
         lxd)
-            lxc exec "$name" -- /bin/bash
+            # LXD: 使用 ubuntu 用户进入交互式 shell
+            lxc exec "$name" -- su - ubuntu
             ;;
         orbstack)
+            # OrbStack: 已经使用 davidxu 用户
             orb shell "$name"
             ;;
         *)
