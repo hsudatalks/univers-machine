@@ -54,8 +54,10 @@ esac
 
 # Load VM list dynamically from actual running containers/VMs
 # This detects real containers/VMs instead of relying on static config
+# Excludes: ubuntu (not a dev machine, used for other purposes)
 load_vm_list() {
     local vms=()
+    local filtered_vms=()
     local container_system="$(detect_container_system)"
 
     # Get running containers from actual system (not config)
@@ -70,6 +72,22 @@ load_vm_list() {
             ;;
     esac
 
+    # Filter out excluded containers (ubuntu)
+    local excluded_vms=("ubuntu")
+    for vm in "${vms[@]}"; do
+        local is_excluded=0
+        for excluded in "${excluded_vms[@]}"; do
+            if [ "$vm" = "$excluded" ]; then
+                is_excluded=1
+                break
+            fi
+        done
+        if [ $is_excluded -eq 0 ]; then
+            filtered_vms+=("$vm")
+        fi
+    done
+    vms=("${filtered_vms[@]}")
+
     # If no running containers found, return empty (caller will handle)
     if [ ${#vms[@]} -eq 0 ]; then
         # Try to get from config as fallback
@@ -77,9 +95,19 @@ load_vm_list() {
             local order_vms=$(grep -A 20 "^display-order:" "$VMS_CONFIG" 2>/dev/null | grep "^  - " | sed 's/^  - //' | grep -v "^#")
             if [ -n "$order_vms" ]; then
                 while IFS= read -r vm; do
-                    local enabled=$(grep -A 5 "^  $vm:" "$VMS_CONFIG" 2>/dev/null | grep "enabled:" | awk '{print $2}')
-                    if [ "$enabled" = "true" ]; then
-                        vms+=("$vm")
+                    # Skip excluded containers
+                    local is_excluded=0
+                    for excluded in "${excluded_vms[@]}"; do
+                        if [ "$vm" = "$excluded" ]; then
+                            is_excluded=1
+                            break
+                        fi
+                    done
+                    if [ $is_excluded -eq 0 ]; then
+                        local enabled=$(grep -A 5 "^  $vm:" "$VMS_CONFIG" 2>/dev/null | grep "enabled:" | awk '{print $2}')
+                        if [ "$enabled" = "true" ]; then
+                            vms+=("$vm")
+                        fi
                     fi
                 done <<< "$order_vms"
             fi
@@ -181,33 +209,17 @@ create_desktop_view() {
     fi
 
     # Create command that properly handles cross-platform container access
-    local container_system="$(detect_container_system)"
-    local attach_script="$SCRIPT_DIR/scripts/container-tmux-attach.sh"
+    # Use the loop script to maintain persistent connections
+    local attach_script="$SCRIPT_DIR/scripts/container-view-attach-loop.sh"
 
-    case "$container_system" in
-        lxd)
-            # For LXD, use helper script for proper interactive attachment
-            tmux send-keys -t "machine-desktop-view:$first_vm" "bash $attach_script $first_vm univers-desktop-view" C-m
-            ;;
-        orbstack)
-            # For OrbStack, use helper script
-            tmux send-keys -t "machine-desktop-view:$first_vm" "bash $attach_script $first_vm univers-desktop-view" C-m
-            ;;
-    esac
+    # Attach to first VM with persistent loop
+    tmux send-keys -t "machine-desktop-view:$first_vm" "bash $attach_script $first_vm univers-desktop-view univers-manager" C-m
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-desktop-view -n "$vm"
-        case "$container_system" in
-            lxd)
-                # For LXD, use helper script for proper interactive attachment
-                tmux send-keys -t "machine-desktop-view:$vm" "bash $attach_script $vm univers-desktop-view" C-m
-                ;;
-            orbstack)
-                # For OrbStack, use helper script
-                tmux send-keys -t "machine-desktop-view:$vm" "bash $attach_script $vm univers-desktop-view" C-m
-                ;;
-        esac
+        # Use persistent loop attachment for all VMs
+        tmux send-keys -t "machine-desktop-view:$vm" "bash $attach_script $vm univers-desktop-view univers-manager" C-m
     done
 
     # Add machine-manage window at the end
@@ -242,33 +254,17 @@ create_mobile_view() {
     fi
 
     # Create command that properly handles cross-platform container access
-    local container_system="$(detect_container_system)"
-    local attach_script="$SCRIPT_DIR/scripts/container-tmux-attach.sh"
+    # Use the loop script to maintain persistent connections
+    local attach_script="$SCRIPT_DIR/scripts/container-view-attach-loop.sh"
 
-    case "$container_system" in
-        lxd)
-            # For LXD, use helper script for proper interactive attachment
-            tmux send-keys -t "machine-mobile-view:$first_vm" "bash $attach_script $first_vm univers-mobile-view" C-m
-            ;;
-        orbstack)
-            # For OrbStack, use helper script
-            tmux send-keys -t "machine-mobile-view:$first_vm" "bash $attach_script $first_vm univers-mobile-view" C-m
-            ;;
-    esac
+    # Attach to first VM with persistent loop
+    tmux send-keys -t "machine-mobile-view:$first_vm" "bash $attach_script $first_vm univers-mobile-view univers-manager" C-m
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-mobile-view -n "$vm"
-        case "$container_system" in
-            lxd)
-                # For LXD, use helper script for proper interactive attachment
-                tmux send-keys -t "machine-mobile-view:$vm" "bash $attach_script $vm univers-mobile-view" C-m
-                ;;
-            orbstack)
-                # For OrbStack, use helper script
-                tmux send-keys -t "machine-mobile-view:$vm" "bash $attach_script $vm univers-mobile-view" C-m
-                ;;
-        esac
+        # Use persistent loop attachment for all VMs
+        tmux send-keys -t "machine-mobile-view:$vm" "bash $attach_script $vm univers-mobile-view univers-manager" C-m
     done
 
     # Add machine-manage window at the end
@@ -566,11 +562,22 @@ case "$COMMAND" in
         ;;
     shell)
         # mm shell <container> [command...]
-        # 如果有第 3 个参数，则执行命令；否则进入交互式 shell
+        # 使用方式：
+        #   mm shell hvac-dev                  # 进入交互式 shell
+        #   mm shell hvac-dev "tmux list-sessions"  # 执行命令
+        #   mm shell hvac-dev ls -la /home/ubuntu   # 执行带参数的命令
+
         container="$2"
+        if [ -z "$container" ]; then
+            echo "❌ Error: container name required"
+            echo "Usage: mm shell <container> [command...]"
+            exit 1
+        fi
+
         shift 2  # 移除 shell 和 container 参数
+
         if [ $# -gt 0 ]; then
-            # 执行命令
+            # 执行命令 - 将所有参数作为完整命令传递
             container_exec "$container" "$@"
         else
             # 进入交互式 shell
