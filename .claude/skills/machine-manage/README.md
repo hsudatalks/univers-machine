@@ -254,7 +254,75 @@ cd .claude/skills/machine-manage
 ./scripts/list-resources.sh
 ```
 
+## Setup: Container Commands
+
+To ensure cm and other container commands work properly with bash, we create a symlink in /usr/local/bin:
+
+```bash
+# This is done automatically during initial container setup
+mm shell hvac-dev "sudo ln -sf /home/ubuntu/repos/univers-container/.claude/skills/container-manage/bin/cm /usr/local/bin/cm"
+```
+
+This allows cm to be found in PATH regardless of shell or execution context.
+
+## Using mm shell (RECOMMENDED for Container Commands)
+
+The `mm shell` command provides a unified interface for executing commands in containers/VMs with automatic OS detection and proper user account handling.
+
+### Why use mm shell?
+
+✅ **Automatic features:**
+- OS detection (Linux vs macOS)
+- Correct user account (ubuntu for LXD, davidxu for OrbStack)
+- Proper parameter escaping and quoting
+- Support for interactive and non-interactive modes
+
+❌ **Don't use:**
+- Direct `lxc exec` commands
+- Direct `orb run` commands
+- These require manual OS detection and user account handling
+
+### Usage Examples
+
+```bash
+# Interactive shell
+mm shell hvac-dev
+
+# List tmux sessions
+mm shell hvac-dev "tmux list-sessions"
+
+# Kill a tmux session
+mm shell hvac-dev "tmux kill-session -t univers-developer"
+
+# Run a script
+mm shell hvac-dev "/path/to/script.sh arg1 arg2"
+
+# Complex commands
+mm shell hvac-dev "cd /home/ubuntu && ls -la"
+```
+
+### Error Handling
+
+```bash
+# If container doesn't exist
+mm shell nonexistent-container "echo test"
+# Returns: Error: No container system detected
+
+# If command fails
+mm shell hvac-dev "false"
+# Returns: exit code 1
+```
+
 ## Container/VM Commands Reference
+
+### ⚠️ Note: Use mm shell instead!
+
+**For running commands in containers, always use `mm shell` instead of the commands below.**
+
+Direct commands are provided here for reference only, but `mm shell` is:
+- Simpler (auto-detects OS)
+- Safer (correct user account)
+- More reliable (proper escaping)
 
 ### On macOS (OrbStack)
 - `orb list` - List all VMs
@@ -264,7 +332,9 @@ cd .claude/skills/machine-manage
 - `orb delete <name>` - Delete a VM
 - `orb clone <source> <dest>` - Clone a VM
 - `orb shell <name>` - SSH into a VM
+  - **Better alternative:** `mm shell <name>` (for non-interactive commands)
 - `orb run <name> <command>` - Run command in VM
+  - **Better alternative:** `mm shell <name> "<command>"`
 - `orb info <name>` - Show VM info
 
 ### On Linux (LXD)
@@ -275,7 +345,9 @@ cd .claude/skills/machine-manage
 - `lxc delete <name> --force` - Delete a container
 - `lxc copy <source> <dest>` - Clone a container
 - `lxc exec <name> -- /bin/bash` - Open shell in container
+  - **Better alternative:** `mm shell <name>` (for interactive)
 - `lxc exec <name> -- <command>` - Run command in container
+  - **Better alternative:** `mm shell <name> "<command>"`
 - `lxc info <name>` - Show container info
 
 ### Cross-Platform Scripts

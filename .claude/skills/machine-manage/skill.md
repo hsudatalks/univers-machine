@@ -81,10 +81,41 @@ Run `scripts/cleanup-dev.sh <container>` to:
 - Execute commands across multiple containers
 - Works on both Linux and macOS
 
-### 7. Direct Container Access
-- Linux: `lxc exec <name> -- /bin/bash` for shell access
-- macOS: `orb shell <name>` for SSH access
-- Skill automatically uses appropriate command
+### 7. Direct Container/VM Access via mm shell (RECOMMENDED)
+**IMPORTANT: Always prioritize using `mm shell` for container operations!**
+
+The `mm shell` command provides a unified interface for accessing containers/VMs with automatic:
+- OS detection (Linux vs macOS)
+- Correct user account handling (ubuntu for LXD, davidxu for OrbStack)
+- Proper parameter quoting and escaping
+- Support for both interactive shells and command execution
+
+**Usage:**
+```bash
+# Interactive shell
+mm shell hvac-dev
+
+# Execute single command
+mm shell hvac-dev "tmux list-sessions"
+
+# Execute command with arguments
+mm shell hvac-dev ls -la /home/ubuntu
+
+# Execute complex commands
+mm shell hvac-dev "tmux kill-session -t univers-developer && sleep 1 && echo 'Done'"
+```
+
+**Why mm shell is better than direct lxc/orb commands:**
+1. ✅ Automatic user account selection (ubuntu vs davidxu)
+2. ✅ Consistent across Linux and macOS
+3. ✅ Proper shell escaping for special characters
+4. ✅ Support for interactive and non-interactive modes
+5. ✅ Error handling built-in
+
+**Direct container access (legacy - use mm shell instead):**
+- Linux: `lxc exec <name> -- su ubuntu -c '<command>'`
+- macOS: `orb run --machine <name> bash -c '<command>'`
+- ⚠️ These should only be used when mm shell is unavailable
 
 ## Scripts Available
 
@@ -120,16 +151,31 @@ All scripts auto-detect the OS and container system, working seamlessly on both 
 
 When the user asks to manage containers, VMs, or tmux sessions:
 
-1. **Detect the context**: Is this about tmux sessions, container lifecycle, or resources?
+1. **Detect the context**: Is this about tmux sessions, container lifecycle, resources, or container commands?
+
 2. **Tmux sessions** (primary skill):
    - Use `mm` command for desktop-view, mobile-view, and machine-manage sessions
    - Ensure containers/VMs are running before starting sessions
-3. **Container operations**:
-   - Auto-detect OS (Linux vs macOS)
-   - Use appropriate commands (lxc on Linux, orb on macOS)
-   - Use scripts for complex operations (clone, cleanup, batch-execute, list-resources)
-4. **Provide clear feedback** about what was done
-5. **Suggest related operations** if relevant (e.g., "Would you like me to clean up before cloning?")
+
+3. **Container/VM command execution** (IMPORTANT - use mm shell):
+   - ✅ **ALWAYS use `mm shell <container> '<command>'` for running commands in containers**
+   - This provides:
+     - Automatic OS detection (Linux vs macOS)
+     - Correct user account handling (ubuntu for LXD, davidxu for OrbStack)
+     - Proper parameter escaping and quoting
+   - Examples:
+     - `mm shell hvac-dev "tmux list-sessions"`
+     - `mm shell hvac-dev "rm -rf /tmp/something"`
+     - `mm shell hvac-dev "/path/to/script.sh arg1 arg2"`
+
+4. **Complex container operations**:
+   - Use scripts for lifecycle operations (clone, cleanup, batch-execute, list-resources)
+   - Rely on `mm shell` for direct command execution
+   - These scripts internally use the container-helper abstraction
+
+5. **Provide clear feedback** about what was done
+
+6. **Suggest related operations** if relevant (e.g., "Would you like me to clean up before cloning?")
 
 ## Examples
 
@@ -139,6 +185,13 @@ When the user asks to manage containers, VMs, or tmux sessions:
 - "Attach to desktop view" → `mm attach desktop`
 - "Attach to mobile view" → `mm attach mobile`
 - "Restart all sessions" → `mm restart`
+
+### Container Command Execution (use mm shell)
+- "List tmux sessions in hvac-dev" → `mm shell hvac-dev "tmux list-sessions"`
+- "Kill a tmux session" → `mm shell hvac-dev "tmux kill-session -t univers-developer"`
+- "Run a script in container" → `mm shell hvac-dev "/path/to/script.sh arg1 arg2"`
+- "Execute multiple commands" → `mm shell hvac-dev "cmd1 && cmd2 && cmd3"`
+- "Check file status" → `mm shell hvac-dev "ls -la /path/to/file"`
 
 ### Container Lifecycle
 - "List all containers" → Use appropriate command (lxc list on Linux, orb list on macOS)
@@ -154,12 +207,33 @@ When the user asks to manage containers, VMs, or tmux sessions:
 
 ## Best Practices
 
-1. Always confirm destructive operations (delete, cleanup)
-2. Check container/VM status before operations
-3. Suggest cleanup before cloning large containers
-4. Auto-detect the operating system and use appropriate commands
-5. Provide clear status updates
-6. Handle errors gracefully and suggest alternatives
-7. When managing machine views, ensure containers are running first
+1. **ALWAYS use `mm shell` for container commands** - This is the unified interface
+   - ✅ `mm shell hvac-dev "tmux list-sessions"`
+   - ❌ Don't use `lxc exec hvac-dev -- su ubuntu -c "tmux list-sessions"`
+   - Exception: Only use direct lxc/orb commands if mm shell is temporarily unavailable
+
+2. Always confirm destructive operations (delete, cleanup)
+
+3. Check container/VM status before operations
+
+4. Suggest cleanup before cloning large containers
+
+5. Auto-detect the operating system and use appropriate commands (mm shell does this automatically)
+
+6. Provide clear status updates
+
+7. Handle errors gracefully and suggest alternatives
+
+8. When managing machine views, ensure containers are running first
+
+9. For complex container tasks, use specialized scripts (clone-vm.sh, cleanup-dev.sh, batch-execute.sh)
+
+## Implementation Notes for Claude Code
+
+When working with containers in hvac-dev or other LXD/OrbStack containers:
+- **PRIORITY 1**: Use `mm shell <container> '<command>'`
+- **PRIORITY 2**: Use dedicated scripts for specific tasks (clone, cleanup, etc.)
+- **PRIORITY 3**: Use direct container system commands only when mm shell is unavailable
+- Never mix direct `lxc` and `orb` commands without checking the OS first
 
 When invoked, help the user manage their containers and machine-level tmux sessions efficiently and safely on both Linux (LXD) and macOS (OrbStack).

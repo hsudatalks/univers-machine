@@ -200,25 +200,9 @@ create_desktop_view() {
     local first_vm="${DEV_VMS[0]}"
     tmux new-session -d -s machine-desktop-view -n "$first_vm"
 
-    # Apply desktop style configuration to the session
+    # Apply desktop style configuration
     if [ -f "$DESKTOP_STYLE_CONFIG" ]; then
-        # Apply configuration line by line to the specific session
-        while IFS= read -r line || [ -n "$line" ]; do
-            # Skip comments and empty lines
-            [[ "$line" =~ ^[[:space:]]*# ]] && continue
-            [[ -z "$line" ]] && continue
-
-            # Apply set-option and setw commands to the session
-            if [[ "$line" =~ ^set-option ]]; then
-                cmd="${line/set-option/set-option -t machine-desktop-view}"
-                eval "tmux $cmd" 2>/dev/null || true
-            elif [[ "$line" =~ ^setw ]]; then
-                cmd="setw -t machine-desktop-view ${line#setw }"
-                eval "tmux $cmd" 2>/dev/null || true
-            elif [[ "$line" =~ ^bind-key ]]; then
-                eval "tmux $line" 2>/dev/null || true
-            fi
-        done < "$DESKTOP_STYLE_CONFIG"
+        tmux source-file -t machine-desktop-view "$DESKTOP_STYLE_CONFIG" 2>/dev/null || true
         print_info "已应用桌面视图样式配置"
     else
         print_warning "样式配置文件未找到: $DESKTOP_STYLE_CONFIG"
@@ -261,25 +245,9 @@ create_mobile_view() {
     local first_vm="${DEV_VMS[0]}"
     tmux new-session -d -s machine-mobile-view -n "$first_vm"
 
-    # Apply mobile style configuration to the session
+    # Apply mobile style configuration
     if [ -f "$MOBILE_STYLE_CONFIG" ]; then
-        # Apply configuration line by line to the specific session
-        while IFS= read -r line || [ -n "$line" ]; do
-            # Skip comments and empty lines
-            [[ "$line" =~ ^[[:space:]]*# ]] && continue
-            [[ -z "$line" ]] && continue
-
-            # Apply set-option and setw commands to the session
-            if [[ "$line" =~ ^set-option ]]; then
-                cmd="${line/set-option/set-option -t machine-mobile-view}"
-                eval "tmux $cmd" 2>/dev/null || true
-            elif [[ "$line" =~ ^setw ]]; then
-                cmd="setw -t machine-mobile-view ${line#setw }"
-                eval "tmux $cmd" 2>/dev/null || true
-            elif [[ "$line" =~ ^bind-key ]]; then
-                eval "tmux $line" 2>/dev/null || true
-            fi
-        done < "$MOBILE_STYLE_CONFIG"
+        tmux source-file -t machine-mobile-view "$MOBILE_STYLE_CONFIG" 2>/dev/null || true
         print_info "已应用移动视图样式配置（简化版）"
     else
         print_warning "样式配置文件未找到: $MOBILE_STYLE_CONFIG"
@@ -485,23 +453,14 @@ refresh_windows() {
         local current_windows=$(tmux list-windows -t machine-desktop-view -F "#{window_name}" | head -n -1)
 
         # Add missing windows
-        local container_system="$(detect_container_system)"
-        local attach_script="$SCRIPT_DIR/scripts/container-tmux-attach.sh"
+        local attach_script="$SCRIPT_DIR/scripts/container-view-attach-loop.sh"
         local last_window_index=0
         for vm in "${DEV_VMS[@]}"; do
             if ! echo "$current_windows" | grep -q "^$vm$"; then
                 print_info "  添加窗口: $vm"
                 tmux new-window -t machine-desktop-view -n "$vm"
-                case "$container_system" in
-                    lxd)
-                        # For LXD, use helper script for proper interactive attachment
-                        tmux send-keys -t "machine-desktop-view:$vm" "bash $attach_script $vm univers-desktop-view" C-m
-                        ;;
-                    orbstack)
-                        # For OrbStack, use helper script
-                        tmux send-keys -t "machine-desktop-view:$vm" "bash $attach_script $vm univers-desktop-view" C-m
-                        ;;
-                esac
+                # Use persistent loop attachment
+                tmux send-keys -t "machine-desktop-view:$vm" "bash $attach_script $vm univers-desktop-view univers-manager" C-m
             fi
             last_window_index=$((last_window_index + 1))
         done
@@ -530,23 +489,14 @@ refresh_windows() {
 
         # Similar logic for mobile view
         local current_windows=$(tmux list-windows -t machine-mobile-view -F "#{window_name}" | head -n -1)
-        local container_system="$(detect_container_system)"
-        local attach_script="$SCRIPT_DIR/scripts/container-tmux-attach.sh"
+        local attach_script="$SCRIPT_DIR/scripts/container-view-attach-loop.sh"
 
         for vm in "${DEV_VMS[@]}"; do
             if ! echo "$current_windows" | grep -q "^$vm$"; then
                 print_info "  添加窗口: $vm"
                 tmux new-window -t machine-mobile-view -n "$vm"
-                case "$container_system" in
-                    lxd)
-                        # For LXD, use helper script for proper interactive attachment
-                        tmux send-keys -t "machine-mobile-view:$vm" "bash $attach_script $vm univers-mobile-view" C-m
-                        ;;
-                    orbstack)
-                        # For OrbStack, use helper script
-                        tmux send-keys -t "machine-mobile-view:$vm" "bash $attach_script $vm univers-mobile-view" C-m
-                        ;;
-                esac
+                # Use persistent loop attachment
+                tmux send-keys -t "machine-mobile-view:$vm" "bash $attach_script $vm univers-mobile-view univers-manager" C-m
             fi
         done
 
