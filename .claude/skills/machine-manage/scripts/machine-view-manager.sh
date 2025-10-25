@@ -135,6 +135,30 @@ ensure_machine_manage_session() {
     print_success "univers-machine-manage 会话已创建"
 }
 
+# Helper function to attach to container session with fallback
+attach_to_container_session() {
+    local container="$1"
+    local session_name="${2:-univers-desktop-view}"
+    local fallback_session="${3:-univers-manager}"
+
+    local container_system="$(detect_container_system)"
+
+    case "$container_system" in
+        lxd)
+            # Try main session first, then fallback
+            lxc exec "$container" -- tmux attach -t "$session_name" 2>/dev/null || \
+            lxc exec "$container" -- tmux attach -t "$fallback_session" 2>/dev/null || \
+            lxc exec "$container" -- bash
+            ;;
+        orbstack)
+            # Try main session first, then fallback
+            orbctl run --machine "$container" tmux attach -t "$session_name" 2>/dev/null || \
+            orbctl run --machine "$container" tmux attach -t "$fallback_session" 2>/dev/null || \
+            orbctl shell "$container"
+            ;;
+    esac
+}
+
 # Create machine-desktop-view session
 create_desktop_view() {
     print_header "创建 Machine Desktop View 会话"
@@ -156,12 +180,28 @@ create_desktop_view() {
         print_warning "样式配置文件未找到: $DESKTOP_STYLE_CONFIG"
     fi
 
-    tmux send-keys -t "machine-desktop-view:$first_vm" "orbctl run --machine $first_vm tmux attach -t univers-desktop-view" C-m
+    # Create command that properly handles cross-platform container access
+    local container_system="$(detect_container_system)"
+    case "$container_system" in
+        lxd)
+            tmux send-keys -t "machine-desktop-view:$first_vm" "lxc exec $first_vm -- su ubuntu -c 'tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $first_vm -- su ubuntu -c 'tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $first_vm -- su ubuntu -c 'bash'" C-m
+            ;;
+        orbstack)
+            tmux send-keys -t "machine-desktop-view:$first_vm" "orbctl run --machine $first_vm tmux attach -t univers-desktop-view 2>/dev/null || orbctl run --machine $first_vm tmux attach -t univers-manager 2>/dev/null || orbctl shell $first_vm" C-m
+            ;;
+    esac
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-desktop-view -n "$vm"
-        tmux send-keys -t "machine-desktop-view:$vm" "orbctl run --machine $vm tmux attach -t univers-desktop-view" C-m
+        case "$container_system" in
+            lxd)
+                tmux send-keys -t "machine-desktop-view:$vm" "lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'bash'" C-m
+                ;;
+            orbstack)
+                tmux send-keys -t "machine-desktop-view:$vm" "orbctl run --machine $vm tmux attach -t univers-desktop-view 2>/dev/null || orbctl run --machine $vm tmux attach -t univers-manager 2>/dev/null || orbctl shell $vm" C-m
+                ;;
+        esac
     done
 
     # Add machine-manage window at the end
@@ -195,12 +235,28 @@ create_mobile_view() {
         print_warning "样式配置文件未找到: $MOBILE_STYLE_CONFIG"
     fi
 
-    tmux send-keys -t "machine-mobile-view:$first_vm" "orbctl run --machine $first_vm tmux attach -t univers-mobile-view" C-m
+    # Create command that properly handles cross-platform container access
+    local container_system="$(detect_container_system)"
+    case "$container_system" in
+        lxd)
+            tmux send-keys -t "machine-mobile-view:$first_vm" "lxc exec $first_vm -- su ubuntu -c 'tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $first_vm -- su ubuntu -c 'tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $first_vm -- su ubuntu -c 'bash'" C-m
+            ;;
+        orbstack)
+            tmux send-keys -t "machine-mobile-view:$first_vm" "orbctl run --machine $first_vm tmux attach -t univers-mobile-view 2>/dev/null || orbctl run --machine $first_vm tmux attach -t univers-manager 2>/dev/null || orbctl shell $first_vm" C-m
+            ;;
+    esac
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-mobile-view -n "$vm"
-        tmux send-keys -t "machine-mobile-view:$vm" "orbctl run --machine $vm tmux attach -t univers-mobile-view" C-m
+        case "$container_system" in
+            lxd)
+                tmux send-keys -t "machine-mobile-view:$vm" "lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'bash'" C-m
+                ;;
+            orbstack)
+                tmux send-keys -t "machine-mobile-view:$vm" "orbctl run --machine $vm tmux attach -t univers-mobile-view 2>/dev/null || orbctl run --machine $vm tmux attach -t univers-manager 2>/dev/null || orbctl shell $vm" C-m
+                ;;
+        esac
     done
 
     # Add machine-manage window at the end
@@ -389,12 +445,20 @@ refresh_windows() {
         local current_windows=$(tmux list-windows -t machine-desktop-view -F "#{window_name}" | head -n -1)
 
         # Add missing windows
+        local container_system="$(detect_container_system)"
         local last_window_index=0
         for vm in "${DEV_VMS[@]}"; do
             if ! echo "$current_windows" | grep -q "^$vm$"; then
                 print_info "  添加窗口: $vm"
                 tmux new-window -t machine-desktop-view -n "$vm"
-                tmux send-keys -t "machine-desktop-view:$vm" "orbctl run --machine $vm tmux attach -t univers-desktop-view 2>/dev/null || lxc exec $vm -- tmux attach -t univers-desktop-view 2>/dev/null || echo '会话不可用'" C-m
+                case "$container_system" in
+                    lxd)
+                        tmux send-keys -t "machine-desktop-view:$vm" "lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'bash'" C-m
+                        ;;
+                    orbstack)
+                        tmux send-keys -t "machine-desktop-view:$vm" "orbctl run --machine $vm tmux attach -t univers-desktop-view 2>/dev/null || orbctl run --machine $vm tmux attach -t univers-manager 2>/dev/null || orbctl shell $vm" C-m
+                        ;;
+                esac
             fi
             last_window_index=$((last_window_index + 1))
         done
@@ -428,7 +492,14 @@ refresh_windows() {
             if ! echo "$current_windows" | grep -q "^$vm$"; then
                 print_info "  添加窗口: $vm"
                 tmux new-window -t machine-mobile-view -n "$vm"
-                tmux send-keys -t "machine-mobile-view:$vm" "orbctl run --machine $vm tmux attach -t univers-mobile-view 2>/dev/null || lxc exec $vm -- tmux attach -t univers-mobile-view 2>/dev/null || echo '会话不可用'" C-m
+                case "$container_system" in
+                    lxd)
+                        tmux send-keys -t "machine-mobile-view:$vm" "lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'bash'" C-m
+                        ;;
+                    orbstack)
+                        tmux send-keys -t "machine-mobile-view:$vm" "orbctl run --machine $vm tmux attach -t univers-mobile-view 2>/dev/null || orbctl run --machine $vm tmux attach -t univers-manager 2>/dev/null || orbctl shell $vm" C-m
+                        ;;
+                esac
             fi
         done
 
