@@ -1,89 +1,165 @@
 # Machine Management Skill
 
-This skill provides comprehensive machine-level management for this physical server, including OrbStack VM lifecycle, tmux session aggregation, and resource monitoring.
+This skill provides comprehensive machine-level management for physical servers, including:
+- **Tmux Session Aggregation**: Manage machine-level desktop and mobile view sessions
+- **Container/VM Lifecycle**: Start, stop, clone, and delete containers/VMs
+- **Resource Monitoring**: Check disk, memory, and resource usage
+- **Cross-Platform Support**: Works on both Linux (LXD) and macOS (OrbStack)
 
-## Capabilities
+## Core Capabilities
 
-You are an expert at managing containers and virtual machines using OrbStack. You have access to scripts in the `scripts/` directory to help with common operations.
+### 1. Machine-Level Tmux Session Management (PRIMARY SKILL)
+- Create and manage aggregated tmux sessions that combine all container/VM sessions
+- `machine-desktop-view` - Full information display for development
+- `machine-mobile-view` - Simplified display for focused work
+- `univers-machine-manage` - Physical machine management session
+- Commands: `mm start`, `mm stop`, `mm status`, `mm attach desktop|mobile`, `mm restart`
+
+### 2. Container/VM Lifecycle Management
+You are an expert at managing containers and virtual machines:
+- **Linux**: Use LXD containers (`lxc` commands)
+- **macOS**: Use OrbStack VMs (`orb` commands)
+- Automatically detects your OS and uses appropriate commands
+
+### 3. Cross-Platform Abstraction
+The skill includes a container abstraction library (`lib/container-helper.sh`) that:
+- Detects OS (Linux vs macOS)
+- Detects container system (LXD vs OrbStack)
+- Provides unified commands that work on both platforms
 
 ## Available Operations
 
-### 1. List Containers/VMs
-- Use `orb list` to show all running containers and VMs
-- Parse and display information in a user-friendly format
-- Show: name, status, OS, size, IP address
+### 1. Tmux Session Management
+**Start all sessions:**
+- `mm start` - Create desktop-view, mobile-view, and machine-manage sessions
+- Automatically starts containers/VMs if needed
 
-### 2. Container Lifecycle
-- **Start**: `orb start <name>`
-- **Stop**: `orb stop <name>`
-- **Restart**: `orb restart <name>`
-- **Delete**: `orb delete <name>`
+**Manage sessions:**
+- `mm status` - Show status of all machine view sessions
+- `mm attach desktop` - Connect to desktop view
+- `mm attach mobile` - Connect to mobile view
+- `mm stop` - Stop all sessions
+- `mm restart` - Restart all sessions
 
-### 3. Clone VMs
-- Clone existing VMs with new names
-- Clean up temporary files before cloning (optional)
-- Use: `orb clone <source> <destination>`
+**Navigation in tmux:**
+- Ctrl+B then 0-4 - Switch between windows
+- Ctrl+B then w - List all windows
+- Ctrl+B then n/p - Next/previous window
+- Ctrl+B then D - Detach
+
+### 2. Container/VM Lifecycle
+**List containers:**
+- Linux: `lxc list`
+- macOS: `orb list`
+- Skill automatically uses correct command
+
+**Lifecycle operations:**
+- **Start**: `container_start <name>` (automatic OS detection)
+- **Stop**: `container_stop <name>`
+- **Restart**: Container operations
+- **Delete**: `container_delete <name>`
+
+### 3. Clone Containers/VMs
+- Use `scripts/clone-vm.sh <source> <dest> [--cleanup]`
+- Optional cleanup of source before cloning
+- Works on both Linux (LXD) and macOS (OrbStack)
 
 ### 4. Cleanup Operations
-Run cleanup scripts to:
+Run `scripts/cleanup-dev.sh <container>` to:
 - Remove build artifacts (target/ directories)
-- Clear sccache caches
-- Clean apt caches
-- Remove old logs
+- Clear sccache and Cargo caches
+- Clean apt package caches
+- Remove temporary files
 
 ### 5. Resource Monitoring
-- Check disk usage: `orb info <name>`
-- SSH into containers: `orb shell <name>`
-- Execute commands remotely: `orb run <name> <command>`
+- Use `scripts/list-resources.sh` to show disk, memory, and large directories
+- Works on both LXD containers and OrbStack VMs
+- Displays resource usage for all running containers/VMs
 
 ### 6. Batch Operations
+- Use `scripts/batch-execute.sh '<command>' [--all|<container1> <container2>...]`
 - Execute commands across multiple containers
-- Group operations (start/stop multiple VMs)
-- Health checks across all containers
+- Works on both Linux and macOS
 
-### 7. Machine-Level View Aggregation
-- Create machine-level tmux sessions that aggregate VM tmux sessions
-- `machine-desktop-view` - Aggregates all `univers-desktop-view` from dev VMs
-- `machine-mobile-view` - Aggregates all `univers-mobile-view` from dev VMs
-- `univers-machine-manage` - Local session for physical machine management
-- Each session has 5 windows: integration-dev, web-dev, control-dev, validation-dev, machine-manage
-- Window 4 (machine-manage) runs in /Users/davidxu/repos/univers-machine for physical machine management
-- Switch between windows using tmux navigation (Ctrl+B then 0-4)
+### 7. Direct Container Access
+- Linux: `lxc exec <name> -- /bin/bash` for shell access
+- macOS: `orb shell <name>` for SSH access
+- Skill automatically uses appropriate command
 
 ## Scripts Available
 
-- `scripts/cleanup-dev.sh` - Clean development artifacts from a VM
-- `scripts/list-resources.sh` - Show resource usage across all VMs
-- `scripts/clone-vm.sh` - Helper for cloning VMs with cleanup
-- `scripts/batch-execute.sh` - Run commands across multiple VMs
-- `scripts/machine-view-manager.sh` - Manage machine-level tmux view sessions
+All scripts auto-detect the OS and container system, working seamlessly on both Linux (LXD) and macOS (OrbStack):
+
+- `scripts/machine-view-manager.sh` - **PRIMARY**: Manage machine-level tmux sessions
+  - Start/stop/restart desktop-view, mobile-view, and machine-manage sessions
+  - Used via `mm` alias for convenience
+
+- `scripts/cleanup-dev.sh <container>` - Clean development artifacts
+  - Remove build artifacts, caches, temporary files
+  - Works on both LXD and OrbStack
+
+- `scripts/clone-vm.sh <source> <dest> [--cleanup]` - Clone containers/VMs
+  - Optional cleanup before cloning
+  - Efficient cloning on both platforms
+
+- `scripts/batch-execute.sh '<cmd>' [--all|<containers>]` - Execute commands across multiple containers
+  - Run on all running containers, or specific ones
+  - Cross-platform compatible
+
+- `scripts/list-resources.sh` - Show disk, memory, and resource usage
+  - Works on both LXD containers and OrbStack VMs
+
+## Support Library
+
+- `lib/container-helper.sh` - Cross-platform abstraction layer
+  - Detects OS and container system automatically
+  - Provides unified container management functions
+  - Used by all scripts for platform-agnostic operations
 
 ## Usage
 
-When the user asks to manage containers or VMs:
+When the user asks to manage containers, VMs, or tmux sessions:
 
-1. Determine what operation they want to perform
-2. Use the appropriate orb command or script
-3. Provide clear feedback about what was done
-4. Suggest related operations if relevant
+1. **Detect the context**: Is this about tmux sessions, container lifecycle, or resources?
+2. **Tmux sessions** (primary skill):
+   - Use `mm` command for desktop-view, mobile-view, and machine-manage sessions
+   - Ensure containers/VMs are running before starting sessions
+3. **Container operations**:
+   - Auto-detect OS (Linux vs macOS)
+   - Use appropriate commands (lxc on Linux, orb on macOS)
+   - Use scripts for complex operations (clone, cleanup, batch-execute, list-resources)
+4. **Provide clear feedback** about what was done
+5. **Suggest related operations** if relevant (e.g., "Would you like me to clean up before cloning?")
 
 ## Examples
 
-- "List all VMs" → `orb list`
-- "Clone ubuntu to web-dev" → Check if cleanup needed, then `orb clone ubuntu web-dev`
-- "Clean up ubuntu VM" → SSH in and run cleanup commands
-- "Delete debian VM" → `orb stop debian && orb delete debian`
-- "Start all stopped VMs" → Parse `orb list` and start each stopped VM
-- "Start machine view sessions" → `scripts/machine-view-manager.sh start`
-- "Show machine view status" → `scripts/machine-view-manager.sh status`
-- "Attach to desktop view" → `scripts/machine-view-manager.sh attach desktop`
+### Tmux Session Management
+- "Start machine view sessions" → `mm start`
+- "Show machine view status" → `mm status`
+- "Attach to desktop view" → `mm attach desktop`
+- "Attach to mobile view" → `mm attach mobile`
+- "Restart all sessions" → `mm restart`
+
+### Container Lifecycle
+- "List all containers" → Use appropriate command (lxc list on Linux, orb list on macOS)
+- "Clone ubuntu to web-dev" → `scripts/clone-vm.sh ubuntu web-dev` (with optional --cleanup)
+- "Clean up ubuntu" → `scripts/cleanup-dev.sh ubuntu`
+- "Delete a container" → Confirm, then execute with appropriate command
+- "Start all stopped containers" → Parse list and start each using correct command
+
+### Resource & Batch Operations
+- "Show resource usage" → `scripts/list-resources.sh`
+- "Run command on all containers" → `scripts/batch-execute.sh '<command>' --all`
+- "Check container status" → Automatically detects OS and uses lxc or orb
 
 ## Best Practices
 
 1. Always confirm destructive operations (delete, cleanup)
-2. Check VM status before operations
-3. Suggest cleanup before cloning large VMs
-4. Provide clear status updates
-5. Handle errors gracefully
+2. Check container/VM status before operations
+3. Suggest cleanup before cloning large containers
+4. Auto-detect the operating system and use appropriate commands
+5. Provide clear status updates
+6. Handle errors gracefully and suggest alternatives
+7. When managing machine views, ensure containers are running first
 
-When invoked, help the user manage their OrbStack containers efficiently and safely.
+When invoked, help the user manage their containers and machine-level tmux sessions efficiently and safely on both Linux (LXD) and macOS (OrbStack).
