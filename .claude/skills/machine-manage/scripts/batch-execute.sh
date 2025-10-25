@@ -1,14 +1,19 @@
 #!/bin/bash
-# Execute a command across multiple VMs
-# Usage: ./batch-execute.sh <command> [vm1 vm2 vm3...] or [--all]
+# Execute a command across multiple containers/VMs
+# Supports both LXD (Linux) and OrbStack (macOS)
+# Usage: ./batch-execute.sh <command> [container1 container2...] or [--all]
 
 set -e
+
+# Source the helper library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SCRIPT_DIR/lib/container-helper.sh"
 
 COMMAND="$1"
 shift
 
 if [ -z "$COMMAND" ]; then
-    echo "Usage: $0 <command> [vm1 vm2 vm3...] or [--all]"
+    echo "Usage: $0 <command> [container1 container2...] or [--all]"
     echo
     echo "Examples:"
     echo "  $0 'uptime' --all"
@@ -17,34 +22,46 @@ if [ -z "$COMMAND" ]; then
     exit 1
 fi
 
-# Determine target VMs
+echo "=== Batch Execute: $COMMAND ==="
+echo "System: $(print_system_info)"
+echo
+
+# Determine target containers
 if [ "$1" = "--all" ]; then
-    TARGET_VMS=$(orb list | grep " running " | awk '{print $1}')
+    # Get all running containers
+    CONTAINER_SYSTEM="$(detect_container_system)"
+    case "$CONTAINER_SYSTEM" in
+        lxd)
+            TARGET_CONTAINERS=$(lxc list --format=json | jq -r '.[] | select(.status == "Running") | .name' 2>/dev/null)
+            ;;
+        orbstack)
+            TARGET_CONTAINERS=$(orb list | grep " running " | awk '{print $1}')
+            ;;
+    esac
 else
-    TARGET_VMS="$@"
+    TARGET_CONTAINERS="$@"
 fi
 
-if [ -z "$TARGET_VMS" ]; then
-    echo "Error: No VMs specified and no running VMs found"
+if [ -z "$TARGET_CONTAINERS" ]; then
+    echo "Error: No containers specified and no running containers found"
     exit 1
 fi
 
-echo "=== Batch Execute: $COMMAND ==="
-echo "Target VMs: $TARGET_VMS"
+echo "Target containers: $TARGET_CONTAINERS"
 echo
 
-for VM in $TARGET_VMS; do
+for CONTAINER in $TARGET_CONTAINERS; do
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "VM: $VM"
+    echo "Container: $CONTAINER"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-    if orb list | grep "^$VM " | grep -q " running "; then
-        orb run "$VM" "$COMMAND" 2>&1 || echo "⚠️  Command failed on $VM"
+    if container_is_running "$CONTAINER"; then
+        container_exec "$CONTAINER" bash -c "$COMMAND" 2>&1 || print_warning "Command failed on $CONTAINER"
     else
-        echo "⚠️  VM $VM is not running, skipping..."
+        print_warning "Container $CONTAINER is not running, skipping..."
     fi
 
     echo
 done
 
-echo "✅ Batch execution complete!"
+print_success "Batch execution complete!"

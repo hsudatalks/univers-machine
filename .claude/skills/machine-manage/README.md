@@ -1,6 +1,10 @@
 # Machine Management Skill
 
-This skill provides comprehensive machine-level management for physical servers, including OrbStack VM lifecycle, tmux session aggregation, and resource monitoring.
+This skill provides comprehensive machine-level management for physical servers, including container/VM lifecycle management, tmux session aggregation, and resource monitoring.
+
+**Supports both:**
+- **Linux**: LXD containers (using `lxc` commands)
+- **macOS**: OrbStack VMs (using `orb` commands)
 
 ## Installation
 
@@ -228,10 +232,9 @@ cd .claude/skills/machine-manage
 ./scripts/list-resources.sh
 ```
 
-## OrbStack Commands Reference
+## Container/VM Commands Reference
 
-The skill also knows these common OrbStack commands:
-
+### On macOS (OrbStack)
 - `orb list` - List all VMs
 - `orb start <name>` - Start a VM
 - `orb stop <name>` - Stop a VM
@@ -241,6 +244,27 @@ The skill also knows these common OrbStack commands:
 - `orb shell <name>` - SSH into a VM
 - `orb run <name> <command>` - Run command in VM
 - `orb info <name>` - Show VM info
+
+### On Linux (LXD)
+- `lxc list` - List all containers
+- `lxc start <name>` - Start a container
+- `lxc stop <name>` - Stop a container
+- `lxc restart <name>` - Restart a container
+- `lxc delete <name> --force` - Delete a container
+- `lxc copy <source> <dest>` - Clone a container
+- `lxc exec <name> -- /bin/bash` - Open shell in container
+- `lxc exec <name> -- <command>` - Run command in container
+- `lxc info <name>` - Show container info
+
+### Cross-Platform Scripts
+
+The scripts in this skill automatically detect your OS and container system, using the appropriate commands:
+
+- `cleanup-dev.sh <name>` - Works on both LXD and OrbStack
+- `clone-vm.sh <source> <dest>` - Works on both LXD and OrbStack
+- `batch-execute.sh <command> [--all|<container1> <container2>...]` - Works on both
+- `list-resources.sh` - Works on both LXD and OrbStack
+- `machine-view-manager.sh` - Works on both (manages machine-level tmux sessions)
 
 ## Tips
 

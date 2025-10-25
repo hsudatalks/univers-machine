@@ -1,59 +1,77 @@
 #!/bin/bash
-# Clone a VM with optional cleanup
-# Usage: ./clone-vm.sh <source-vm> <new-vm-name> [--cleanup]
+# Clone a container/VM with optional cleanup
+# Supports both LXD (Linux) and OrbStack (macOS)
+# Usage: ./clone-vm.sh <source-container> <new-container-name> [--cleanup]
 
 set -e
 
-SOURCE_VM="$1"
-NEW_VM="$2"
+# Source the helper library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SCRIPT_DIR/lib/container-helper.sh"
+
+SOURCE_CONTAINER="$1"
+NEW_CONTAINER="$2"
 CLEANUP="${3:-}"
 
-if [ -z "$SOURCE_VM" ] || [ -z "$NEW_VM" ]; then
-    echo "Usage: $0 <source-vm> <new-vm-name> [--cleanup]"
+if [ -z "$SOURCE_CONTAINER" ] || [ -z "$NEW_CONTAINER" ]; then
+    echo "Usage: $0 <source-container> <new-container-name> [--cleanup]"
     echo
     echo "Options:"
-    echo "  --cleanup    Clean up source VM before cloning"
+    echo "  --cleanup    Clean up source container before cloning"
     echo
     echo "Example:"
     echo "  $0 ubuntu web-dev --cleanup"
     exit 1
 fi
 
-echo "=== Cloning VM: $SOURCE_VM → $NEW_VM ==="
+echo "=== Cloning Container/VM: $SOURCE_CONTAINER → $NEW_CONTAINER ==="
+echo "System: $(print_system_info)"
 echo
 
-# Check if source VM exists
-if ! orb list | grep -q "^$SOURCE_VM "; then
-    echo "Error: Source VM '$SOURCE_VM' not found"
+# Check if source container exists
+if ! container_exists "$SOURCE_CONTAINER"; then
+    echo "Error: Source container/VM '$SOURCE_CONTAINER' not found"
     echo
-    echo "Available VMs:"
-    orb list
+    echo "Available containers/VMs:"
+    container_list
     exit 1
 fi
 
-# Check if target VM already exists
-if orb list | grep -q "^$NEW_VM "; then
-    echo "Error: VM '$NEW_VM' already exists"
+# Check if target container already exists
+if container_exists "$NEW_CONTAINER"; then
+    echo "Error: Container/VM '$NEW_CONTAINER' already exists"
     exit 1
 fi
 
 # Optional cleanup
 if [ "$CLEANUP" = "--cleanup" ]; then
-    echo "Step 1: Cleaning up source VM..."
-    ./cleanup-dev.sh "$SOURCE_VM"
+    echo "Step 1: Cleaning up source container..."
+    "$SCRIPT_DIR/scripts/cleanup-dev.sh" "$SOURCE_CONTAINER"
     echo
 fi
 
-# Clone the VM
-echo "Step 2: Cloning $SOURCE_VM to $NEW_VM..."
-orb clone "$SOURCE_VM" "$NEW_VM"
+# Clone the container
+echo "Step 2: Cloning $SOURCE_CONTAINER to $NEW_CONTAINER..."
+container_clone "$SOURCE_CONTAINER" "$NEW_CONTAINER"
 
 echo
-echo "✅ Clone complete!"
+print_success "Clone complete!"
 echo
-echo "New VM created: $NEW_VM"
-orb list | grep "^$NEW_VM "
 
-echo
-echo "To access the new VM:"
-echo "  orb shell $NEW_VM"
+# Show the new container
+echo "New container/VM created: $NEW_CONTAINER"
+CONTAINER_SYSTEM="$(detect_container_system)"
+case "$CONTAINER_SYSTEM" in
+    lxd)
+        lxc list --format=json | jq -r ".[] | select(.name == \"$NEW_CONTAINER\") | \"\(.name) \(.status)\""
+        echo
+        echo "To access the new container:"
+        echo "  lxc exec $NEW_CONTAINER -- /bin/bash"
+        ;;
+    orbstack)
+        orb list | grep "^$NEW_CONTAINER "
+        echo
+        echo "To access the new VM:"
+        echo "  orb shell $NEW_CONTAINER"
+        ;;
+esac

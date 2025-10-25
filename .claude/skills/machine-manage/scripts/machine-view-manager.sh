@@ -1,20 +1,56 @@
 #!/bin/bash
 # Machine-level tmux view manager
-# Aggregates VM tmux sessions into machine-level sessions
+# Aggregates container/VM tmux sessions into machine-level sessions
+# Supports both LXD (Linux) and OrbStack (macOS)
 # Usage: ./machine-view-manager.sh <start|stop|status|attach>
 
 set -e
 
+# Source the helper library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SCRIPT_DIR/lib/container-helper.sh"
+
 COMMAND="${1:-status}"
 
-# Machine management directory
-MACHINE_DIR="/Users/davidxu/repos/univers-machine"
+# Determine machine directory based on OS
+OS_TYPE="$(detect_os)"
+case "$OS_TYPE" in
+    linux)
+        # On Linux, assume this repo is in home directory or user's repos
+        MACHINE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+        ;;
+    macos)
+        # On macOS, use the path from original script
+        MACHINE_DIR="${HOME}/repos/univers-machine"
+        ;;
+    *)
+        # Fallback: try to find it relative to script location
+        MACHINE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+        ;;
+esac
 
-# Get script directory and config paths
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Get config paths
 DESKTOP_STYLE_CONFIG="$SCRIPT_DIR/../configs/machine-desktop-tmux-style.conf"
 MOBILE_STYLE_CONFIG="$SCRIPT_DIR/../configs/machine-mobile-tmux-style.conf"
-VMS_CONFIG="$MACHINE_DIR/config/vms.yaml"
+
+# Config file path depends on container system
+CONTAINER_SYSTEM="$(detect_container_system)"
+case "$CONTAINER_SYSTEM" in
+    lxd)
+        # For LXD on Linux, check for containers.yaml first, then fall back to vms.yaml
+        VMS_CONFIG="$MACHINE_DIR/config/containers.yaml"
+        if [ ! -f "$VMS_CONFIG" ]; then
+            VMS_CONFIG="$MACHINE_DIR/config/vms.yaml"
+        fi
+        ;;
+    orbstack)
+        # For OrbStack on macOS, use vms.yaml
+        VMS_CONFIG="$MACHINE_DIR/config/vms.yaml"
+        ;;
+    *)
+        VMS_CONFIG="$MACHINE_DIR/config/vms.yaml"
+        ;;
+esac
 
 # Load VM list from config or use defaults
 load_vm_list() {
@@ -186,12 +222,13 @@ start_sessions() {
     ensure_machine_manage_session
     echo
 
-    # Check if VMs are running
-    print_info "检查虚拟机状态..."
+    # Check if containers/VMs are running
+    print_info "检查容器/虚拟机状态..."
+    CONTAINER_SYSTEM="$(detect_container_system)"
     for vm in "${DEV_VMS[@]}"; do
-        if ! orb list | grep "^$vm " | grep -q "running"; then
-            print_warning "虚拟机 $vm 未运行，正在启动..."
-            orbctl start "$vm"
+        if ! container_is_running "$vm"; then
+            print_warning "容器/虚拟机 $vm 未运行，正在启动..."
+            container_start "$vm"
         fi
     done
 
@@ -252,10 +289,24 @@ stop_sessions() {
 # Show status
 show_status() {
     echo "=== Machine View Sessions 状态 ==="
+    echo "System: $(print_system_info)"
     echo
 
-    print_header "虚拟机状态:"
-    orb list | grep -E "(integration-dev|web-dev|control-dev|validation-dev)" || echo "没有找到 dev 虚拟机"
+    print_header "容器/虚拟机状态:"
+
+    # Show container/VM status
+    CONTAINER_SYSTEM="$(detect_container_system)"
+    case "$CONTAINER_SYSTEM" in
+        lxd)
+            lxc list --format=json | jq -r '.[] | "\(.name) \(.status)"' 2>/dev/null || echo "无法获取 LXD 容器列表"
+            ;;
+        orbstack)
+            orb list | grep -E "(integration-dev|web-dev|control-dev|validation-dev)" || echo "没有找到 dev 虚拟机"
+            ;;
+        *)
+            echo "Error: No container system detected"
+            ;;
+    esac
 
     echo
     print_header "Machine View 会话状态:"
@@ -336,6 +387,9 @@ case "$COMMAND" in
         ;;
     -h|--help|help)
         echo "Machine View Manager - 机器层面 tmux 会话管理"
+        echo "支持 LXD (Linux) 和 OrbStack (macOS)"
+        echo
+        echo "System: $(print_system_info)"
         echo
         echo "Usage: $0 <command> [options]"
         echo
@@ -355,12 +409,17 @@ case "$COMMAND" in
         echo "  $0 restart            # 重启所有会话"
         echo
         echo "Machine Views:"
-        echo "  machine-desktop-view  - 聚合所有 VM 的桌面视图（完整信息）"
-        echo "  machine-mobile-view   - 聚合所有 VM 的移动视图（简化显示）"
+        echo "  machine-desktop-view  - 聚合所有容器/VM 的桌面视图（完整信息）"
+        echo "  machine-mobile-view   - 聚合所有容器/VM 的移动视图（简化显示）"
         echo "  univers-machine-manage - 物理机管理会话"
         echo
+        echo "Supported Container Systems:"
+        echo "  LXD (Linux)      - 使用 'lxc' 命令"
+        echo "  OrbStack (macOS) - 使用 'orb' 命令"
+        echo
         echo "Configuration:"
-        echo "  VM list: $VMS_CONFIG"
+        echo "  Container list: $VMS_CONFIG"
+        echo "  Machine dir: $MACHINE_DIR"
         exit 0
         ;;
     *)
