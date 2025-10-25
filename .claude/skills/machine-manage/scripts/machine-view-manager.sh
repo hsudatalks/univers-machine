@@ -30,8 +30,8 @@ case "$OS_TYPE" in
 esac
 
 # Get config paths
-DESKTOP_STYLE_CONFIG="$SCRIPT_DIR/../configs/machine-desktop-tmux-style.conf"
-MOBILE_STYLE_CONFIG="$SCRIPT_DIR/../configs/machine-mobile-tmux-style.conf"
+DESKTOP_STYLE_CONFIG="$SCRIPT_DIR/configs/machine-desktop-tmux-style.conf"
+MOBILE_STYLE_CONFIG="$SCRIPT_DIR/configs/machine-mobile-tmux-style.conf"
 
 # Config file path depends on container system
 CONTAINER_SYSTEM="$(detect_container_system)"
