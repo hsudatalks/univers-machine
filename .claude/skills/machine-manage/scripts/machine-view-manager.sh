@@ -184,7 +184,8 @@ create_desktop_view() {
     local container_system="$(detect_container_system)"
     case "$container_system" in
         lxd)
-            tmux send-keys -t "machine-desktop-view:$first_vm" "lxc exec $first_vm -- su ubuntu -c 'tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $first_vm -- su ubuntu -c 'tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $first_vm -- su ubuntu -c 'bash'" C-m
+            # For LXD, need to unset TMUX for nested tmux sessions
+            tmux send-keys -t "machine-desktop-view:$first_vm" "lxc exec $first_vm -- su ubuntu -c 'unset TMUX && tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $first_vm -- su ubuntu -c 'unset TMUX && tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $first_vm -- su ubuntu -c 'bash'" C-m
             ;;
         orbstack)
             tmux send-keys -t "machine-desktop-view:$first_vm" "orbctl run --machine $first_vm tmux attach -t univers-desktop-view 2>/dev/null || orbctl run --machine $first_vm tmux attach -t univers-manager 2>/dev/null || orbctl shell $first_vm" C-m
@@ -196,7 +197,8 @@ create_desktop_view() {
         tmux new-window -t machine-desktop-view -n "$vm"
         case "$container_system" in
             lxd)
-                tmux send-keys -t "machine-desktop-view:$vm" "lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'bash'" C-m
+                # For LXD, need to unset TMUX for nested tmux sessions
+                tmux send-keys -t "machine-desktop-view:$vm" "lxc exec $vm -- su ubuntu -c 'unset TMUX && tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'unset TMUX && tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'bash'" C-m
                 ;;
             orbstack)
                 tmux send-keys -t "machine-desktop-view:$vm" "orbctl run --machine $vm tmux attach -t univers-desktop-view 2>/dev/null || orbctl run --machine $vm tmux attach -t univers-manager 2>/dev/null || orbctl shell $vm" C-m
@@ -239,7 +241,8 @@ create_mobile_view() {
     local container_system="$(detect_container_system)"
     case "$container_system" in
         lxd)
-            tmux send-keys -t "machine-mobile-view:$first_vm" "lxc exec $first_vm -- su ubuntu -c 'tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $first_vm -- su ubuntu -c 'tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $first_vm -- su ubuntu -c 'bash'" C-m
+            # For LXD, need to unset TMUX for nested tmux sessions
+            tmux send-keys -t "machine-mobile-view:$first_vm" "lxc exec $first_vm -- su ubuntu -c 'unset TMUX && tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $first_vm -- su ubuntu -c 'unset TMUX && tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $first_vm -- su ubuntu -c 'bash'" C-m
             ;;
         orbstack)
             tmux send-keys -t "machine-mobile-view:$first_vm" "orbctl run --machine $first_vm tmux attach -t univers-mobile-view 2>/dev/null || orbctl run --machine $first_vm tmux attach -t univers-manager 2>/dev/null || orbctl shell $first_vm" C-m
@@ -251,7 +254,8 @@ create_mobile_view() {
         tmux new-window -t machine-mobile-view -n "$vm"
         case "$container_system" in
             lxd)
-                tmux send-keys -t "machine-mobile-view:$vm" "lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'bash'" C-m
+                # For LXD, need to unset TMUX for nested tmux sessions
+                tmux send-keys -t "machine-mobile-view:$vm" "lxc exec $vm -- su ubuntu -c 'unset TMUX && tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'unset TMUX && tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'bash'" C-m
                 ;;
             orbstack)
                 tmux send-keys -t "machine-mobile-view:$vm" "orbctl run --machine $vm tmux attach -t univers-mobile-view 2>/dev/null || orbctl run --machine $vm tmux attach -t univers-manager 2>/dev/null || orbctl shell $vm" C-m
@@ -453,7 +457,8 @@ refresh_windows() {
                 tmux new-window -t machine-desktop-view -n "$vm"
                 case "$container_system" in
                     lxd)
-                        tmux send-keys -t "machine-desktop-view:$vm" "lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'bash'" C-m
+                        # For LXD, need to unset TMUX for nested tmux sessions
+                        tmux send-keys -t "machine-desktop-view:$vm" "lxc exec $vm -- su ubuntu -c 'unset TMUX && tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'unset TMUX && tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'bash'" C-m
                         ;;
                     orbstack)
                         tmux send-keys -t "machine-desktop-view:$vm" "orbctl run --machine $vm tmux attach -t univers-desktop-view 2>/dev/null || orbctl run --machine $vm tmux attach -t univers-manager 2>/dev/null || orbctl shell $vm" C-m
@@ -494,7 +499,8 @@ refresh_windows() {
                 tmux new-window -t machine-mobile-view -n "$vm"
                 case "$container_system" in
                     lxd)
-                        tmux send-keys -t "machine-mobile-view:$vm" "lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'bash'" C-m
+                        # For LXD, need to unset TMUX for nested tmux sessions
+                        tmux send-keys -t "machine-mobile-view:$vm" "lxc exec $vm -- su ubuntu -c 'unset TMUX && tmux attach -t univers-mobile-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'unset TMUX && tmux attach -t univers-desktop-view' 2>/dev/null || lxc exec $vm -- su ubuntu -c 'bash'" C-m
                         ;;
                     orbstack)
                         tmux send-keys -t "machine-mobile-view:$vm" "orbctl run --machine $vm tmux attach -t univers-mobile-view 2>/dev/null || orbctl run --machine $vm tmux attach -t univers-manager 2>/dev/null || orbctl shell $vm" C-m
