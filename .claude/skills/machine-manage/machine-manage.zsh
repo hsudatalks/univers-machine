@@ -24,6 +24,9 @@ machine-manager() {
     "$MACHINE_MANAGE_SCRIPT" "$@"
 }
 
+# Alias for machine-manager (mm = machine-manage)
+alias mm='machine-manager'
+
 # Optional: Add completion for machine-manager
 _machine_manager() {
     local -a commands
@@ -39,3 +42,4 @@ _machine_manager() {
 }
 
 compdef _machine_manager machine-manager
+compdef _machine_manager mm
