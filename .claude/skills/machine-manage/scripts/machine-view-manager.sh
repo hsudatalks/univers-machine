@@ -208,14 +208,14 @@ create_desktop_view() {
         print_warning "样式配置文件未找到: $DESKTOP_STYLE_CONFIG"
     fi
 
-    # Attach to first VM's container session
+    # Attach to first VM's container shell
     # Note: --project is needed to ensure lxc commands access the correct project
-    tmux send-keys -t "machine-desktop-view:$first_vm" "lxc exec --project default $first_vm -- su ubuntu -c 'unset TMUX && exec tmux attach -t univers-desktop-view'" C-m
+    tmux send-keys -t "machine-desktop-view:$first_vm" "lxc exec --project default $first_vm -- su ubuntu" C-m
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-desktop-view -n "$vm"
-        tmux send-keys -t "machine-desktop-view:$vm" "lxc exec --project default $vm -- su ubuntu -c 'unset TMUX && exec tmux attach -t univers-desktop-view'" C-m
+        tmux send-keys -t "machine-desktop-view:$vm" "lxc exec --project default $vm -- su ubuntu" C-m
     done
 
     # Add machine-manage window at the end
@@ -249,14 +249,14 @@ create_mobile_view() {
         print_warning "样式配置文件未找到: $MOBILE_STYLE_CONFIG"
     fi
 
-    # Attach to first VM's container session
+    # Attach to first VM's container shell
     # Note: --project is needed to ensure lxc commands access the correct project
-    tmux send-keys -t "machine-mobile-view:$first_vm" "lxc exec --project default $first_vm -- su ubuntu -c 'unset TMUX && exec tmux attach -t univers-mobile-view'" C-m
+    tmux send-keys -t "machine-mobile-view:$first_vm" "lxc exec --project default $first_vm -- su ubuntu" C-m
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-mobile-view -n "$vm"
-        tmux send-keys -t "machine-mobile-view:$vm" "lxc exec --project default $vm -- su ubuntu -c 'unset TMUX && exec tmux attach -t univers-mobile-view'" C-m
+        tmux send-keys -t "machine-mobile-view:$vm" "lxc exec --project default $vm -- su ubuntu" C-m
     done
 
     # Add machine-manage window at the end
@@ -450,7 +450,7 @@ refresh_windows() {
             if ! echo "$current_windows" | grep -q "^$vm$"; then
                 print_info "  添加窗口: $vm"
                 tmux new-window -t machine-desktop-view -n "$vm"
-                tmux send-keys -t "machine-desktop-view:$vm" "lxc exec --project default $vm -- su ubuntu -c 'unset TMUX && exec tmux attach -t univers-desktop-view'" C-m
+                tmux send-keys -t "machine-desktop-view:$vm" "lxc exec --project default $vm -- su ubuntu" C-m
             fi
             last_window_index=$((last_window_index + 1))
         done
@@ -484,7 +484,7 @@ refresh_windows() {
             if ! echo "$current_windows" | grep -q "^$vm$"; then
                 print_info "  添加窗口: $vm"
                 tmux new-window -t machine-mobile-view -n "$vm"
-                tmux send-keys -t "machine-mobile-view:$vm" "lxc exec --project default $vm -- su ubuntu -c 'unset TMUX && exec tmux attach -t univers-mobile-view'" C-m
+                tmux send-keys -t "machine-mobile-view:$vm" "lxc exec --project default $vm -- su ubuntu" C-m
             fi
         done
 
