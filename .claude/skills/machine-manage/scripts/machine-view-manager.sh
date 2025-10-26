@@ -166,8 +166,8 @@ ensure_machine_manage_session() {
 # Helper function to attach to container session with fallback
 attach_to_container_session() {
     local container="$1"
-    local session_name="${2:-univers-desktop-view}"
-    local fallback_session="${3:-univers-manager}"
+    local session_name="${2:-container-desktop-view}"
+    local fallback_session="${3:-container-manager}"
 
     local container_system="$(detect_container_system)"
 

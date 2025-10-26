@@ -18,7 +18,7 @@
 lxc exec hvac-dev -- tmux list-sessions
 
 # ❌ 错误：找不到 tmux 会话（root 看不到 ubuntu 用户的会话）
-lxc exec hvac-dev -- bash -c "tmux attach -t univers-mobile-view"
+lxc exec hvac-dev -- bash -c "tmux attach -t container-mobile-view"
 ```
 
 ### ✅ 正确做法
@@ -28,7 +28,7 @@ lxc exec hvac-dev -- bash -c "tmux attach -t univers-mobile-view"
 lxc exec hvac-dev -- su ubuntu -c "tmux list-sessions"
 
 # ✅ 正确：以 ubuntu 用户身份连接会话
-lxc exec hvac-dev -- su ubuntu -c 'tmux attach -t univers-mobile-view'
+lxc exec hvac-dev -- su ubuntu -c 'tmux attach -t container-mobile-view'
 
 # ✅ 使用 container_exec 助手函数（推荐）
 source lib/container-helper.sh
@@ -47,7 +47,7 @@ container_exec <container> "<command>"
 
 # 例：
 container_exec hvac-dev "tmux list-sessions"
-container_exec hvac-dev "tmux attach -t univers-mobile-view"
+container_exec hvac-dev "tmux attach -t container-mobile-view"
 
 # 检测容器系统（LXD 或 OrbStack）
 detect_container_system  # 返回 "lxd" 或 "orbstack"
@@ -102,7 +102,7 @@ mm refresh          # 刷新窗口列表
 
 ```bash
 # 从宿主机连接到容器的会话
-./scripts/container-tmux-attach.sh hvac-dev univers-mobile-view
+./scripts/container-tmux-attach.sh hvac-dev container-mobile-view
 ```
 
 ## 常见错误及修复

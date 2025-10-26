@@ -13,14 +13,14 @@
 #   - validation-dev
 #
 # The script automatically creates:
-#   - univers-desktop-view: aggregated desktop view with 3 windows
-#   - univers-mobile-view: aggregated mobile view with 4 windows
+#   - container-desktop-view: aggregated desktop view with 3 windows
+#   - container-mobile-view: aggregated mobile view with 4 windows
 
 set -e
 
 # Constants
-DESKTOP_VIEW="univers-desktop-view"
-MOBILE_VIEW="univers-mobile-view"
+DESKTOP_VIEW="container-desktop-view"
+MOBILE_VIEW="container-mobile-view"
 
 # Desktop view windows: workbench, operation, manager
 DESKTOP_WINDOWS=("workbench" "operation" "manager")

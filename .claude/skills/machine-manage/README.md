@@ -137,8 +137,8 @@ Machine-level sessions use custom blue-themed styles to distinguish them from VM
 
 **What it does:**
 Creates machine-level tmux sessions on your physical Mac that aggregate all VM tmux sessions:
-- `machine-desktop-view` - Aggregates all `univers-desktop-view` sessions from dev VMs
-- `machine-mobile-view` - Aggregates all `univers-mobile-view` sessions from dev VMs
+- `machine-desktop-view` - Aggregates all `container-desktop-view` sessions from dev VMs
+- `machine-mobile-view` - Aggregates all `container-mobile-view` sessions from dev VMs
 - `univers-machine-manage` - A local session for managing the physical machine (added to both views)
 
 Each session has 5 windows:
