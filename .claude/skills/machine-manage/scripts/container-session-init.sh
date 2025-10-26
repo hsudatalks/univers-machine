@@ -82,11 +82,8 @@ create_desktop_view() {
         return
     fi
 
-    # Create main session with first window
-    tmux new-session -d -s "$DESKTOP_VIEW" -c ~
-
-    # Rename first window
-    tmux rename-window -t "$DESKTOP_VIEW:0" "${DESKTOP_WINDOWS[0]}"
+    # Create main session with first window (use -n flag to name it)
+    tmux new-session -d -s "$DESKTOP_VIEW" -n "${DESKTOP_WINDOWS[0]}" -c ~
     tmux send-keys -t "$DESKTOP_VIEW:${DESKTOP_WINDOWS[0]}" "# Desktop View - $(date)" C-m
 
     # Add remaining windows
@@ -108,11 +105,8 @@ create_mobile_view() {
         return
     fi
 
-    # Create main session with first window
-    tmux new-session -d -s "$MOBILE_VIEW" -c ~
-
-    # Rename first window
-    tmux rename-window -t "$MOBILE_VIEW:0" "${MOBILE_WINDOWS[0]}"
+    # Create main session with first window (use -n flag to name it)
+    tmux new-session -d -s "$MOBILE_VIEW" -n "${MOBILE_WINDOWS[0]}" -c ~
     tmux send-keys -t "$MOBILE_VIEW:${MOBILE_WINDOWS[0]}" "# Mobile View - $(date)" C-m
 
     # Add remaining windows
