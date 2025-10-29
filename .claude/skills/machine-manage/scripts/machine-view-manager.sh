@@ -249,14 +249,29 @@ create_mobile_view() {
         print_warning "样式配置文件未找到: $MOBILE_STYLE_CONFIG"
     fi
 
-    # Attach to first VM's container shell
-    # Use container_shell to properly enter ubuntu user environment
-    tmux send-keys -t "machine-mobile-view:$first_vm" "mm shell $first_vm" C-m
+    # Attach to first VM's container-mobile-view (with fallback to shell)
+    # This ensures machine-mobile-view connects to container-mobile-view
+    local container_system="$(detect_container_system)"
+    case "$container_system" in
+        lxd)
+            tmux send-keys -t "machine-mobile-view:$first_vm" "lxc exec $first_vm -- su - ubuntu -c 'tmux attach -t container-mobile-view || exec bash'" C-m
+            ;;
+        orbstack)
+            tmux send-keys -t "machine-mobile-view:$first_vm" "orbctl run --machine $first_vm -- tmux attach -t container-mobile-view || orbctl shell $first_vm" C-m
+            ;;
+    esac
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-mobile-view -n "$vm"
-        tmux send-keys -t "machine-mobile-view:$vm" "mm shell $vm" C-m
+        case "$container_system" in
+            lxd)
+                tmux send-keys -t "machine-mobile-view:$vm" "lxc exec $vm -- su - ubuntu -c 'tmux attach -t container-mobile-view || exec bash'" C-m
+                ;;
+            orbstack)
+                tmux send-keys -t "machine-mobile-view:$vm" "orbctl run --machine $vm -- tmux attach -t container-mobile-view || orbctl shell $vm" C-m
+                ;;
+        esac
     done
 
     # Add machine-manage window at the end
@@ -480,11 +495,19 @@ refresh_windows() {
         # Similar logic for mobile view
         local current_windows=$(tmux list-windows -t machine-mobile-view -F "#{window_name}" | head -n -1)
 
+        local container_system="$(detect_container_system)"
         for vm in "${DEV_VMS[@]}"; do
             if ! echo "$current_windows" | grep -q "^$vm$"; then
                 print_info "  添加窗口: $vm"
                 tmux new-window -t machine-mobile-view -n "$vm"
-                tmux send-keys -t "machine-mobile-view:$vm" "mm shell $vm" C-m
+                case "$container_system" in
+                    lxd)
+                        tmux send-keys -t "machine-mobile-view:$vm" "lxc exec $vm -- su - ubuntu -c 'tmux attach -t container-mobile-view || exec bash'" C-m
+                        ;;
+                    orbstack)
+                        tmux send-keys -t "machine-mobile-view:$vm" "orbctl run --machine $vm -- tmux attach -t container-mobile-view || orbctl shell $vm" C-m
+                        ;;
+                esac
             fi
         done
 
