@@ -274,14 +274,10 @@ create_mobile_view() {
         esac
     done
 
-    # Add machine-manage window at the end
-    tmux new-window -t machine-mobile-view -n "machine-manage"
-    tmux send-keys -t "machine-mobile-view:machine-manage" "unset TMUX && tmux attach -t univers-machine-manage" C-m
-
     # Select first window
     tmux select-window -t "machine-mobile-view:0"
 
-    print_success "Machine Mobile View 会话已创建 (包含 machine-manage 窗口)"
+    print_success "Machine Mobile View 会话已创建"
 }
 
 # Start both sessions
@@ -513,11 +509,10 @@ refresh_windows() {
 
         local window_list=$(tmux list-windows -t machine-mobile-view -F "#{window_name}:#{window_index}")
         while IFS=: read -r window_name window_index; do
-            if [ "$window_name" != "machine-manage" ]; then
-                if ! printf '%s\n' "${DEV_VMS[@]}" | grep -q "^$window_name$"; then
-                    print_info "  移除窗口: $window_name"
-                    tmux kill-window -t "machine-mobile-view:$window_index"
-                fi
+            # Remove windows that are not in the current VM list
+            if ! printf '%s\n' "${DEV_VMS[@]}" | grep -q "^$window_name$"; then
+                print_info "  移除窗口: $window_name"
+                tmux kill-window -t "machine-mobile-view:$window_index"
             fi
         done <<< "$window_list"
 
