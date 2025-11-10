@@ -72,17 +72,19 @@ load_vm_list() {
             ;;
     esac
 
-    # Filter out excluded containers (ubuntu)
+    # Filter: only include *-dev VMs, exclude ubuntu and non-dev VMs
     local excluded_vms=("ubuntu")
     for vm in "${vms[@]}"; do
         local is_excluded=0
+        # Check if in excluded list
         for excluded in "${excluded_vms[@]}"; do
             if [ "$vm" = "$excluded" ]; then
                 is_excluded=1
                 break
             fi
         done
-        if [ $is_excluded -eq 0 ]; then
+        # Only include VMs ending with -dev
+        if [ $is_excluded -eq 0 ] && [[ "$vm" == *-dev ]]; then
             filtered_vms+=("$vm")
         fi
     done
@@ -95,7 +97,7 @@ load_vm_list() {
             local order_vms=$(grep -A 20 "^display-order:" "$VMS_CONFIG" 2>/dev/null | grep "^  - " | sed 's/^  - //' | grep -v "^#")
             if [ -n "$order_vms" ]; then
                 while IFS= read -r vm; do
-                    # Skip excluded containers
+                    # Skip excluded containers and non-dev VMs
                     local is_excluded=0
                     for excluded in "${excluded_vms[@]}"; do
                         if [ "$vm" = "$excluded" ]; then
@@ -103,7 +105,8 @@ load_vm_list() {
                             break
                         fi
                     done
-                    if [ $is_excluded -eq 0 ]; then
+                    # Only include VMs ending with -dev
+                    if [ $is_excluded -eq 0 ] && [[ "$vm" == *-dev ]]; then
                         local enabled=$(grep -A 5 "^  $vm:" "$VMS_CONFIG" 2>/dev/null | grep "enabled:" | awk '{print $2}')
                         if [ "$enabled" = "true" ]; then
                             vms+=("$vm")
