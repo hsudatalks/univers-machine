@@ -217,12 +217,12 @@ create_desktop_view() {
 
     # Attach to first VM's container-desktop-view
     # Use -d to detach other clients so window size follows this connection
-    tmux send-keys -t "machine-desktop-view:$first_vm" "mm shell $first_vm 'unset TMUX; tmux attach -t container-desktop-view'" C-m
+    tmux send-keys -t "machine-desktop-view:$first_vm" "mm shell $first_vm" C-m
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-desktop-view -n "$vm"
-        tmux send-keys -t "machine-desktop-view:$vm" "mm shell $vm 'unset TMUX; tmux attach -t container-desktop-view'" C-m
+        tmux send-keys -t "machine-desktop-view:$vm" "mm shell $vm" C-m
     done
 
     # Add machine-manage window at the end
@@ -499,7 +499,7 @@ refresh_windows() {
                 else
                     tmux new-window -t machine-desktop-view -n "$vm"
                 fi
-                tmux send-keys -t "machine-desktop-view:$vm" "mm shell $vm 'unset TMUX; tmux attach -t container-desktop-view'" C-m
+                tmux send-keys -t "machine-desktop-view:$vm" "mm shell $vm" C-m
             fi
         done
 
