@@ -218,11 +218,15 @@ create_desktop_view() {
     # Attach to first VM's container-desktop-view
     # Use -d to detach other clients so window size follows this connection
     tmux send-keys -t "machine-desktop-view:$first_vm" "mm shell $first_vm" C-m
+    sleep 1
+    tmux send-keys -t "machine-desktop-view:$first_vm" "tmux attach -t container-desktop-view" C-m
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-desktop-view -n "$vm"
         tmux send-keys -t "machine-desktop-view:$vm" "mm shell $vm" C-m
+        sleep 1
+        tmux send-keys -t "machine-desktop-view:$vm" "tmux attach -t container-desktop-view" C-m
     done
 
     # Add machine-manage window at the end
@@ -263,11 +267,15 @@ create_mobile_view() {
     # Attach to first VM's container-mobile-view
     # Use -d to detach other clients so window size follows this connection
     tmux send-keys -t "machine-mobile-view:$first_vm" "mm shell $first_vm" C-m
+    sleep 1
+    tmux send-keys -t "machine-mobile-view:$first_vm" "tmux attach -t container-mobile-view" C-m
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-mobile-view -n "$vm"
         tmux send-keys -t "machine-mobile-view:$vm" "mm shell $vm" C-m
+        sleep 1
+        tmux send-keys -t "machine-mobile-view:$vm" "tmux attach -t container-mobile-view" C-m
     done
 
     # Select first window
@@ -500,6 +508,8 @@ refresh_windows() {
                     tmux new-window -t machine-desktop-view -n "$vm"
                 fi
                 tmux send-keys -t "machine-desktop-view:$vm" "mm shell $vm" C-m
+                sleep 1
+                tmux send-keys -t "machine-desktop-view:$vm" "tmux attach -t container-desktop-view" C-m
             fi
         done
 
@@ -531,6 +541,8 @@ refresh_windows() {
                 print_info "  添加窗口: $vm"
                 tmux new-window -t machine-mobile-view -n "$vm"
                 tmux send-keys -t "machine-mobile-view:$vm" "mm shell $vm" C-m
+                sleep 1
+                tmux send-keys -t "machine-mobile-view:$vm" "tmux attach -t container-mobile-view" C-m
             fi
         done
 
