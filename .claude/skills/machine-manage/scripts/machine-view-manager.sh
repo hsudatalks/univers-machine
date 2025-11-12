@@ -262,12 +262,12 @@ create_mobile_view() {
 
     # Attach to first VM's container-mobile-view
     # Use -d to detach other clients so window size follows this connection
-    tmux send-keys -t "machine-mobile-view:$first_vm" "mm shell $first_vm 'unset TMUX; tmux attach -t container-mobile-view'" C-m
+    tmux send-keys -t "machine-mobile-view:$first_vm" "mm shell $first_vm 'while true; do unset TMUX; tmux attach -t container-mobile-view 2>/dev/null; sleep 1; done'" C-m
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-mobile-view -n "$vm"
-        tmux send-keys -t "machine-mobile-view:$vm" "mm shell $vm 'unset TMUX; tmux attach -t container-mobile-view'" C-m
+        tmux send-keys -t "machine-mobile-view:$vm" "mm shell $vm 'while true; do unset TMUX; tmux attach -t container-mobile-view 2>/dev/null; sleep 1; done'" C-m
     done
 
     # Select first window
@@ -530,7 +530,7 @@ refresh_windows() {
             if ! echo "$current_windows" | grep -q "^$vm$"; then
                 print_info "  添加窗口: $vm"
                 tmux new-window -t machine-mobile-view -n "$vm"
-                tmux send-keys -t "machine-mobile-view:$vm" "mm shell $vm 'unset TMUX; tmux attach -t container-mobile-view'" C-m
+                tmux send-keys -t "machine-mobile-view:$vm" "mm shell $vm 'while true; do unset TMUX; tmux attach -t container-mobile-view 2>/dev/null; sleep 1; done'" C-m
             fi
         done
 
