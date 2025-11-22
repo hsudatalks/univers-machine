@@ -42,6 +42,7 @@ _machine_manager() {
         'attach:连接到会话 (desktop/mobile)'
         'refresh:刷新窗口以匹配当前运行的容器'
         'shell:进入容器/VM shell 或执行命令 (自动检测系统)'
+        'share:通过 Web 浏览器分享容器 tmux 会话'
     )
 
     _describe 'command' commands

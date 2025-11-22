@@ -602,6 +602,12 @@ case "$COMMAND" in
             container_shell "$container"
         fi
         ;;
+    share)
+        # mm share <container> <session> [options]
+        # 通过 Web 浏览器分享 tmux 会话
+        shift  # 移除 share 参数
+        "$SCRIPT_DIR/scripts/tmux-web-share.sh" "$@"
+        ;;
     -h|--help|help)
         echo "Machine View Manager - 机器层面 tmux 会话管理"
         echo "支持 LXD (Linux) 和 OrbStack (macOS)"
