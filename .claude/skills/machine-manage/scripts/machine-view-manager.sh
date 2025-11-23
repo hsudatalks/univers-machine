@@ -278,10 +278,14 @@ create_mobile_view() {
         tmux send-keys -t "machine-mobile-view:$vm" "tmux attach -t container-mobile-view" C-m
     done
 
+    # Add machine-manage window at the end
+    tmux new-window -t machine-mobile-view -n "machine-manage"
+    tmux send-keys -t "machine-mobile-view:machine-manage" "unset TMUX && tmux attach -t univers-machine-manage" C-m
+
     # Select first window
     tmux select-window -t "machine-mobile-view:0"
 
-    print_success "Machine Mobile View 会话已创建"
+    print_success "Machine Mobile View 会话已创建 (包含 machine-manage 窗口)"
 }
 
 # Initialize container tmux sessions
@@ -520,17 +524,18 @@ refresh_windows() {
 
     echo
 
-    # Refresh mobile view (same logic)
+    # Refresh mobile view (same logic as desktop)
     if session_exists "machine-mobile-view"; then
         print_info "刷新 machine-mobile-view..."
 
-        # Step 1: Remove old windows first
+        # Step 1: Remove old windows first (except machine-manage)
         local window_list=$(tmux list-windows -t machine-mobile-view -F "#{window_name}:#{window_index}")
         while IFS=: read -r window_name window_index; do
-            # Remove windows that are not in the current VM list
-            if ! printf '%s\n' "${DEV_VMS[@]}" | grep -q "^$window_name$"; then
-                print_info "  移除窗口: $window_name (窗口 $window_index)"
-                tmux kill-window -t "machine-mobile-view:$window_index"
+            if [[ "$window_name" != "machine-manage" && "$window_name" != machine-manage* ]]; then
+                if ! printf '%s\n' "${DEV_VMS[@]}" | grep -q "^$window_name$"; then
+                    print_info "  移除窗口: $window_name (窗口 $window_index)"
+                    tmux kill-window -t "machine-mobile-view:$window_index"
+                fi
             fi
         done <<< "$window_list"
 
@@ -539,12 +544,25 @@ refresh_windows() {
         for vm in "${DEV_VMS[@]}"; do
             if ! echo "$current_windows" | grep -q "^$vm$"; then
                 print_info "  添加窗口: $vm"
-                tmux new-window -t machine-mobile-view -n "$vm"
+                # Find the position before machine-manage window
+                local machine_manage_index=$(tmux list-windows -t machine-mobile-view -F "#{window_index}:#{window_name}" | grep "machine-manage" | cut -d: -f1 | head -1)
+                if [ -n "$machine_manage_index" ]; then
+                    tmux new-window -t "machine-mobile-view:$machine_manage_index" -n "$vm" -b
+                else
+                    tmux new-window -t machine-mobile-view -n "$vm"
+                fi
                 tmux send-keys -t "machine-mobile-view:$vm" "mm shell $vm" C-m
                 sleep 1
                 tmux send-keys -t "machine-mobile-view:$vm" "tmux attach -t container-mobile-view" C-m
             fi
         done
+
+        # Step 3: Ensure machine-manage window exists
+        if ! echo "$current_windows" | grep -q "^machine-manage$"; then
+            print_info "  添加窗口: machine-manage"
+            tmux new-window -t machine-mobile-view -n "machine-manage"
+            tmux send-keys -t "machine-mobile-view:machine-manage" "unset TMUX && tmux attach -t univers-machine-manage" C-m
+        fi
 
         print_success "machine-mobile-view 已刷新"
     else
