@@ -204,8 +204,8 @@ create_desktop_view() {
     local first_vm="${DEV_VMS[0]}"
     tmux new-session -d -s machine-desktop-view -n "$first_vm" -x 179 -y 50
 
-    # Use window-size latest so window follows the most recently active client
-    tmux set-option -t machine-desktop-view window-size latest
+    # Enable aggressive-resize so each window can resize independently for different clients
+    tmux set-option -t machine-desktop-view -g aggressive-resize on
 
     # Apply desktop style configuration
     if [ -f "$DESKTOP_STYLE_CONFIG" ]; then
@@ -253,8 +253,8 @@ create_mobile_view() {
     local first_vm="${DEV_VMS[0]}"
     tmux new-session -d -s machine-mobile-view -n "$first_vm" -x 179 -y 50
 
-    # Use window-size latest so window follows the most recently active client
-    tmux set-option -t machine-mobile-view window-size latest
+    # Enable aggressive-resize so each window can resize independently for different clients
+    tmux set-option -t machine-mobile-view -g aggressive-resize on
 
     # Apply mobile style configuration
     if [ -f "$MOBILE_STYLE_CONFIG" ]; then
