@@ -204,8 +204,8 @@ create_desktop_view() {
     local first_vm="${DEV_VMS[0]}"
     tmux new-session -d -s machine-desktop-view -n "$first_vm" -x 179 -y 50
 
-    # Use window-size latest so window follows the most recently active client
-    tmux set-option -t machine-desktop-view window-size latest
+    # Enable aggressive-resize so windows expand when larger clients attach
+    tmux set-option -t machine-desktop-view -g window-size largest
 
     # Apply desktop style configuration
     if [ -f "$DESKTOP_STYLE_CONFIG" ]; then
@@ -219,14 +219,14 @@ create_desktop_view() {
     # Use -d to detach other clients so window size follows this connection
     tmux send-keys -t "machine-desktop-view:$first_vm" "mm shell $first_vm" C-m
     sleep 1
-    tmux send-keys -t "machine-desktop-view:$first_vm" "tmux attach -d -t container-desktop-view" C-m
+    tmux send-keys -t "machine-desktop-view:$first_vm" "tmux attach -t container-desktop-view" C-m
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-desktop-view -n "$vm"
         tmux send-keys -t "machine-desktop-view:$vm" "mm shell $vm" C-m
         sleep 1
-        tmux send-keys -t "machine-desktop-view:$vm" "tmux attach -d -t container-desktop-view" C-m
+        tmux send-keys -t "machine-desktop-view:$vm" "tmux attach -t container-desktop-view" C-m
     done
 
     # Add machine-manage window at the end
@@ -253,8 +253,8 @@ create_mobile_view() {
     local first_vm="${DEV_VMS[0]}"
     tmux new-session -d -s machine-mobile-view -n "$first_vm" -x 179 -y 50
 
-    # Use window-size latest so window follows the most recently active client
-    tmux set-option -t machine-mobile-view window-size latest
+    # Enable aggressive-resize so windows expand when larger clients attach
+    tmux set-option -t machine-mobile-view -g window-size largest
 
     # Apply mobile style configuration
     if [ -f "$MOBILE_STYLE_CONFIG" ]; then
@@ -268,24 +268,20 @@ create_mobile_view() {
     # Use -d to detach other clients so window size follows this connection
     tmux send-keys -t "machine-mobile-view:$first_vm" "mm shell $first_vm" C-m
     sleep 1
-    tmux send-keys -t "machine-mobile-view:$first_vm" "tmux attach -d -t container-mobile-view" C-m
+    tmux send-keys -t "machine-mobile-view:$first_vm" "tmux attach -t container-mobile-view" C-m
 
     # Add windows for other VMs
     for vm in "${DEV_VMS[@]:1}"; do
         tmux new-window -t machine-mobile-view -n "$vm"
         tmux send-keys -t "machine-mobile-view:$vm" "mm shell $vm" C-m
         sleep 1
-        tmux send-keys -t "machine-mobile-view:$vm" "tmux attach -d -t container-mobile-view" C-m
+        tmux send-keys -t "machine-mobile-view:$vm" "tmux attach -t container-mobile-view" C-m
     done
-
-    # Add machine-manage window at the end
-    tmux new-window -t machine-mobile-view -n "machine-manage"
-    tmux send-keys -t "machine-mobile-view:machine-manage" "unset TMUX && tmux attach -t univers-machine-manage" C-m
 
     # Select first window
     tmux select-window -t "machine-mobile-view:0"
 
-    print_success "Machine Mobile View 会话已创建 (包含 machine-manage 窗口)"
+    print_success "Machine Mobile View 会话已创建"
 }
 
 # Initialize container tmux sessions
@@ -513,7 +509,7 @@ refresh_windows() {
                 fi
                 tmux send-keys -t "machine-desktop-view:$vm" "mm shell $vm" C-m
                 sleep 1
-                tmux send-keys -t "machine-desktop-view:$vm" "tmux attach -d -t container-desktop-view" C-m
+                tmux send-keys -t "machine-desktop-view:$vm" "tmux attach -t container-desktop-view" C-m
             fi
         done
 
@@ -524,18 +520,17 @@ refresh_windows() {
 
     echo
 
-    # Refresh mobile view (same logic as desktop)
+    # Refresh mobile view (same logic)
     if session_exists "machine-mobile-view"; then
         print_info "刷新 machine-mobile-view..."
 
-        # Step 1: Remove old windows first (except machine-manage)
+        # Step 1: Remove old windows first
         local window_list=$(tmux list-windows -t machine-mobile-view -F "#{window_name}:#{window_index}")
         while IFS=: read -r window_name window_index; do
-            if [[ "$window_name" != "machine-manage" && "$window_name" != machine-manage* ]]; then
-                if ! printf '%s\n' "${DEV_VMS[@]}" | grep -q "^$window_name$"; then
-                    print_info "  移除窗口: $window_name (窗口 $window_index)"
-                    tmux kill-window -t "machine-mobile-view:$window_index"
-                fi
+            # Remove windows that are not in the current VM list
+            if ! printf '%s\n' "${DEV_VMS[@]}" | grep -q "^$window_name$"; then
+                print_info "  移除窗口: $window_name (窗口 $window_index)"
+                tmux kill-window -t "machine-mobile-view:$window_index"
             fi
         done <<< "$window_list"
 
@@ -544,25 +539,12 @@ refresh_windows() {
         for vm in "${DEV_VMS[@]}"; do
             if ! echo "$current_windows" | grep -q "^$vm$"; then
                 print_info "  添加窗口: $vm"
-                # Find the position before machine-manage window
-                local machine_manage_index=$(tmux list-windows -t machine-mobile-view -F "#{window_index}:#{window_name}" | grep "machine-manage" | cut -d: -f1 | head -1)
-                if [ -n "$machine_manage_index" ]; then
-                    tmux new-window -t "machine-mobile-view:$machine_manage_index" -n "$vm" -b
-                else
-                    tmux new-window -t machine-mobile-view -n "$vm"
-                fi
+                tmux new-window -t machine-mobile-view -n "$vm"
                 tmux send-keys -t "machine-mobile-view:$vm" "mm shell $vm" C-m
                 sleep 1
-                tmux send-keys -t "machine-mobile-view:$vm" "tmux attach -d -t container-mobile-view" C-m
+                tmux send-keys -t "machine-mobile-view:$vm" "tmux attach -t container-mobile-view" C-m
             fi
         done
-
-        # Step 3: Ensure machine-manage window exists
-        if ! echo "$current_windows" | grep -q "^machine-manage$"; then
-            print_info "  添加窗口: machine-manage"
-            tmux new-window -t machine-mobile-view -n "machine-manage"
-            tmux send-keys -t "machine-mobile-view:machine-manage" "unset TMUX && tmux attach -t univers-machine-manage" C-m
-        fi
 
         print_success "machine-mobile-view 已刷新"
     else
@@ -619,12 +601,6 @@ case "$COMMAND" in
             # 进入交互式 shell
             container_shell "$container"
         fi
-        ;;
-    share)
-        # mm share <container> <session> [options]
-        # 通过 Web 浏览器分享 tmux 会话
-        shift  # 移除 share 参数
-        "$SCRIPT_DIR/scripts/tmux-web-share.sh" "$@"
         ;;
     -h|--help|help)
         echo "Machine View Manager - 机器层面 tmux 会话管理"
