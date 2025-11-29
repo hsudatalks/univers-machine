@@ -232,8 +232,8 @@ create_desktop_view() {
     done
 
     # Add machine-manage window at the end
-    tmux new-window -t machine-desktop-view -n "machine-manage"
-    tmux send-keys -t "machine-desktop-view:machine-manage" "unset TMUX && tmux attach -t univers-machine-manage" C-m
+    tmux new-window -t machine-desktop-view -n "machine"
+    tmux send-keys -t "machine-desktop-view:machine" "unset TMUX && tmux attach -t univers-machine-manage" C-m
 
     # Select first window
     tmux select-window -t "machine-desktop-view:0"
@@ -283,8 +283,8 @@ create_mobile_view() {
     done
 
     # Add machine-manage window at the end
-    tmux new-window -t machine-mobile-view -n "machine-manage"
-    tmux send-keys -t "machine-mobile-view:machine-manage" "unset TMUX && tmux attach -t univers-machine-manage" C-m
+    tmux new-window -t machine-mobile-view -n "machine"
+    tmux send-keys -t "machine-mobile-view:machine" "unset TMUX && tmux attach -t univers-machine-manage" C-m
 
     # Select first window
     tmux select-window -t "machine-mobile-view:0"
@@ -492,10 +492,10 @@ refresh_windows() {
     if session_exists "machine-desktop-view"; then
         print_info "刷新 machine-desktop-view..."
 
-        # Step 1: Remove old windows first (except machine-manage)
+        # Step 1: Remove old windows first (except machine)
         local window_list=$(tmux list-windows -t machine-desktop-view -F "#{window_name}:#{window_index}")
         while IFS=: read -r window_name window_index; do
-            if [[ "$window_name" != "machine-manage" && "$window_name" != machine-manage* ]]; then
+            if [[ "$window_name" != "machine" && "$window_name" != machine-manage* ]]; then
                 # Check if window name matches any VM (after removing -dev suffix)
                 local found=false
                 for vm in "${DEV_VMS[@]}"; do
@@ -517,8 +517,8 @@ refresh_windows() {
             local window_name="${vm%-dev}"  # Remove -dev suffix for display
             if ! echo "$current_windows" | grep -q "^$window_name$"; then
                 print_info "  添加窗口: $window_name"
-                # Find the position before machine-manage window
-                local machine_manage_index=$(tmux list-windows -t machine-desktop-view -F "#{window_index}:#{window_name}" | grep "machine-manage" | cut -d: -f1 | head -1)
+                # Find the position before machine window
+                local machine_manage_index=$(tmux list-windows -t machine-desktop-view -F "#{window_index}:#{window_name}" | grep -E "^[0-9]+:(machine|machine-manage)$" | cut -d: -f1 | head -1)
                 if [ -n "$machine_manage_index" ]; then
                     tmux new-window -t "machine-desktop-view:$machine_manage_index" -n "$window_name" -b
                 else
@@ -541,10 +541,10 @@ refresh_windows() {
     if session_exists "machine-mobile-view"; then
         print_info "刷新 machine-mobile-view..."
 
-        # Step 1: Remove old windows first (except machine-manage)
+        # Step 1: Remove old windows first (except machine)
         local window_list=$(tmux list-windows -t machine-mobile-view -F "#{window_name}:#{window_index}")
         while IFS=: read -r window_name window_index; do
-            if [[ "$window_name" != "machine-manage" && "$window_name" != machine-manage* ]]; then
+            if [[ "$window_name" != "machine" && "$window_name" != machine-manage* ]]; then
                 # Check if window name matches any VM (after removing -dev suffix)
                 local found=false
                 for vm in "${DEV_VMS[@]}"; do
@@ -566,8 +566,8 @@ refresh_windows() {
             local window_name="${vm%-dev}"  # Remove -dev suffix for display
             if ! echo "$current_windows" | grep -q "^$window_name$"; then
                 print_info "  添加窗口: $window_name"
-                # Find the position before machine-manage window
-                local machine_manage_index=$(tmux list-windows -t machine-mobile-view -F "#{window_index}:#{window_name}" | grep "machine-manage" | cut -d: -f1 | head -1)
+                # Find the position before machine window
+                local machine_manage_index=$(tmux list-windows -t machine-mobile-view -F "#{window_index}:#{window_name}" | grep -E "^[0-9]+:(machine|machine-manage)$" | cut -d: -f1 | head -1)
                 if [ -n "$machine_manage_index" ]; then
                     tmux new-window -t "machine-mobile-view:$machine_manage_index" -n "$window_name" -b
                 else
@@ -579,11 +579,11 @@ refresh_windows() {
             fi
         done
 
-        # Step 3: Ensure machine-manage window exists
-        if ! echo "$current_windows" | grep -q "^machine-manage$"; then
-            print_info "  添加窗口: machine-manage"
-            tmux new-window -t machine-mobile-view -n "machine-manage"
-            tmux send-keys -t "machine-mobile-view:machine-manage" "unset TMUX && tmux attach -t univers-machine-manage" C-m
+        # Step 3: Ensure machine window exists
+        if ! echo "$current_windows" | grep -qE "^(machine|machine-manage)$"; then
+            print_info "  添加窗口: machine"
+            tmux new-window -t machine-mobile-view -n "machine"
+            tmux send-keys -t "machine-mobile-view:machine" "unset TMUX && tmux attach -t univers-machine-manage" C-m
         fi
 
         print_success "machine-mobile-view 已刷新"
