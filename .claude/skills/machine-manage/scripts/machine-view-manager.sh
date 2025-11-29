@@ -648,6 +648,23 @@ case "$COMMAND" in
         shift  # 移除 share 参数
         "$SCRIPT_DIR/scripts/tmux-web-share.sh" "$@"
         ;;
+    inspect)
+        # mm inspect [container]
+        # 检查容器内部状态（tmux 会话、服务等）
+        shift  # 移除 inspect 参数
+
+        if [ $# -eq 0 ]; then
+            # 检查所有容器
+            DEV_VMS=($(load_vm_list))
+            for vm in "${DEV_VMS[@]}"; do
+                "$SCRIPT_DIR/scripts/container-inspect.sh" "$vm"
+                echo ""
+            done
+        else
+            # 检查指定容器
+            "$SCRIPT_DIR/scripts/container-inspect.sh" "$1"
+        fi
+        ;;
     -h|--help|help)
         echo "Machine View Manager - 机器层面 tmux 会话管理"
         echo "支持 LXD (Linux) 和 OrbStack (macOS)"
