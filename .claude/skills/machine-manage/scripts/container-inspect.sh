@@ -47,6 +47,38 @@ else
     exit 1
 fi
 
+# Check if Claude Code is working
+check_claude_working() {
+    # Find claude process
+    local claude_pid=$($CONTAINER_CMD 'pgrep -x claude' 2>/dev/null | head -1 || echo "")
+
+    if [ -z "$claude_pid" ]; then
+        echo "${RED}[Not Running]${NC}"
+        return
+    fi
+
+    # Get CPU usage - use ps for more reliable output
+    local cpu_usage=$($CONTAINER_CMD "ps -p $claude_pid -o %cpu= 2>/dev/null | tr -d ' '" || echo "0")
+
+    # Get connection count
+    local connections=$($CONTAINER_CMD "lsof -p $claude_pid 2>/dev/null | grep -c ESTABLISHED || true")
+
+    # Remove decimal point for comparison (convert 18.5 to 18)
+    local cpu_int=${cpu_usage%.*}
+
+    # Handle empty or non-numeric values
+    if [[ ! "$cpu_int" =~ ^[0-9]+$ ]]; then
+        cpu_int=0
+    fi
+
+    # Determine status based on CPU and connections
+    if [ "$cpu_int" -gt 5 ] || [ "$connections" -gt 2 ]; then
+        echo "${GREEN}[Working - CPU: ${cpu_usage}%, Conns: ${connections}]${NC}"
+    else
+        echo "${YELLOW}[Idle - CPU: ${cpu_usage}%, Conns: ${connections}]${NC}"
+    fi
+}
+
 # Check tmux sessions
 check_tmux_sessions() {
     print_header "Tmux Sessions in $CONTAINER"
@@ -71,7 +103,14 @@ check_tmux_sessions() {
     for session in "${important_sessions[@]}"; do
         if echo "$sessions" | grep -q "^$session:"; then
             local info=$(echo "$sessions" | grep "^$session:" | sed 's/^[^:]*: //')
-            print_success "$session - $info"
+
+            # Special check for univers-developer (Claude Code session)
+            if [ "$session" = "univers-developer" ]; then
+                local claude_status=$(check_claude_working)
+                print_success "$session - $info $claude_status"
+            else
+                print_success "$session - $info"
+            fi
         fi
     done
     
