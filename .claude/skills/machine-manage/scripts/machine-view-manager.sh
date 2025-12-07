@@ -11,7 +11,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SCRIPT_DIR/lib/container-helper.sh"
 
 COMMAND="${1:-status}"
-
 # Determine machine directory based on OS
 OS_TYPE="$(detect_os)"
 case "$OS_TYPE" in
@@ -668,7 +667,7 @@ case "$COMMAND" in
                 fi
                 
                 # 确定要操作的VM列表
-                local vms_to_manage=()
+                vms_to_manage=()
                 if [ -n "$target_vm" ]; then
                     # 检查指定VM是否存在且运行
                     if ! container_is_running "$target_vm"; then
