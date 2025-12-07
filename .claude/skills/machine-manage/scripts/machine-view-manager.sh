@@ -155,6 +155,11 @@ session_exists() {
 ensure_machine_manage_session() {
     if session_exists "univers-machine-manage"; then
         print_info "univers-machine-manage 会话已存在"
+        # Apply configuration even if session exists
+        if [ -f "$MANAGE_STYLE_CONFIG" ]; then
+            tmux source-file -t univers-machine-manage "$MANAGE_STYLE_CONFIG" 2>/dev/null || true
+            print_info "已重新应用管理会话样式配置"
+        fi
         return
     fi
 
