@@ -304,9 +304,9 @@ initialize_container_tmux() {
     fi
 
     # Step 2: Start container tmux sessions using cm
-    print_info "  → 启动容器内的 tmux 会话 (cm tmux start)..."
-    if ! container_exec "$vm" "cm tmux start" 2>/dev/null; then
-        print_warning "  → cm tmux start 失败，可能 cm 命令不存在或会话已存在，继续执行..."
+    print_info "  → 启动容器内的 tmux 会话 (~/repos/univers-container/.claude/skills/container-manage/bin/cm tmux start)..."
+    if ! container_exec "$vm" "~/repos/univers-container/.claude/skills/container-manage/bin/cm tmux start" 2>/dev/null; then
+        print_warning "  → ~/repos/univers-container/.claude/skills/container-manage/bin/cm tmux start 失败，可能 cm 命令不存在或会话已存在，继续执行..."
     fi
 
     print_success "容器 $vm 初始化完成"
@@ -700,7 +700,7 @@ case "$COMMAND" in
                     
                     # 启动会话
                     print_info "  → 启动 univers-manage 会话..."
-                    if container_exec "$vm" "cm tmux start" 2>/dev/null; then
+                    if container_exec "$vm" "~/repos/univers-container/.claude/skills/container-manage/bin/cm tmux start" 2>/dev/null; then
                         print_success "  → $vm univers-manage 会话已启动"
                     else
                         print_warning "  → $vm univers-manage 启动失败，可能已存在或cm命令不可用"
