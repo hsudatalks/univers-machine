@@ -42,7 +42,7 @@ _machine_manager() {
         'attach:连接到会话 (desktop/mobile)'
         'refresh:刷新窗口以匹配当前运行的容器'
         'update [container]:更新容器内的代码库 (all|container_name)'
-        'manage:管理容器内的 univers-manage 会话 (start|restart)'
+        'manage [cmd]:构建/刷新 machine manage 会话并内嵌容器管理会话 (build|rebuild|refresh|start|restart)'
         'shell:进入容器/VM shell 或执行命令 (自动检测系统)'
         'share:通过 Web 浏览器分享容器 tmux 会话'
         'inspect:检查容器内部状态 (会话、服务、资源)'
@@ -51,5 +51,12 @@ _machine_manager() {
     _describe 'command' commands
 }
 
-compdef _machine_manager machine-manager
-compdef _machine_manager mm
+# Safely add completion if compdef is available
+if command -v compdef >/dev/null 2>&1; then
+    compdef _machine_manager machine-manager
+    compdef _machine_manager mm
+else
+    # Fallback: define completion function without compdef
+    # This allows the function to be available but without tab completion
+    :
+fi
