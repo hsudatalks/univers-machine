@@ -129,30 +129,44 @@ container_is_running() {
 }
 
 # Execute command in container/VM with proper user account
-# 🔑 重要：自动使用正确的用户账号（ubuntu 用于 LXD，davidxu 用于 OrbStack）
+# 🔑 重要：自动使用正确的用户账号（ubuntu 用于 LXD，davidxu 用于 OrbStack，server-dev@orb 用于 macOS SSH）
 # 📝 统一使用bash shell确保命令执行一致性和可靠性
 container_exec() {
     local name="$1"
     shift
     local container_system="$(detect_container_system)"
+    local os="$(detect_os)"
 
     # 将所有参数合并为一个字符串（处理带空格的参数）
     local cmd="$*"
 
-    case "$container_system" in
-        lxd)
-            # LXD: 使用 ubuntu 用户（不能用 root，root 无法访问 ubuntu 用户的 tmux 会话）
-            # 使用 bash -l 启动login shell以加载环境配置
-            # 注意：容器内的cm命令通过/usr/local/bin/cm symlink在PATH中可用
-            lxc exec "$name" -- su - ubuntu -c "bash -l -c '$cmd'"
+    case "$os" in
+        macos)
+            # macOS: 使用 ssh 进入 OrbStack 虚拟机
+            # 格式: ssh server-dev@orb, ssh ui-dev@orb, ssh web-dev@orb
+            ssh "${name}@orb" "bash -l -c '$cmd'"
             ;;
-        orbstack)
-            # OrbStack: 使用 davidxu 用户（该用户拥有所有会话和配置）
-            # bash -l 读取登录shell的配置（.bash_profile, .bashrc等）
-            orb run --machine "$name" bash -l -c "$cmd"
+        linux)
+            case "$container_system" in
+                lxd)
+                    # LXD: 使用 ubuntu 用户（不能用 root，root 无法访问 ubuntu 用户的会话）
+                    # 使用 bash -l 启动login shell以加载环境配置
+                    # 注意：容器内的cm命令通过/usr/local/bin/cm symlink在PATH中可用
+                    lxc exec "$name" -- su - ubuntu -c "bash -l -c '$cmd'"
+                    ;;
+                orbstack)
+                    # OrbStack: 使用 davidxu 用户（该用户拥有所有会话和配置）
+                    # bash -l 读取登录shell的配置（.bash_profile, .bashrc等）
+                    orb run --machine "$name" bash -l -c "$cmd"
+                    ;;
+                *)
+                    echo "Error: No container system detected" >&2
+                    return 1
+                    ;;
+            esac
             ;;
         *)
-            echo "Error: No container system detected" >&2
+            echo "Error: Unsupported operating system: $os" >&2
             return 1
             ;;
     esac
@@ -259,21 +273,36 @@ container_delete() {
 # Open shell in container/VM with correct user account
 # LXD: ubuntu user (不能用 root，root 无法访问 ubuntu 用户的 tmux 会话)
 # OrbStack: davidxu user (该用户拥有所有会话和配置)
+# macOS: 使用 ssh server-dev@orb 进入虚拟机
 container_shell() {
     local name="$1"
     local container_system="$(detect_container_system)"
+    local os="$(detect_os)"
 
-    case "$container_system" in
-        lxd)
-            # LXD: 使用 ubuntu 用户进入交互式 shell
-            lxc exec "$name" -- su - ubuntu
+    case "$os" in
+        macos)
+            # macOS: 使用 ssh 进入 OrbStack 虚拟机
+            # 格式: ssh server-dev@orb, ssh ui-dev@orb, ssh web-dev@orb
+            ssh "${name}@orb"
             ;;
-        orbstack)
-            # OrbStack: 已经使用 davidxu 用户
-            orb shell "$name"
+        linux)
+            case "$container_system" in
+                lxd)
+                    # LXD: 使用 ubuntu 用户进入交互式 shell
+                    lxc exec "$name" -- su - ubuntu
+                    ;;
+                orbstack)
+                    # OrbStack: 已经使用 davidxu 用户
+                    orb shell "$name"
+                    ;;
+                *)
+                    echo "Error: No container system detected" >&2
+                    return 1
+                    ;;
+            esac
             ;;
         *)
-            echo "Error: No container system detected" >&2
+            echo "Error: Unsupported operating system: $os" >&2
             return 1
             ;;
     esac
