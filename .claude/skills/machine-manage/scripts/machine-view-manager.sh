@@ -30,7 +30,8 @@ esac
 
 # Get config paths
 DESKTOP_STYLE_CONFIG="$SCRIPT_DIR/configs/machine-desktop-tmux-style.conf"
-MOBILE_STYLE_CONFIG="$SCRIPT_DIR/configs/machine-mobile-tmux-style.conf"
+MOBILE_STYLE_CONFIG="$SCRIPT_DIR/configs/machine-mobile-view.conf"
+MANAGE_STYLE_CONFIG="$SCRIPT_DIR/configs/univers-machine-manage.conf"
 
 # Config file path depends on container system
 CONTAINER_SYSTEM="$(detect_container_system)"
@@ -161,6 +162,14 @@ ensure_machine_manage_session() {
 
     # Create the session in the machine directory
     tmux new-session -d -s univers-machine-manage -c "$MACHINE_DIR"
+
+    # Apply machine manage style configuration
+    if [ -f "$MANAGE_STYLE_CONFIG" ]; then
+        tmux source-file -t univers-machine-manage "$MANAGE_STYLE_CONFIG" 2>/dev/null || true
+        print_info "已应用管理会话样式配置"
+    else
+        print_warning "管理会话样式配置文件未找到: $MANAGE_STYLE_CONFIG"
+    fi
 
     print_success "univers-machine-manage 会话已创建"
 }
