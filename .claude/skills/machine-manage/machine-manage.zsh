@@ -41,6 +41,7 @@ _machine_manager() {
         'status:查看状态'
         'attach:连接到会话 (desktop/mobile)'
         'refresh:刷新窗口以匹配当前运行的容器'
+        'update [container]:更新容器内的代码库 (all|container_name)'
         'manage:管理容器内的 univers-manage 会话 (start|restart)'
         'shell:进入容器/VM shell 或执行命令 (自动检测系统)'
         'share:通过 Web 浏览器分享容器 tmux 会话'

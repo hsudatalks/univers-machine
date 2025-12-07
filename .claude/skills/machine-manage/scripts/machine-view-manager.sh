@@ -643,96 +643,99 @@ case "$COMMAND" in
         fi
         ;;
     manage)
-        # mm manage <action> [vm_name]
-        # 管理容器内的 univers-manage 会话
-        # action: start|restart
-        # vm_name: 可选，不指定则操作所有VM
-        local action="$2"
-        local target_vm="$3"
-        
-        if [ -z "$action" ]; then
-            echo "❌ Error: action required"
-            echo "Usage: mm manage <start|restart> [vm_name]"
-            exit 1
-        fi
-        
-        if [ "$action" != "start" ] && [ "$action" != "restart" ]; then
-            echo "❌ Error: invalid action '$action'"
-            echo "Supported actions: start, restart"
-            exit 1
-        fi
-        
-        # 确定要操作的VM列表
-        local vms_to_manage=()
-        if [ -n "$target_vm" ]; then
-            # 检查指定VM是否存在且运行
-            if ! container_is_running "$target_vm"; then
-                echo "❌ Error: VM '$target_vm' is not running"
+        # Check if this is build/rebuild/refresh or start/restart
+        subcmd="$2"
+        case "$subcmd" in
+            build|rebuild|refresh)
+                # mm manage [build|rebuild|refresh] - 构建/刷新 machine manage 会话
+                "$SCRIPT_DIR/scripts/build-machine-manage.sh" "$subcmd"
+                ;;
+            start|restart)
+                # mm manage <start|restart> [vm_name] - 管理容器内的 univers-manage 会话
+                action="$subcmd"
+                target_vm="$3"
+                
+                if [ -z "$action" ]; then
+                    echo "❌ Error: action required"
+                    echo "Usage: mm manage <start|restart> [vm_name]"
+                    exit 1
+                fi
+                
+                if [ "$action" != "start" ] && [ "$action" != "restart" ]; then
+                    echo "❌ Error: invalid action '$action'"
+                    echo "Supported actions: start, restart"
+                    exit 1
+                fi
+                
+                # 确定要操作的VM列表
+                local vms_to_manage=()
+                if [ -n "$target_vm" ]; then
+                    # 检查指定VM是否存在且运行
+                    if ! container_is_running "$target_vm"; then
+                        echo "❌ Error: VM '$target_vm' is not running"
+                        exit 1
+                    fi
+                    vms_to_manage=("$target_vm")
+                else
+                    # 操作所有dev VMs
+                    vms_to_manage=("${DEV_VMS[@]}")
+                    if [ ${#vms_to_manage[@]} -eq 0 ]; then
+                        echo "❌ Error: no running dev VMs found"
+                        exit 1
+                    fi
+                fi
+                
+                echo "=== 管理 univers-manage 会话 ==="
+                echo "操作: $action"
+                echo "目标: ${vms_to_manage[@]}"
+                echo
+                
+                for vm in "${vms_to_manage[@]}"; do
+                    print_info "处理 VM: $vm"
+                    
+                    if [ "$action" = "restart" ]; then
+                        # 先停止会话
+                        print_info "  → 停止 univers-manage 会话..."
+                        container_exec "$vm" "tmux has-session -t univers-manage 2>/dev/null && tmux kill-session -t univers-manage" 2>/dev/null || true
+                    fi
+                    
+                    # 启动会话
+                    print_info "  → 启动 univers-manage 会话..."
+                    if container_exec "$vm" "cm tmux start" 2>/dev/null; then
+                        print_success "  → $vm univers-manage 会话已启动"
+                    else
+                        print_warning "  → $vm univers-manage 启动失败，可能已存在或cm命令不可用"
+                    fi
+                done
+                
+                echo
+                print_success "管理操作完成！"
+                echo
+                print_info "使用以下命令连接到管理会话："
+                for vm in "${vms_to_manage[@]}"; do
+                    echo "  mm shell $vm \"tmux attach -t univers-manage\""
+                done
+                ;;
+            "")
+                # Default to build if no subcommand provided
+                "$SCRIPT_DIR/scripts/build-machine-manage.sh" build
+                ;;
+            *)
+                echo "❌ Error: unknown manage subcommand '$subcmd'"
+                echo "Supported subcommands: build, rebuild, refresh, start, restart"
                 exit 1
-            fi
-            vms_to_manage=("$target_vm")
-        else
-            # 操作所有dev VMs
-            vms_to_manage=("${DEV_VMS[@]}")
-            if [ ${#vms_to_manage[@]} -eq 0 ]; then
-                echo "❌ Error: no running dev VMs found"
-                exit 1
-            fi
-        fi
-        
-        echo "=== 管理 univers-manage 会话 ==="
-        echo "操作: $action"
-        echo "目标: ${vms_to_manage[@]}"
-        echo
-        
-        for vm in "${vms_to_manage[@]}"; do
-            print_info "处理 VM: $vm"
-            
-            if [ "$action" = "restart" ]; then
-                # 先停止会话
-                print_info "  → 停止 univers-manage 会话..."
-                container_exec "$vm" "tmux has-session -t univers-manage 2>/dev/null && tmux kill-session -t univers-manage" 2>/dev/null || true
-            fi
-            
-            # 启动会话
-            print_info "  → 启动 univers-manage 会话..."
-            if container_exec "$vm" "cm tmux start" 2>/dev/null; then
-                print_success "  → $vm univers-manage 会话已启动"
-            else
-                print_warning "  → $vm univers-manage 启动失败，可能已存在或cm命令不可用"
-            fi
-        done
-        
-        echo
-        print_success "管理操作完成！"
-        echo
-        print_info "使用以下命令连接到管理会话："
-        for vm in "${vms_to_manage[@]}"; do
-            echo "  mm shell $vm \"tmux attach -t univers-manage\""
-        done
+                ;;
+        esac
+        ;;
+    update)
+        # mm update [container] - 更新容器内的代码库
+        "$SCRIPT_DIR/scripts/update-container-repos.sh" "$2"
         ;;
     share)
         # mm share <container> <session> [options]
         # 通过 Web 浏览器分享 tmux 会话
         shift  # 移除 share 参数
         "$SCRIPT_DIR/scripts/tmux-web-share.sh" "$@"
-        ;;
-    inspect)
-        # mm inspect [container]
-        # 检查容器内部状态（tmux 会话、服务等）
-        shift  # 移除 inspect 参数
-
-        if [ $# -eq 0 ]; then
-            # 检查所有容器
-            DEV_VMS=($(load_vm_list))
-            for vm in "${DEV_VMS[@]}"; do
-                "$SCRIPT_DIR/scripts/container-inspect.sh" "$vm"
-                echo ""
-            done
-        else
-            # 检查指定容器
-            "$SCRIPT_DIR/scripts/container-inspect.sh" "$1"
-        fi
         ;;
     -h|--help|help)
         echo "Machine View Manager - 机器层面 tmux 会话管理"
@@ -749,7 +752,11 @@ case "$COMMAND" in
         echo "  attach <type> - 连接到指定会话 (desktop|mobile)"
         echo "  restart       - 重启所有会话"
         echo "  refresh       - 刷新窗口以匹配当前运行的容器/VM（无需退出 tmux）"
-        echo "  manage <action> [vm] - 管理容器内的 univers-manage 会话 (start|restart)"
+        echo "  manage [cmd]  - 构建/刷新 machine manage 会话并内嵌容器管理会话"
+        echo "                 - build: 构建会话（默认）"
+        echo "                 - rebuild: 重新构建会话"
+        echo "                 - refresh: 刷新会话"
+        echo "                 - start|restart [vm]: 管理容器内univers-manage会话"
         echo "  shell <name> [cmd...]  - 进入容器或执行命令 (使用正确的用户账号)"
         echo "  -h, --help    - 显示此帮助信息"
         echo
@@ -760,9 +767,14 @@ case "$COMMAND" in
         echo "  $0 status             # 查看状态"
         echo "  $0 restart            # 重启所有会话"
         echo "  $0 refresh            # 刷新窗口（在 tmux 中运行）"
+        echo "  $0 manage             # 构建 machine manage 会话（默认）"
+        echo "  $0 manage rebuild     # 重新构建会话（删除现有）"
+        echo "  $0 manage refresh     # 刷新会话（不关闭窗口）"
         echo "  $0 manage start       # 启动所有VM的univers-manage会话"
         echo "  $0 manage start web-dev  # 启动指定VM的univers-manage会话"
         echo "  $0 manage restart      # 重启所有VM的univers-manage会话"
+        echo "  $0 update              # 更新所有VM的代码库"
+        echo "  $0 update web-dev      # 更新指定VM的代码库"
         echo "  $0 shell hvac-dev     # 进入 hvac-dev 容器的交互式 shell"
         echo "  $0 shell hvac-dev tmux list-sessions  # 在容器中执行命令"
         echo "  $0 shell ubuntu 'ls -la ~'  # 在 ubuntu 容器执行命令"
