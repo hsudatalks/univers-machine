@@ -129,7 +129,7 @@ Machine-level sessions use custom blue-themed styles to distinguish them from VM
 - **Active window**: Bright blue with ✓
 - **Inactive window**: Gray-blue
 
-**Mobile View** (`machine-mobile-tmux-style.conf`):
+**Mobile View** (`machine-mobile-view.conf`):
 - **Status bar**: Simplified - only window list
 - **Left**: (empty)
 - **Right**: (empty)
@@ -227,14 +227,15 @@ Tmux style configuration for machine-desktop-view. Automatically applied when cr
 - Window navigation shortcuts (Ctrl+Y/U, Alt+0-4)
 - Scroll shortcuts (Ctrl+J/K)
 
-### `configs/machine-mobile-tmux-style.conf`
+### `configs/machine-mobile-view.conf`
 Tmux style configuration for machine-mobile-view. Simplified version for focused window navigation.
 
 **Features:**
 - Blue color scheme (consistent with desktop view)
-- Minimal status bar - only window list (no left/right info)
+- Minimal status bar - shows CPU stats only
+- Session-specific settings (set -t) to avoid conflicts
+- Mouse-clickable window list with proper status-format
 - Same navigation shortcuts as desktop view
-- Optimized for distraction-free window switching
 
 **Customization:**
 You can edit these files to change:
