@@ -91,4 +91,5 @@ else
 fi
 
 # Format output
-echo "${CPU_USAGE}% ${USED_GB}/${TOTAL_GB}G ${SWAP_PCT}% ${MEM_STATUS}"
+TOTAL_GB_INT=$(echo "scale=0; $TOTAL_GB / 1" | bc 2>/dev/null || echo "$TOTAL_GB" | cut -d"." -f1)
+echo "${CPU_USAGE}% ${USED_GB}/${TOTAL_GB_INT}G ${SWAP_PCT}% ${MEM_STATUS}"
