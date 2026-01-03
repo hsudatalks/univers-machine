@@ -293,6 +293,11 @@ create_desktop_view() {
     tmux new-window -t machine-desktop-view -n "machine"
     tmux send-keys -t "machine-desktop-view:machine" "unset TMUX && tmux attach -t univers-machine-manage" C-m
 
+    # Re-apply style configuration after all windows are created
+    if [ -f "$DESKTOP_STYLE_CONFIG" ]; then
+        tmux source-file -t machine-desktop-view "$DESKTOP_STYLE_CONFIG" 2>/dev/null || true
+    fi
+
     # Select first window
     tmux select-window -t "machine-desktop-view:0"
 
@@ -364,6 +369,11 @@ create_mobile_view() {
     # Add machine-manage window at the end
     tmux new-window -t machine-mobile-view -n "machine"
     tmux send-keys -t "machine-mobile-view:machine" "unset TMUX && tmux attach -t univers-machine-manage" C-m
+
+    # Re-apply style configuration after all windows are created
+    if [ -f "$MOBILE_STYLE_CONFIG" ]; then
+        tmux source-file -t machine-mobile-view "$MOBILE_STYLE_CONFIG" 2>/dev/null || true
+    fi
 
     # Select first window
     tmux select-window -t "machine-mobile-view:0"
