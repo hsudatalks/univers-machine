@@ -52,6 +52,30 @@ case "$CONTAINER_SYSTEM" in
         ;;
 esac
 
+# Check if local machine has cm command available
+# Need to check the actual path since cm might be an alias
+has_local_cm() {
+    # Try to find cm binary, ignoring aliases
+    local cm_path=$(type -P cm 2>/dev/null || which cm 2>/dev/null | grep -v "^cm is an alias" | head -1)
+
+    # If type -P didn't work, check if the alias target exists
+    if [ -z "$cm_path" ]; then
+        # Check common locations for cm script
+        local possible_paths=(
+            "$HOME/repos/univers-container/.claude/skills/container-manage/bin/cm"
+            "/home/david/repos/univers-container/.claude/skills/container-manage/bin/cm"
+        )
+        for path in "${possible_paths[@]}"; do
+            if [ -x "$path" ]; then
+                cm_path="$path"
+                break
+            fi
+        done
+    fi
+
+    [ -n "$cm_path" ] && [ -x "$cm_path" ]
+}
+
 # Load VM list dynamically from actual running containers/VMs
 # This detects real containers/VMs instead of relying on static config
 # Excludes: ubuntu (not a dev machine, used for other purposes)
@@ -212,11 +236,32 @@ create_desktop_view() {
         return
     fi
 
-    # Create the main session with first VM
-    # Use larger default size (179x50) to avoid constraining nested sessions
-    local first_vm="${DEV_VMS[0]}"
-    local window_name="${first_vm%-dev}"  # Remove -dev suffix for display
-    tmux new-session -d -s machine-desktop-view -n "$window_name" -x 179 -y 50
+    # Check if we should create local window first
+    local has_local=false
+    if has_local_cm; then
+        has_local=true
+        print_info "检测到本机 cm 命令，将创建本机窗口"
+    fi
+
+    # Create the main session
+    # If local cm exists, start with local window, otherwise first VM
+    if [ "$has_local" = true ]; then
+        # Start with local machine window
+        tmux new-session -d -s machine-desktop-view -n "local" -x 179 -y 50
+        print_info "创建本机 local 窗口"
+        tmux send-keys -t "machine-desktop-view:local" "unset TMUX && tmux attach -d -t container-desktop-view" C-m
+    elif [ ${#DEV_VMS[@]} -gt 0 ]; then
+        # No local cm, start with first VM
+        local first_vm="${DEV_VMS[0]}"
+        local window_name="${first_vm%-dev}"  # Remove -dev suffix for display
+        tmux new-session -d -s machine-desktop-view -n "$window_name" -x 179 -y 50
+        tmux send-keys -t "machine-desktop-view:$window_name" "mm shell $first_vm" C-m
+        sleep 1
+        tmux send-keys -t "machine-desktop-view:$window_name" "tmux attach -d -t container-desktop-view" C-m
+    else
+        print_warning "没有可用的容器或本地 cm 命令"
+        return
+    fi
 
     # Enable aggressive-resize so each window can resize independently for different clients
     tmux set-option -t machine-desktop-view -g aggressive-resize on
@@ -229,14 +274,14 @@ create_desktop_view() {
         print_warning "样式配置文件未找到: $DESKTOP_STYLE_CONFIG"
     fi
 
-    # Attach to first VM's container-desktop-view
-    # Use -d to detach other clients so window size follows this connection
-    tmux send-keys -t "machine-desktop-view:$window_name" "mm shell $first_vm" C-m
-    sleep 1
-    tmux send-keys -t "machine-desktop-view:$window_name" "tmux attach -d -t container-desktop-view" C-m
+    # Add windows for remote VMs (skip first if we already started with local)
+    local start_index=0
+    if [ "$has_local" = false ] && [ ${#DEV_VMS[@]} -gt 0 ]; then
+        start_index=1  # Skip first VM as it was already created
+    fi
 
-    # Add windows for other VMs
-    for vm in "${DEV_VMS[@]:1}"; do
+    for ((i=start_index; i<${#DEV_VMS[@]}; i++)); do
+        local vm="${DEV_VMS[$i]}"
         local window_name="${vm%-dev}"  # Remove -dev suffix for display
         tmux new-window -t machine-desktop-view -n "$window_name"
         tmux send-keys -t "machine-desktop-view:$window_name" "mm shell $vm" C-m
@@ -263,11 +308,32 @@ create_mobile_view() {
         return
     fi
 
-    # Create the main session with first VM
-    # Use larger default size (179x50) to avoid constraining nested sessions
-    local first_vm="${DEV_VMS[0]}"
-    local window_name="${first_vm%-dev}"  # Remove -dev suffix for display
-    tmux new-session -d -s machine-mobile-view -n "$window_name" -x 179 -y 50
+    # Check if we should create local window first
+    local has_local=false
+    if has_local_cm; then
+        has_local=true
+        print_info "检测到本机 cm 命令，将创建本机窗口"
+    fi
+
+    # Create the main session
+    # If local cm exists, start with local window, otherwise first VM
+    if [ "$has_local" = true ]; then
+        # Start with local machine window
+        tmux new-session -d -s machine-mobile-view -n "local" -x 179 -y 50
+        print_info "创建本机 local 窗口"
+        tmux send-keys -t "machine-mobile-view:local" "unset TMUX && tmux attach -d -t container-mobile-view" C-m
+    elif [ ${#DEV_VMS[@]} -gt 0 ]; then
+        # No local cm, start with first VM
+        local first_vm="${DEV_VMS[0]}"
+        local window_name="${first_vm%-dev}"  # Remove -dev suffix for display
+        tmux new-session -d -s machine-mobile-view -n "$window_name" -x 179 -y 50
+        tmux send-keys -t "machine-mobile-view:$window_name" "mm shell $first_vm" C-m
+        sleep 1
+        tmux send-keys -t "machine-mobile-view:$window_name" "tmux attach -d -t container-mobile-view" C-m
+    else
+        print_warning "没有可用的容器或本地 cm 命令"
+        return
+    fi
 
     # Enable aggressive-resize so each window can resize independently for different clients
     tmux set-option -t machine-mobile-view -g aggressive-resize on
@@ -280,14 +346,14 @@ create_mobile_view() {
         print_warning "样式配置文件未找到: $MOBILE_STYLE_CONFIG"
     fi
 
-    # Attach to first VM's container-mobile-view
-    # Use -d to detach other clients so window size follows this connection
-    tmux send-keys -t "machine-mobile-view:$window_name" "mm shell $first_vm" C-m
-    sleep 1
-    tmux send-keys -t "machine-mobile-view:$window_name" "tmux attach -d -t container-mobile-view" C-m
+    # Add windows for remote VMs (skip first if we already started with local)
+    local start_index=0
+    if [ "$has_local" = false ] && [ ${#DEV_VMS[@]} -gt 0 ]; then
+        start_index=1  # Skip first VM as it was already created
+    fi
 
-    # Add windows for other VMs
-    for vm in "${DEV_VMS[@]:1}"; do
+    for ((i=start_index; i<${#DEV_VMS[@]}; i++)); do
+        local vm="${DEV_VMS[$i]}"
         local window_name="${vm%-dev}"  # Remove -dev suffix for display
         tmux new-window -t machine-mobile-view -n "$window_name"
         tmux send-keys -t "machine-mobile-view:$window_name" "mm shell $vm" C-m
