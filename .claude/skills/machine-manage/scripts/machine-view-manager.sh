@@ -16,7 +16,7 @@ OS_TYPE="$(detect_os)"
 case "$OS_TYPE" in
     linux)
         # On Linux, assume this repo is in home directory or user's repos
-        MACHINE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+        MACHINE_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
         ;;
     macos)
         # On macOS, use the path from original script
@@ -24,7 +24,7 @@ case "$OS_TYPE" in
         ;;
     *)
         # Fallback: try to find it relative to script location
-        MACHINE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+        MACHINE_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
         ;;
 esac
 
@@ -404,19 +404,25 @@ start_sessions() {
     # Check if containers/VMs are running
     print_info "检查容器/虚拟机状态..."
     CONTAINER_SYSTEM="$(detect_container_system)"
-    for vm in "${DEV_VMS[@]}"; do
-        if ! container_is_running "$vm"; then
-            print_warning "容器/虚拟机 $vm 未运行，正在启动..."
-            container_start "$vm"
-        fi
-    done
 
-    echo
-    # Initialize container tmux sessions
-    print_info "初始化容器内的 tmux 会话..."
-    for vm in "${DEV_VMS[@]}"; do
-        initialize_container_tmux "$vm"
-    done
+    if [ "$CONTAINER_SYSTEM" = "none" ]; then
+        print_info "未检测到容器系统（LXD/OrbStack），将仅创建本地会话"
+        DEV_VMS=()
+    else
+        for vm in "${DEV_VMS[@]}"; do
+            if ! container_is_running "$vm"; then
+                print_warning "容器/虚拟机 $vm 未运行，正在启动..."
+                container_start "$vm"
+            fi
+        done
+
+        echo
+        # Initialize container tmux sessions
+        print_info "初始化容器内的 tmux 会话..."
+        for vm in "${DEV_VMS[@]}"; do
+            initialize_container_tmux "$vm"
+        done
+    fi
 
     echo
     create_desktop_view
