@@ -73,20 +73,43 @@ load_tmux_config() {
 
     print_info "Loading tmux configuration from $config_file..."
 
-    # Source the config file to apply all settings
-    # Use run-shell to avoid issues with special characters
-    tmux run-shell "
-        tmux set-option -t $session_name -g aggressive-resize on
-        tmux set-option -t $session_name status-style bg=colour234,fg=colour33
-        tmux set-option -t $session_name status-left-length 7
-        tmux set-option -t $session_name status-left ' 👨‍💻 '
-        tmux set-option -t $session_name status-right-length 6
-        tmux set-option -t $session_name status-right ' %H:%M'
-        tmux set-option -t $session_name window-status-format ' #W '
-        tmux set-option -t $session_name window-status-current-format ' [#W] '
-        tmux set-window-option -t $session_name window-status-separator ''
-        tmux set-option -t $session_name status-justify left
-    "
+    # First, clear any conflicting global settings
+    tmux set-option -t "$session_name" status-left ''
+    tmux set-option -t "$session_name" status-right ''
+
+    # Use a more robust approach: source the config file through tmux
+    # The config file uses set -g which sets global options, we need session-specific
+    while IFS= read -r line; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^# ]] && continue
+
+        # Remove inline comments (everything after # that's not in quotes)
+        local clean_line=$(echo "$line" | sed 's/\s*#.*$//')
+        [[ -z "$clean_line" ]] && continue
+
+        # For set commands, replace -g (global) with -t (target session) if not already -t
+        if [[ "$clean_line" =~ ^set-window-option ]]; then
+            # Remove set-window-option -g or setw -g and replace with -t <session>
+            if [[ "$clean_line" =~ -t\  ]]; then
+                # Already has -t, don't modify
+                eval "tmux $clean_line" 2>/dev/null || true
+            else
+                # Replace -g with -t <session>
+                local cmd=$(echo "$clean_line" | sed "s/setw\? -g /set-window-option -t $session_name /")
+                eval "tmux $cmd" 2>/dev/null || true
+            fi
+        elif [[ "$clean_line" =~ ^set\  ]]; then
+            # Check if already has -t
+            if [[ "$clean_line" =~ -t\  ]]; then
+                # Already has -t, don't modify
+                eval "tmux $clean_line" 2>/dev/null || true
+            else
+                # Replace set -g with set-option -t <session>
+                local cmd=$(echo "$clean_line" | sed "s/set -g /set-option -t $session_name /")
+                eval "tmux $cmd" 2>/dev/null || true
+            fi
+        fi
+    done < "$config_file"
 
     print_success "Tmux configuration loaded"
 }
@@ -127,27 +150,8 @@ start_session() {
         tmux set-window-option -t "$SESSION_NAME:$first_key" automatic-rename off
     fi
 
-    # Configure dev session
-    print_info "Configuring dev session..."
-    tmux set-option -t "$SESSION_NAME" -g aggressive-resize on
-    tmux set-option -t "$SESSION_NAME" status-style bg=colour234,fg=colour33  # Dark background, light text
-
-    # Left section: Developer emoji (fixed width)
-    tmux set-option -t "$SESSION_NAME" status-left-length 7
-    tmux set-option -t "$SESSION_NAME" status-left ' 👨‍💻 '
-
-    # Right section: Time (fixed width)
-    tmux set-option -t "$SESSION_NAME" status-right-length 6
-    tmux set-option -t "$SESSION_NAME" status-right ' %H:%M'
-
-    # Middle section: Window list with spaces for readability
-    # Note: tmux automatically shows window flags (-, *, etc.) after the format
-    tmux set-option -t "$SESSION_NAME" window-status-format ' #W '  # Non-current windows
-    tmux set-option -t "$SESSION_NAME" window-status-current-format ' [#W] '  # Current window
-    tmux set-window-option -t "$SESSION_NAME" window-status-separator ''  # No extra separator
-
-    # Justify: left means window list follows status-left, grows to fit available space
-    tmux set-option -t "$SESSION_NAME" status-justify left
+    # Configure dev session from config file
+    load_tmux_config "$SESSION_NAME"
 
     # Add remaining server windows
     local remaining_keys="$(echo "$server_keys" | tail -n +2)"
