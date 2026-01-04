@@ -148,6 +148,9 @@ start_session() {
         tmux set-window-option -t "$SESSION_NAME:$first_key" window-status-format ' #W '
         tmux set-window-option -t "$SESSION_NAME:$first_key" window-status-current-format ' [#W] '
         tmux set-window-option -t "$SESSION_NAME:$first_key" automatic-rename off
+        # Preserve color settings from config file
+        tmux set-window-option -t "$SESSION_NAME:$first_key" window-status-style fg=colour244
+        tmux set-window-option -t "$SESSION_NAME:$first_key" window-status-current-style fg=colour39,bold
     fi
 
     # Configure dev session from config file
@@ -167,6 +170,9 @@ start_session() {
             tmux set-window-option -t "$SESSION_NAME:$key" window-status-format ' #W '
             tmux set-window-option -t "$SESSION_NAME:$key" window-status-current-format ' [#W] '
             tmux set-window-option -t "$SESSION_NAME:$key" automatic-rename off
+            # Preserve color settings from config file
+            tmux set-window-option -t "$SESSION_NAME:$key" window-status-style fg=colour244
+            tmux set-window-option -t "$SESSION_NAME:$key" window-status-current-style fg=colour39,bold
         fi
     done <<< "$remaining_keys"
 
@@ -198,6 +204,9 @@ start_session() {
         tmux set-window-option -t "$SESSION_NAME:$local_name" window-status-format ' #W '
         tmux set-window-option -t "$SESSION_NAME:$local_name" window-status-current-format ' [#W] '
         tmux set-window-option -t "$SESSION_NAME:$local_name" automatic-rename off
+        # Preserve color settings from config file
+        tmux set-window-option -t "$SESSION_NAME:$local_name" window-status-style fg=colour244
+        tmux set-window-option -t "$SESSION_NAME:$local_name" window-status-current-style fg=colour39,bold
     fi
 
     # Key bindings for window navigation
