@@ -249,7 +249,7 @@ create_desktop_view() {
         # Start with local machine window
         tmux new-session -d -s machine-desktop-view -n "local" -x 179 -y 50
         print_info "创建本机 local 窗口"
-        tmux send-keys -t "machine-desktop-view:local" "unset TMUX && tmux attach -d -t container-desktop-view" C-m
+        tmux send-keys -t "machine-desktop-view:local" "unset TMUX && tmux -L container attach -d -t container-desktop-view" C-m
     elif [ ${#DEV_VMS[@]} -gt 0 ]; then
         # No local cm, start with first VM
         local first_vm="${DEV_VMS[0]}"
@@ -326,7 +326,7 @@ create_mobile_view() {
         # Start with local machine window
         tmux new-session -d -s machine-mobile-view -n "local" -x 179 -y 50
         print_info "创建本机 local 窗口"
-        tmux send-keys -t "machine-mobile-view:local" "unset TMUX && tmux attach -d -t container-mobile-view" C-m
+        tmux send-keys -t "machine-mobile-view:local" "unset TMUX && tmux -L container attach -d -t container-mobile-view" C-m
     elif [ ${#DEV_VMS[@]} -gt 0 ]; then
         # No local cm, start with first VM
         local first_vm="${DEV_VMS[0]}"
