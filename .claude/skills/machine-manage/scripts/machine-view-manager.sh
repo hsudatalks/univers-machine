@@ -266,7 +266,7 @@ create_desktop_view() {
         tmux new-session -d -s machine-desktop-view -n "$window_name" -x 179 -y 50
         tmux send-keys -t "machine-desktop-view:$window_name" "mm shell $first_vm" C-m
         sleep 1
-        tmux send-keys -t "machine-desktop-view:$window_name" "tmux attach -d -t container-desktop-view" C-m
+        tmux send-keys -t "machine-desktop-view:$window_name" "unset TMUX && tmux attach -d -t container-desktop-view" C-m
     else
         print_warning "没有可用的容器或本地 cm 命令"
         return
@@ -295,7 +295,7 @@ create_desktop_view() {
         tmux new-window -t machine-desktop-view -n "$window_name"
         tmux send-keys -t "machine-desktop-view:$window_name" "mm shell $vm" C-m
         sleep 1
-        tmux send-keys -t "machine-desktop-view:$window_name" "tmux attach -d -t container-desktop-view" C-m
+        tmux send-keys -t "machine-desktop-view:$window_name" "unset TMUX && tmux attach -d -t container-desktop-view" C-m
     done
 
     # Add machine-manage window at the end
@@ -349,7 +349,7 @@ create_mobile_view() {
         tmux new-session -d -s machine-mobile-view -n "$window_name" -x 179 -y 50
         tmux send-keys -t "machine-mobile-view:$window_name" "mm shell $first_vm" C-m
         sleep 1
-        tmux send-keys -t "machine-mobile-view:$window_name" "tmux attach -d -t container-mobile-view" C-m
+        tmux send-keys -t "machine-mobile-view:$window_name" "unset TMUX && tmux attach -d -t container-mobile-view" C-m
     else
         print_warning "没有可用的容器或本地 cm 命令"
         return
@@ -378,7 +378,7 @@ create_mobile_view() {
         tmux new-window -t machine-mobile-view -n "$window_name"
         tmux send-keys -t "machine-mobile-view:$window_name" "mm shell $vm" C-m
         sleep 1
-        tmux send-keys -t "machine-mobile-view:$window_name" "tmux attach -d -t container-mobile-view" C-m
+        tmux send-keys -t "machine-mobile-view:$window_name" "unset TMUX && tmux attach -d -t container-mobile-view" C-m
     done
 
     # Add machine-manage window at the end
@@ -642,7 +642,7 @@ refresh_windows() {
                 fi
                 tmux send-keys -t "machine-desktop-view:$window_name" "mm shell $vm" C-m
                 sleep 1
-                tmux send-keys -t "machine-desktop-view:$window_name" "tmux attach -d -t container-desktop-view" C-m
+                tmux send-keys -t "machine-desktop-view:$window_name" "unset TMUX && tmux attach -d -t container-desktop-view" C-m
             fi
         done
 
@@ -691,7 +691,7 @@ refresh_windows() {
                 fi
                 tmux send-keys -t "machine-mobile-view:$window_name" "mm shell $vm" C-m
                 sleep 1
-                tmux send-keys -t "machine-mobile-view:$window_name" "tmux attach -d -t container-mobile-view" C-m
+                tmux send-keys -t "machine-mobile-view:$window_name" "unset TMUX && tmux attach -d -t container-mobile-view" C-m
             fi
         done
 
