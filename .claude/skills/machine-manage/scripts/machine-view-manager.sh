@@ -7,7 +7,9 @@
 set -e
 
 # Source the helper library
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Resolve symlinks to get the real script path
+REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")/.." && pwd)"
 source "$SCRIPT_DIR/lib/container-helper.sh"
 
 COMMAND="${1:-status}"
@@ -266,7 +268,7 @@ create_desktop_view() {
         tmux new-session -d -s machine-desktop-view -n "$window_name" -x 179 -y 50
         tmux send-keys -t "machine-desktop-view:$window_name" "mm shell $first_vm" C-m
         sleep 1
-        tmux send-keys -t "machine-desktop-view:$window_name" "unset TMUX && tmux attach -d -t container-desktop-view" C-m
+        tmux send-keys -t "machine-desktop-view:$window_name" "unset TMUX && tmux -L machine attach -d -t container-desktop-view" C-m
     else
         print_warning "没有可用的容器或本地 cm 命令"
         return
@@ -295,12 +297,12 @@ create_desktop_view() {
         tmux new-window -t machine-desktop-view -n "$window_name"
         tmux send-keys -t "machine-desktop-view:$window_name" "mm shell $vm" C-m
         sleep 1
-        tmux send-keys -t "machine-desktop-view:$window_name" "unset TMUX && tmux attach -d -t container-desktop-view" C-m
+        tmux send-keys -t "machine-desktop-view:$window_name" "unset TMUX && tmux -L machine attach -d -t container-desktop-view" C-m
     done
 
     # Add machine-manage window at the end
     tmux new-window -t machine-desktop-view -n "machine"
-    tmux send-keys -t "machine-desktop-view:machine" "unset TMUX && tmux attach -t univers-machine-manage" C-m
+    tmux send-keys -t "machine-desktop-view:machine" "unset TMUX && tmux -L machine attach -t univers-machine-manage" C-m
 
     # Re-apply style configuration after all windows are created
     if [ -f "$DESKTOP_STYLE_CONFIG" ]; then
@@ -349,7 +351,7 @@ create_mobile_view() {
         tmux new-session -d -s machine-mobile-view -n "$window_name" -x 179 -y 50
         tmux send-keys -t "machine-mobile-view:$window_name" "mm shell $first_vm" C-m
         sleep 1
-        tmux send-keys -t "machine-mobile-view:$window_name" "unset TMUX && tmux attach -d -t container-mobile-view" C-m
+        tmux send-keys -t "machine-mobile-view:$window_name" "unset TMUX && tmux -L machine attach -d -t container-mobile-view" C-m
     else
         print_warning "没有可用的容器或本地 cm 命令"
         return
@@ -378,12 +380,12 @@ create_mobile_view() {
         tmux new-window -t machine-mobile-view -n "$window_name"
         tmux send-keys -t "machine-mobile-view:$window_name" "mm shell $vm" C-m
         sleep 1
-        tmux send-keys -t "machine-mobile-view:$window_name" "unset TMUX && tmux attach -d -t container-mobile-view" C-m
+        tmux send-keys -t "machine-mobile-view:$window_name" "unset TMUX && tmux -L machine attach -d -t container-mobile-view" C-m
     done
 
     # Add machine-manage window at the end
     tmux new-window -t machine-mobile-view -n "machine"
-    tmux send-keys -t "machine-mobile-view:machine" "unset TMUX && tmux attach -t univers-machine-manage" C-m
+    tmux send-keys -t "machine-mobile-view:machine" "unset TMUX && tmux -L machine attach -t univers-machine-manage" C-m
 
     # Re-apply style configuration after all windows are created
     if [ -f "$MOBILE_STYLE_CONFIG" ]; then
@@ -570,14 +572,14 @@ attach_session() {
 
     if [ "$view_type" = "desktop" ]; then
         if session_exists "machine-desktop-view"; then
-            tmux attach -t machine-desktop-view
+            tmux -L machine attach -t machine-desktop-view
         else
             print_warning "machine-desktop-view 未运行，请先执行: $0 start"
             exit 1
         fi
     elif [ "$view_type" = "mobile" ]; then
         if session_exists "machine-mobile-view"; then
-            tmux attach -t machine-mobile-view
+            tmux -L machine attach -t machine-mobile-view
         else
             print_warning "machine-mobile-view 未运行，请先执行: $0 start"
             exit 1
@@ -642,7 +644,7 @@ refresh_windows() {
                 fi
                 tmux send-keys -t "machine-desktop-view:$window_name" "mm shell $vm" C-m
                 sleep 1
-                tmux send-keys -t "machine-desktop-view:$window_name" "unset TMUX && tmux attach -d -t container-desktop-view" C-m
+                tmux send-keys -t "machine-desktop-view:$window_name" "unset TMUX && tmux -L machine attach -d -t container-desktop-view" C-m
             fi
         done
 
@@ -691,7 +693,7 @@ refresh_windows() {
                 fi
                 tmux send-keys -t "machine-mobile-view:$window_name" "mm shell $vm" C-m
                 sleep 1
-                tmux send-keys -t "machine-mobile-view:$window_name" "unset TMUX && tmux attach -d -t container-mobile-view" C-m
+                tmux send-keys -t "machine-mobile-view:$window_name" "unset TMUX && tmux -L machine attach -d -t container-mobile-view" C-m
             fi
         done
 
@@ -699,7 +701,7 @@ refresh_windows() {
         if ! echo "$current_windows" | grep -qE "^(machine|machine-manage)$"; then
             print_info "  添加窗口: machine"
             tmux new-window -t machine-mobile-view -n "machine"
-            tmux send-keys -t "machine-mobile-view:machine" "unset TMUX && tmux attach -t univers-machine-manage" C-m
+            tmux send-keys -t "machine-mobile-view:machine" "unset TMUX && tmux -L machine attach -t univers-machine-manage" C-m
         fi
 
         print_success "machine-mobile-view 已刷新"
