@@ -305,23 +305,37 @@ mm_manage() {
     local action="$1"
     print_header "Managing machine-manage sessions ($action) on all servers for $SESSION_NAME"
 
-    # Get server keys
-    local server_keys="$(yq eval ".sessions.$SESSION_NAME.servers | keys | .[]" "$CONFIG_FILE" 2>/dev/null)"
+    # Get server keys - use while loop without pipe to avoid subshell issues
     local ssh_options="$(yq eval ".sessions.$SESSION_NAME.ssh_options" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
+    local -a server_keys=()
+    while IFS= read -r key; do
+        server_keys+=("$key")
+    done < <(yq eval ".sessions.$SESSION_NAME.servers | keys | .[]" "$CONFIG_FILE" 2>/dev/null)
 
-    if [[ -z "$server_keys" ]]; then
+    if [[ ${#server_keys[@]} -eq 0 ]]; then
         print_error "No servers found in configuration"
         exit 1
     fi
 
-    echo "$server_keys" | while IFS= read -r key; do
+    local all_success=true
+    for key in "${server_keys[@]}"; do
         if [[ -n "$key" ]]; then
             local host="$(yq eval ".sessions.$SESSION_NAME.servers.$key.host" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
 
             print_info "Executing 'mm $action' on $host..."
-            ssh $ssh_options "$host" "/usr/bin/bash -lc 'source ~/.zshrc && mm $action'"
+            # Directly use the machine-view-manager.sh script instead of mm alias
+            if ! ssh $ssh_options "$host" "/usr/bin/bash /home/david/repos/univers-machine/.claude/skills/machine-manage/scripts/machine-view-manager.sh $action" 2>&1; then
+                print_warning "Command failed on $host, continuing..."
+                all_success=false
+            fi
         fi
     done
+
+    if [[ "$all_success" == "true" ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 case "$COMMAND" in
