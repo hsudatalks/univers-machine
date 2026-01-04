@@ -198,11 +198,17 @@ update_repositories() {
     echo "$server_keys" | while IFS= read -r key; do
         if [[ -n "$key" ]]; then
             local host="$(yq eval ".sessions.$SESSION_NAME.servers.$key.host" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
+            local username="$(yq eval ".sessions.$SESSION_NAME.servers.$key.username" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
             local repo_path="$(yq eval ".sessions.$SESSION_NAME.servers.$key.repo_path" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
+
+            # Default username if not specified or null
+            if [[ -z "$username" || "$username" == "null" ]]; then
+                username="david"
+            fi
 
             # Default repo path if not specified or null
             if [[ -z "$repo_path" || "$repo_path" == "null" ]]; then
-                repo_path="/home/david/repos"
+                repo_path="/home/$username/repos"
             fi
 
             print_info "Pulling latest code on $host ($repo_path)..."

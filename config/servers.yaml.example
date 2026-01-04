@@ -13,6 +13,8 @@ sessions:
       infra:
         host: "infra-dev"
         description: "Infrastructure development server"
+        # Optional: specify username (default: david)
+        # username: "david"
         # Optional: specify repository path for updates (default: /home/david/repos)
         # repo_path: "/home/david/repos"
       domain:
