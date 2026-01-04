@@ -48,10 +48,9 @@ Commands:
   restart [session]   Restart a session
   list                List all available sessions
   update [session]    Update remote server repositories
-  mm-start [session]  Start remote machine-manage sessions
-  mm-stop [session]   Stop remote machine-manage sessions
-  mm-restart [session] Restart remote machine-manage sessions
-  mm-status [session] Show remote machine-manage status
+  mm-start [session] [view] Start machine view on servers (mobile|desktop)
+  mm-manage [session] [action] Manage machine-manage service (start|stop|restart|status)
+  cm-setup [session]  Setup container-manage on all servers
   --help              Show this help
 
 Examples:
@@ -60,6 +59,8 @@ Examples:
   dm attach          # Attach to default session
   dm status ark-dev  # Check ark-dev status
   dm list            # List all sessions
+  dm mm-start ark-dev mobile  # Start machine-mobile-view on all servers
+  dm mm-manage ark-dev status # Check machine-manage service status
 
 Available sessions:
   ark-dev   - Multi-server development environment
@@ -91,8 +92,31 @@ EOF
 
     # Handle remote commands that don't need tmux
     case "$command" in
-        update|mm-start|mm-stop|mm-restart|mm-status)
+        update|mm-stop|mm-restart|mm-status|cm-setup)
             "$DEV_MANAGE_SCRIPT" "$session_name" "$command"
+            return $?
+            ;;
+        mm-manage)
+            # Parse action for mm-manage
+            if [[ -n "${2:-}" && ("$2" == "start" || "$2" == "stop" || "$2" == "restart" || "$2" == "status") ]]; then
+                action="$2"
+                "$DEV_MANAGE_SCRIPT" "$session_name" "mm-manage" "$action"
+            else
+                # Default to status if not specified
+                "$DEV_MANAGE_SCRIPT" "$session_name" "mm-manage" "status"
+            fi
+            return $?
+            ;;
+        mm-start)
+            # Parse view type for mm-start (mobile or desktop)
+            if [[ -n "${2:-}" && ("$2" == "mobile" || "$2" == "desktop") ]]; then
+                # Command is: dm mm-start ark-dev mobile
+                view_type="$2"
+                "$DEV_MANAGE_SCRIPT" "$session_name" "mm-start" "" "$view_type"
+            else
+                # Default to mobile if not specified
+                "$DEV_MANAGE_SCRIPT" "$session_name" "mm-start" "" "mobile"
+            fi
             return $?
             ;;
     esac

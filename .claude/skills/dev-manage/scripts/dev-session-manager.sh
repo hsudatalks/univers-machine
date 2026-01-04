@@ -62,6 +62,35 @@ check_yq() {
 
 session_exists() { tmux has-session -t "$1" 2>/dev/null; }
 
+load_tmux_config() {
+    local session_name="$1"
+    local config_file="$REPO_ROOT/.claude/skills/dev-manage/configs/dev-session-tmux.conf"
+
+    if [[ ! -f "$config_file" ]]; then
+        print_error "Tmux config file not found: $config_file"
+        return 1
+    fi
+
+    print_info "Loading tmux configuration from $config_file..."
+
+    # Source the config file to apply all settings
+    # Use run-shell to avoid issues with special characters
+    tmux run-shell "
+        tmux set-option -t $session_name -g aggressive-resize on
+        tmux set-option -t $session_name status-style bg=colour234,fg=colour33
+        tmux set-option -t $session_name status-left-length 7
+        tmux set-option -t $session_name status-left ' 👨‍💻 '
+        tmux set-option -t $session_name status-right-length 6
+        tmux set-option -t $session_name status-right ' %H:%M'
+        tmux set-option -t $session_name window-status-format ' #W '
+        tmux set-option -t $session_name window-status-current-format ' [#W] '
+        tmux set-window-option -t $session_name window-status-separator ''
+        tmux set-option -t $session_name status-justify left
+    "
+
+    print_success "Tmux configuration loaded"
+}
+
 start_session() {
     print_header "Starting Dev Session: $SESSION_NAME"
 
@@ -91,15 +120,34 @@ start_session() {
         # Dev层: 创建会话和第一个窗口（直接启动SSH连接）
         tmux new-session -d -s "$SESSION_NAME" -n "$first_key" \
             "while true; do ssh $ssh_options $host -t 'bash -c \"tmux -L machine attach -t machine-mobile-view 2>/dev/null || echo Machine layer not found; exec bash\"' 2>&1; echo \"$disconnect_msg\"; read; done"
+
+        # Apply window format to first window immediately after creation
+        tmux set-window-option -t "$SESSION_NAME:$first_key" window-status-format ' #W '
+        tmux set-window-option -t "$SESSION_NAME:$first_key" window-status-current-format ' [#W] '
+        tmux set-window-option -t "$SESSION_NAME:$first_key" automatic-rename off
     fi
 
     # Configure dev session
     print_info "Configuring dev session..."
     tmux set-option -t "$SESSION_NAME" -g aggressive-resize on
-    tmux set-option -t "$SESSION_NAME" status-style bg=colour234,fg=colour33
-    tmux set-option -t "$SESSION_NAME" status-right '#[fg=colour39]%H:%M %m/%d'
-    tmux set-option -t "$SESSION_NAME" window-status-format '#[fg=colour61] #W '
-    tmux set-option -t "$SESSION_NAME" window-status-current-format '#[fg=colour39,bold][#W]#[fg=colour33] ✓'
+    tmux set-option -t "$SESSION_NAME" status-style bg=colour234,fg=colour33  # Dark background, light text
+
+    # Left section: Developer emoji (fixed width)
+    tmux set-option -t "$SESSION_NAME" status-left-length 7
+    tmux set-option -t "$SESSION_NAME" status-left ' 👨‍💻 '
+
+    # Right section: Time (fixed width)
+    tmux set-option -t "$SESSION_NAME" status-right-length 6
+    tmux set-option -t "$SESSION_NAME" status-right ' %H:%M'
+
+    # Middle section: Window list with spaces for readability
+    # Note: tmux automatically shows window flags (-, *, etc.) after the format
+    tmux set-option -t "$SESSION_NAME" window-status-format ' #W '  # Non-current windows
+    tmux set-option -t "$SESSION_NAME" window-status-current-format ' [#W] '  # Current window
+    tmux set-window-option -t "$SESSION_NAME" window-status-separator ''  # No extra separator
+
+    # Justify: left means window list follows status-left, grows to fit available space
+    tmux set-option -t "$SESSION_NAME" status-justify left
 
     # Add remaining server windows
     local remaining_keys="$(echo "$server_keys" | tail -n +2)"
@@ -110,6 +158,11 @@ start_session() {
             print_info "Creating window '$key' (SSH to $host)..."
 
             tmux new-window -t "$SESSION_NAME" -n "$key" "while true; do ssh $ssh_options $host -t 'tmux -L machine attach -t machine-mobile-view 2>/dev/null || echo \"No machine-mobile-view found\"; bash' 2>&1; echo \"$disconnect_msg\"; read; done"
+
+            # Apply window format immediately after creating window
+            tmux set-window-option -t "$SESSION_NAME:$key" window-status-format ' #W '
+            tmux set-window-option -t "$SESSION_NAME:$key" window-status-current-format ' [#W] '
+            tmux set-window-option -t "$SESSION_NAME:$key" automatic-rename off
         fi
     done <<< "$remaining_keys"
 
@@ -121,6 +174,14 @@ start_session() {
         print_info "Creating local window '$local_name'..."
 
         tmux new-window -t "$SESSION_NAME" -n "$local_name" "unset TMUX && $local_path -L machine attach -t machine-mobile-view 2>/dev/null || echo \"No local machine-mobile-view found\""
+    fi
+
+    # Apply format to local window if it exists
+    if [ "$local_enabled" = "true" ]; then
+        print_info "Applying window status format to local window..."
+        tmux set-window-option -t "$SESSION_NAME:$local_name" window-status-format ' #W '
+        tmux set-window-option -t "$SESSION_NAME:$local_name" window-status-current-format ' [#W] '
+        tmux set-window-option -t "$SESSION_NAME:$local_name" automatic-rename off
     fi
 
     # Key bindings for window navigation
