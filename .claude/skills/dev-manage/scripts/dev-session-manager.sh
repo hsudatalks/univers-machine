@@ -187,15 +187,29 @@ update_repositories() {
     print_header "Updating repositories on all servers for $SESSION_NAME"
 
     # Get server keys
-    local server_keys="$(yq eval ".sessions.$SESSION_NAME.servers | keys | .[]" "$CONFIG_FILE" 2>/dev/null)"
+    local -a server_keys=()
+    while IFS= read -r key; do
+        server_keys+=("$key")
+    done < <(yq eval ".sessions.$SESSION_NAME.servers | keys | .[]" "$CONFIG_FILE" 2>/dev/null)
+
     local ssh_options="$(yq eval ".sessions.$SESSION_NAME.ssh_options" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
 
-    if [[ -z "$server_keys" ]]; then
+    if [[ ${#server_keys[@]} -eq 0 ]]; then
         print_error "No servers found in configuration"
         exit 1
     fi
 
-    echo "$server_keys" | while IFS= read -r key; do
+    # Statistics tracking - use simple arrays for bash 3.2 compatibility
+    local total_servers=${#server_keys[@]}
+    local successful_servers=0
+    local -a failed_servers
+    local -a failed_repos  # parallel array storing failed repos as "host:repo1 repo2"
+    local -a all_repos_info  # parallel array storing all repos as "host:repo1 repo2"
+
+    echo ""
+
+    # Process each server
+    for key in "${server_keys[@]}"; do
         if [[ -n "$key" ]]; then
             local host="$(yq eval ".sessions.$SESSION_NAME.servers.$key.host" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
             local username="$(yq eval ".sessions.$SESSION_NAME.servers.$key.username" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
@@ -212,9 +226,79 @@ update_repositories() {
             fi
 
             print_info "Pulling latest code on $host ($repo_path)..."
-            ssh $ssh_options "$host" "/usr/bin/bash -lc 'cd $repo_path && ls -d univers-*/ 2>/dev/null | while read repo; do echo \"\\033[0;34m[Pulling \\$repo]\\033[0m\"; cd $repo_path/\$repo && git pull --rebase 2>&1 || echo \"Failed to pull \$repo\"; done'"
+
+            # Execute SSH command and capture output
+            local output
+            local server_success=true
+            local -a server_failed_repos
+            local -a server_all_repos
+
+            # Execute remote command
+            output=$(ssh $ssh_options "$host" "/usr/bin/bash -lc 'cd $repo_path && for repo in univers-*/; do repo_name=\${repo%%/}; echo \"[\$repo_name]\"; cd $repo_path/\$repo_name && git pull --rebase 2>&1 || echo \"FAILED:\$repo_name\"; done'" 2>&1)
+
+            # Display output
+            echo "$output"
+
+            # Parse output for failures
+            while IFS= read -r line; do
+                if [[ "$line" =~ ^FAILED:(.+)$ ]]; then
+                    server_success=false
+                    server_failed_repos+=("${BASH_REMATCH[1]}")
+                elif [[ "$line" =~ ^\[([^\]]+)\] ]]; then
+                    server_all_repos+=("${BASH_REMATCH[1]}")
+                fi
+            done <<< "$output"
+
+            # Update statistics
+            if [[ "$server_success" == "true" ]]; then
+                ((successful_servers++))
+            else
+                failed_servers+=("$host")
+                if [[ ${#server_failed_repos[@]} -gt 0 ]]; then
+                    failed_repos+=("$host:${server_failed_repos[*]}")
+                fi
+            fi
+
+            # Store all repos for this server
+            if [[ ${#server_all_repos[@]} -gt 0 ]]; then
+                all_repos_info+=("$host:${server_all_repos[*]}")
+            fi
         fi
     done
+
+    # Print summary
+    echo ""
+    print_header "Update Summary"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Total servers: $total_servers"
+    echo "Successful:    $successful_servers ✓"
+    echo "Failed:        $((total_servers - successful_servers)) ✗"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    if [[ ${#failed_servers[@]} -gt 0 ]]; then
+        echo ""
+        print_error "Failed repositories:"
+        for info in "${failed_repos[@]}"; do
+            local host="${info%%:*}"
+            local repos="${info##*:}"
+            echo "  ❌ $host"
+            for repo in $repos; do
+                echo "     • $repo"
+            done
+        done
+        return 1
+    else
+        echo ""
+        print_success "✅ All repositories updated successfully!"
+        echo ""
+        echo "Updated repositories:"
+        for info in "${all_repos_info[@]}"; do
+            local host="${info%%:*}"
+            local repos="${info##*:}"
+            echo "  ✓ $host: $repos"
+        done
+        return 0
+    fi
 }
 
 mm_manage() {
