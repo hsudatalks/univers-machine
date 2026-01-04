@@ -1,0 +1,47 @@
+# Development Session Configuration
+# Defines servers and sessions for dm (dev-manage) command
+
+sessions:
+  ark-dev:
+    ssh_options: "-o ConnectTimeout=10 -o ServerAliveInterval=60 -o ServerAliveCountMax=3"
+    disconnect_message: "[Connection lost - Press Enter to reconnect]"
+    local_window:
+      enabled: true
+      display_name: "local"
+      tmux_path: "/opt/homebrew/bin/tmux"
+    servers:
+      infra:
+        host: "infra-dev"
+        description: "Infrastructure development server"
+      domain:
+        host: "domain-dev"
+        description: "Domain services development server"
+      sys:
+        host: "mechanism-dev"
+        description: "System services development server"
+      ppe:
+        host: "ppe-dev"
+        description: "PPE development environment"
+      qa:
+        host: "qa-dev"
+        description: "QA development environment"
+
+  infra-dev:
+    ssh_options: "-o ConnectTimeout=10 -o ServerAliveInterval=60 -o ServerAliveCountMax=3"
+    disconnect_message: "[Connection lost - Press Enter to reconnect]"
+    local_window:
+      enabled: false
+    servers:
+      infra:
+        host: "infra-dev"
+        description: "Infrastructure development server"
+
+  domain-dev:
+    ssh_options: "-o ConnectTimeout=10 -o ServerAliveInterval=60 -o ServerAliveCountMax=3"
+    disconnect_message: "[Connection lost - Press Enter to reconnect]"
+    local_window:
+      enabled: false
+    servers:
+      domain:
+        host: "domain-dev"
+        description: "Domain services development server"

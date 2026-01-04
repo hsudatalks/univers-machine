@@ -30,6 +30,8 @@ if [[ -f "$REPO_ROOT/config/servers.yaml" ]]; then
     CONFIG_FILE="$REPO_ROOT/config/servers.yaml"
 elif [[ -f "$REPO_ROOT/configs/servers.yaml" ]]; then
     CONFIG_FILE="$REPO_ROOT/configs/servers.yaml"
+elif [[ -f "$REPO_ROOT/config/servers.yaml.example" ]]; then
+    CONFIG_FILE="$REPO_ROOT/config/servers.yaml.example"
 else
     print_error "Config file not found at $REPO_ROOT/config/servers.yaml or $REPO_ROOT/configs/servers.yaml"
     exit 1
