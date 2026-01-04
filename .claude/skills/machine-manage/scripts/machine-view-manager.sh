@@ -11,6 +11,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SCRIPT_DIR/lib/container-helper.sh"
 
 COMMAND="${1:-status}"
+
+# Use independent machine server instance
+TMUX_SERVER="machine"
+
+# Create tmux wrapper function for machine server instance
+tmux() {
+    command tmux -L "$TMUX_SERVER" "$@"
+}
+
 # Determine machine directory based on OS
 OS_TYPE="$(detect_os)"
 case "$OS_TYPE" in
