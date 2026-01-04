@@ -307,6 +307,12 @@ create_desktop_view() {
         tmux source-file -t machine-desktop-view "$DESKTOP_STYLE_CONFIG" 2>/dev/null || true
     fi
 
+    # Explicitly set window format for each window (fixes individual window overrides)
+    for ((i=0; i<$(tmux list-windows -t machine-desktop-view | wc -l); i++)); do
+        tmux set-window-option -t "machine-desktop-view:$i" window-status-format '#[fg=colour61] #W ' 2>/dev/null || true
+        tmux set-window-option -t "machine-desktop-view:$i" window-status-current-format '#[fg=colour39,bold] [#W]' 2>/dev/null || true
+    done
+
     # Select first window
     tmux select-window -t "machine-desktop-view:0"
 
@@ -383,6 +389,12 @@ create_mobile_view() {
     if [ -f "$MOBILE_STYLE_CONFIG" ]; then
         tmux source-file -t machine-mobile-view "$MOBILE_STYLE_CONFIG" 2>/dev/null || true
     fi
+
+    # Explicitly set window format for each window (fixes individual window overrides)
+    for ((i=0; i<$(tmux list-windows -t machine-mobile-view | wc -l); i++)); do
+        tmux set-window-option -t "machine-mobile-view:$i" window-status-format '#[fg=colour61] #W ' 2>/dev/null || true
+        tmux set-window-option -t "machine-mobile-view:$i" window-status-current-format '#[fg=colour39,bold] [#W]' 2>/dev/null || true
+    done
 
     # Select first window
     tmux select-window -t "machine-mobile-view:0"
