@@ -200,9 +200,9 @@ update_repositories() {
             local host="$(yq eval ".sessions.$SESSION_NAME.servers.$key.host" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
             local repo_path="$(yq eval ".sessions.$SESSION_NAME.servers.$key.repo_path" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
 
-            # Default repo path if not specified
-            if [[ -z "$repo_path" ]]; then
-                repo_path="/home/ubuntu/repos"
+            # Default repo path if not specified or null
+            if [[ -z "$repo_path" || "$repo_path" == "null" ]]; then
+                repo_path="/home/david/repos"
             fi
 
             print_info "Pulling latest code on $host ($repo_path)..."

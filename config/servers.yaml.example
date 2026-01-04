@@ -13,8 +13,8 @@ sessions:
       infra:
         host: "infra-dev"
         description: "Infrastructure development server"
-        # Optional: specify repository path for updates
-        # repo_path: "/home/ubuntu/repos"
+        # Optional: specify repository path for updates (default: /home/david/repos)
+        # repo_path: "/home/david/repos"
       domain:
         host: "domain-dev"
         description: "Domain services development server"
