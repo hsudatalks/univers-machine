@@ -177,7 +177,19 @@ start_session() {
 
         print_info "Creating local window '$local_name'..."
 
-        tmux new-window -t "$SESSION_NAME" -n "$local_name" "unset TMUX && $local_path -L machine attach -t machine-mobile-view 2>/dev/null || echo \"No local machine-mobile-view found\""
+        # Keep window open even if machine-mobile-view doesn't exist
+        tmux new-window -t "$SESSION_NAME" -n "$local_name" "
+            while true; do
+                if $local_path -L machine has-session -t machine-mobile-view 2>/dev/null; then
+                    $local_path -L machine attach -t machine-mobile-view 2>/dev/null || echo \"Attach failed\";
+                else
+                    echo \"⚠️  Local machine-mobile-view not found\";
+                    echo \"Run: mm machine start\" to create it;
+                fi;
+                echo \"Waiting... Press Ctrl+C to exit\";
+                sleep 5;
+            done
+        "
     fi
 
     # Apply format to local window if it exists
