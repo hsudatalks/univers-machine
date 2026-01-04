@@ -182,6 +182,58 @@ restart_session() {
     start_session
 }
 
+# Remote server management functions
+update_repositories() {
+    print_header "Updating repositories on all servers for $SESSION_NAME"
+
+    # Get server keys
+    local server_keys="$(yq eval ".sessions.$SESSION_NAME.servers | keys | .[]" "$CONFIG_FILE" 2>/dev/null)"
+    local ssh_options="$(yq eval ".sessions.$SESSION_NAME.ssh_options" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
+
+    if [[ -z "$server_keys" ]]; then
+        print_error "No servers found in configuration"
+        exit 1
+    fi
+
+    echo "$server_keys" | while IFS= read -r key; do
+        if [[ -n "$key" ]]; then
+            local host="$(yq eval ".sessions.$SESSION_NAME.servers.$key.host" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
+            local repo_path="$(yq eval ".sessions.$SESSION_NAME.servers.$key.repo_path" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
+
+            # Default repo path if not specified
+            if [[ -z "$repo_path" ]]; then
+                repo_path="/home/ubuntu/repos"
+            fi
+
+            print_info "Pulling latest code on $host ($repo_path)..."
+            ssh $ssh_options "$host" "/usr/bin/bash -lc 'cd $repo_path && ls -d univers-*/ 2>/dev/null | while read repo; do echo \"\\033[0;34m[Pulling \\$repo]\\033[0m\"; cd $repo_path/\$repo && git pull --rebase 2>&1 || echo \"Failed to pull \$repo\"; done'"
+        fi
+    done
+}
+
+mm_manage() {
+    local action="$1"
+    print_header "Managing machine-manage sessions ($action) on all servers for $SESSION_NAME"
+
+    # Get server keys
+    local server_keys="$(yq eval ".sessions.$SESSION_NAME.servers | keys | .[]" "$CONFIG_FILE" 2>/dev/null)"
+    local ssh_options="$(yq eval ".sessions.$SESSION_NAME.ssh_options" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
+
+    if [[ -z "$server_keys" ]]; then
+        print_error "No servers found in configuration"
+        exit 1
+    fi
+
+    echo "$server_keys" | while IFS= read -r key; do
+        if [[ -n "$key" ]]; then
+            local host="$(yq eval ".sessions.$SESSION_NAME.servers.$key.host" "$CONFIG_FILE" 2>/dev/null | tr -d '"')"
+
+            print_info "Executing 'mm $action' on $host..."
+            ssh $ssh_options "$host" "/usr/bin/bash -lc 'source ~/.zshrc && mm $action'"
+        fi
+    done
+}
+
 case "$COMMAND" in
     start)
         check_yq
@@ -213,6 +265,26 @@ case "$COMMAND" in
             echo "  - domain-dev: Domain services development"
         }
         ;;
+    update)
+        check_yq
+        update_repositories
+        ;;
+    mm-start)
+        check_yq
+        mm_manage "start"
+        ;;
+    mm-stop)
+        check_yq
+        mm_manage "stop"
+        ;;
+    mm-restart)
+        check_yq
+        mm_manage "restart"
+        ;;
+    mm-status)
+        check_yq
+        mm_manage "status"
+        ;;
     -h|--help|help)
         echo "Dev Session Manager - 4-Layer Architecture"
         echo "Layers: Dev → Machine → Container → Session"
@@ -220,13 +292,18 @@ case "$COMMAND" in
         echo "Usage: $0 <session-name> <command>"
         echo
         echo "Commands:"
-        echo "  start    - Create and start session"
-        echo "  stop     - Stop session"
-        echo "  status   - Show session status"
-        echo "  attach   - Attach to session"
-        echo "  restart  - Restart session"
-        echo "  list     - List available sessions"
-        echo "  --help   - Show this help message"
+        echo "  start       - Create and start session"
+        echo "  stop        - Stop session"
+        echo "  status      - Show session status"
+        echo "  attach      - Attach to session"
+        echo "  restart     - Restart session"
+        echo "  list        - List available sessions"
+        echo "  update      - Update repositories on all servers"
+        echo "  mm-start    - Start machine-manage on all servers"
+        echo "  mm-stop     - Stop machine-manage on all servers"
+        echo "  mm-restart  - Restart machine-manage on all servers"
+        echo "  mm-status   - Show machine-manage status on all servers"
+        echo "  --help      - Show this help message"
         echo
         echo "Examples:"
         echo "  $0 ark-dev start   # Start ark-dev session (tmux -L ark)"

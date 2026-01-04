@@ -41,13 +41,18 @@ Dev Manage - Development Session Manager
 Usage: dm <command> [session-name]
 
 Commands:
-  start [session]    Start a dev session (default: ark-dev)
-  stop [session]     Stop a dev session
-  status [session]   Show session status
-  attach [session]   Attach to a session
-  restart [session]  Restart a session
-  list               List all available sessions
-  --help             Show this help
+  start [session]     Start a dev session (default: ark-dev)
+  stop [session]      Stop a dev session
+  status [session]    Show session status
+  attach [session]    Attach to a session
+  restart [session]   Restart a session
+  list                List all available sessions
+  update [session]    Update remote server repositories
+  mm-start [session]  Start remote machine-manage sessions
+  mm-stop [session]   Stop remote machine-manage sessions
+  mm-restart [session] Restart remote machine-manage sessions
+  mm-status [session] Show remote machine-manage status
+  --help              Show this help
 
 Examples:
   dm start           # Start default session (ark-dev)
@@ -84,7 +89,15 @@ EOF
     # Get session name (default to ark-dev if not provided)
     local session_name="${1:-ark-dev}"
 
-    # Validate command
+    # Handle remote commands that don't need tmux
+    case "$command" in
+        update|mm-start|mm-stop|mm-restart|mm-status)
+            "$DEV_MANAGE_SCRIPT" "$session_name" "$command"
+            return $?
+            ;;
+    esac
+
+    # Validate command for tmux operations
     case "$command" in
         start|stop|status|attach|restart)
             # Valid command, execute it
@@ -94,7 +107,9 @@ EOF
             echo "❌ Unknown command: '$command'"
             echo ""
             echo "Available commands:"
-            echo "  start, stop, status, attach, restart, list, --help"
+            echo "  start, stop, status, attach, restart, list"
+            echo "  update, mm-start, mm-stop, mm-restart, mm-status"
+            echo "  --help"
             echo ""
             echo "Usage: dm <command> [session-name]"
             return 1
