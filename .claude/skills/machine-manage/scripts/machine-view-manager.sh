@@ -614,7 +614,7 @@ refresh_windows() {
         # Step 1: Remove old windows first (except machine)
         local window_list=$(tmux list-windows -t machine-desktop-view -F "#{window_name}:#{window_index}")
         while IFS=: read -r window_name window_index; do
-            if [[ "$window_name" != "machine" && "$window_name" != machine-manage* ]]; then
+            if [[ "$window_name" != "machine" && "$window_name" != "local" && "$window_name" != machine-manage* ]]; then
                 # Check if window name matches any VM (after removing -dev suffix)
                 local found=false
                 for vm in "${DEV_VMS[@]}"; do
@@ -630,8 +630,21 @@ refresh_windows() {
             fi
         done <<< "$window_list"
 
-        # Step 2: Add missing windows
+        # Step 2: Add local window if needed
         local current_windows=$(tmux list-windows -t machine-desktop-view -F "#{window_name}")
+        if has_local_cm && ! echo "$current_windows" | grep -q "^local$"; then
+            print_info "  添加窗口: local"
+            # Find the position before machine window
+            local machine_manage_index=$(tmux list-windows -t machine-desktop-view -F "#{window_index}:#{window_name}" | grep -E "^[0-9]+:(machine|machine-manage)$" | cut -d: -f1 | head -1)
+            if [ -n "$machine_manage_index" ]; then
+                tmux new-window -t "machine-desktop-view:$machine_manage_index" -n "local" -b
+            else
+                tmux new-window -t machine-desktop-view -n "local"
+            fi
+            tmux send-keys -t "machine-desktop-view:local" "unset TMUX && tmux -L container attach -d -t container-desktop-view" C-m
+        fi
+
+        # Step 3: Add missing VM windows
         for vm in "${DEV_VMS[@]}"; do
             local window_name="${vm%-dev}"  # Remove -dev suffix for display
             if ! echo "$current_windows" | grep -q "^$window_name$"; then
@@ -663,7 +676,7 @@ refresh_windows() {
         # Step 1: Remove old windows first (except machine)
         local window_list=$(tmux list-windows -t machine-mobile-view -F "#{window_name}:#{window_index}")
         while IFS=: read -r window_name window_index; do
-            if [[ "$window_name" != "machine" && "$window_name" != machine-manage* ]]; then
+            if [[ "$window_name" != "machine" && "$window_name" != "local" && "$window_name" != machine-manage* ]]; then
                 # Check if window name matches any VM (after removing -dev suffix)
                 local found=false
                 for vm in "${DEV_VMS[@]}"; do
@@ -679,8 +692,21 @@ refresh_windows() {
             fi
         done <<< "$window_list"
 
-        # Step 2: Add missing windows
+        # Step 2: Add local window if needed
         local current_windows=$(tmux list-windows -t machine-mobile-view -F "#{window_name}")
+        if has_local_cm && ! echo "$current_windows" | grep -q "^local$"; then
+            print_info "  添加窗口: local"
+            # Find the position before machine window
+            local machine_manage_index=$(tmux list-windows -t machine-mobile-view -F "#{window_index}:#{window_name}" | grep -E "^[0-9]+:(machine|machine-manage)$" | cut -d: -f1 | head -1)
+            if [ -n "$machine_manage_index" ]; then
+                tmux new-window -t "machine-mobile-view:$machine_manage_index" -n "local" -b
+            else
+                tmux new-window -t machine-mobile-view -n "local"
+            fi
+            tmux send-keys -t "machine-mobile-view:local" "unset TMUX && tmux -L container attach -d -t container-mobile-view" C-m
+        fi
+
+        # Step 3: Add missing VM windows
         for vm in "${DEV_VMS[@]}"; do
             local window_name="${vm%-dev}"  # Remove -dev suffix for display
             if ! echo "$current_windows" | grep -q "^$window_name$"; then
@@ -698,7 +724,7 @@ refresh_windows() {
             fi
         done
 
-        # Step 3: Ensure machine window exists
+        # Step 4: Ensure machine window exists
         if ! echo "$current_windows" | grep -qE "^(machine|machine-manage)$"; then
             print_info "  添加窗口: machine"
             tmux new-window -t machine-mobile-view -n "machine"
