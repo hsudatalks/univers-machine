@@ -1,8 +1,23 @@
 # Dev Manage Skill 安装指南
 
+## 自动安装（推荐）
+
+运行安装脚本：
+
+```bash
+cd /Users/davidxu/repos/univers-machine/.claude/skills/dev-manage
+./install.sh
+source ~/.zshrc
+```
+
+安装脚本会自动：
+1. 添加 `source` 配置到 `~/.zshrc`
+2. 初始化配置文件（如果不存在）
+3. 验证安装
+
 ## 快速安装
 
-将以下行添加到 `~/.zshrc`：
+手动将以下行添加到 `~/.zshrc`：
 
 ```bash
 echo "source $HOME/repos/univers-machine/.claude/skills/dev-manage/dm.zsh" >> ~/.zshrc
@@ -32,13 +47,18 @@ source ~/.zshrc
 运行以下命令验证安装：
 
 ```bash
-# 查看 dm 命令帮助
-dm
+# 查看 dev-manager 帮助
+dev-manager --help
+
+# 或查看 dm 帮助（别名）
+dm --help
 
 # 查看 ark-dev 会话状态
-dm ark-dev status
+dm status
+# 或
+dev-manager status ark-dev
 
-# 应该显示类似：
+# 应该显示：
 # 📦 Dev Session Status: ark-dev
 # ✅ Session is RUNNING
 #   1: infra (1 panes) [80x24] @0
@@ -52,6 +72,22 @@ dm ark-dev status
 `$HOME/repos/univers-machine/.claude/skills/dev-manage/configs/servers.yaml`
 
 编辑该文件可添加或修改开发服务器配置。
+
+### 配置示例
+
+```yaml
+sessions:
+  ark-dev:
+    local_window:
+      enabled: true
+      display_name: app  # 窗口显示名称
+      description: "Local machine"
+    servers:
+      infra:
+        enabled: true
+        host: infra-dev
+        description: "Infrastructure server"
+```
 
 ## 使用示例
 

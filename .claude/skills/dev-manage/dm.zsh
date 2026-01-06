@@ -15,11 +15,11 @@
 DEV_MANAGE_SKILL_DIR="${${(%):-%x}:A:h}"
 DEV_MANAGE_SCRIPT="$DEV_MANAGE_SKILL_DIR/scripts/dev-session-manager.sh"
 
-# dev-manager command (dm = dev-manage)
-# New command structure: dm <command> [session-name]
+# Primary function: dev-manager
+# Usage: dev-manager <command> [session-name]
 # If session-name is omitted, defaults to "ark-dev"
 
-dm() {
+dev-manager() {
     if [[ ! -x "$DEV_MANAGE_SCRIPT" ]]; then
         echo "❌ Error: dev-session-manager.sh not found or not executable"
         echo "   Path: $DEV_MANAGE_SCRIPT"
@@ -38,7 +38,8 @@ dm() {
         if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
             cat <<'EOF'
 Dev Manage - Development Session Manager
-Usage: dm <command> [session-name]
+Usage: dev-manager <command> [session-name]
+Alias: dm
 
 Commands:
   start [session]     Start a dev session (default: ark-dev)
@@ -54,13 +55,17 @@ Commands:
   --help              Show this help
 
 Examples:
-  dm start           # Start default session (ark-dev)
-  dm start infra-dev # Start infra-dev session
-  dm attach          # Attach to default session
-  dm status ark-dev  # Check ark-dev status
-  dm list            # List all sessions
-  dm mm-start ark-dev mobile  # Start machine-mobile-view on all servers
-  dm mm-manage ark-dev status # Check machine-manage service status
+  dev-manager start           # Start default session (ark-dev)
+  dev-manager start infra-dev # Start infra-dev session
+  dev-manager attach          # Attach to default session
+  dev-manager status ark-dev  # Check ark-dev status
+  dev-manager list            # List all sessions
+  dev-manager mm-start ark-dev mobile  # Start machine-mobile-view on all servers
+  dev-manager mm-manage ark-dev status # Check machine-manage service status
+
+Alias examples:
+  dm start           # Same as dev-manager start
+  dm attach          # Same as dev-manager attach
 
 Available sessions:
   ark-dev   - Multi-server development environment
@@ -110,7 +115,7 @@ EOF
         mm-start)
             # Parse view type for mm-start (mobile or desktop)
             if [[ -n "${2:-}" && ("$2" == "mobile" || "$2" == "desktop") ]]; then
-                # Command is: dm mm-start ark-dev mobile
+                # Command is: dev-manager mm-start ark-dev mobile
                 view_type="$2"
                 "$DEV_MANAGE_SCRIPT" "$session_name" "mm-start" "" "$view_type"
             else
@@ -135,14 +140,18 @@ EOF
             echo "  update, mm-start, mm-stop, mm-restart, mm-status"
             echo "  --help"
             echo ""
-            echo "Usage: dm <command> [session-name]"
+            echo "Usage: dev-manager <command> [session-name]"
             return 1
             ;;
     esac
 }
 
-# Optional: Add completion for dm
-_dm() {
+# Alias: dm (dev-manage)
+# Short alias for dev-manager
+alias dm=dev-manager
+
+# Optional: Add completion for dm/dev-manager
+_dev_manager() {
     local -a sessions commands
     sessions=(
         'ark-dev:Ark开发环境'
@@ -167,7 +176,8 @@ _dm() {
 
 # Safely add completion if compdef is available
 if command -v compdef >/dev/null 2>&1; then
-    compdef _dm dm
+    compdef _dev_manager dm
+    compdef _dev_manager dev-manager
 else
     # Fallback: define completion function without compdef
     # This allows the function to be available but without tab completion
