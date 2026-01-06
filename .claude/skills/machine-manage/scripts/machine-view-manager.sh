@@ -87,6 +87,44 @@ has_local_cm() {
     [ -n "$cm_path" ] && [ -x "$cm_path" ]
 }
 
+# Get local window configuration from vms.yaml
+get_local_window_config() {
+    local config_key="$1"
+    local default_value="$2"
+
+    # Check if config file exists
+    if [ ! -f "$VMS_CONFIG" ]; then
+        echo "$default_value"
+        return
+    fi
+
+    # Read the value from config - extract value after colon, before comment, trim spaces and quotes
+    local value=$(grep -A 10 "^local-window:" "$VMS_CONFIG" 2>/dev/null | grep "^  $config_key:" | sed 's/^  [^:]*: *//' | sed 's/[[:space:]]*#.*$//' | sed 's/[[:space:]]*$//' | sed 's/^"//;s/"$//')
+
+    # Return value or default
+    if [ -n "$value" ]; then
+        echo "$value"
+    else
+        echo "$default_value"
+    fi
+}
+
+# Get local window name from config
+get_local_window_name() {
+    get_local_window_config "window-name" "local"
+}
+
+# Check if local window is enabled in config
+is_local_window_enabled() {
+    local enabled=$(get_local_window_config "enabled" "true")
+    [ "$enabled" = "true" ]
+}
+
+# Get local window session name from config
+get_local_window_session() {
+    get_local_window_config "session" "container-desktop-view"
+}
+
 # Load VM list dynamically from actual running containers/VMs
 # This detects real containers/VMs instead of relying on static config
 # Excludes: ubuntu (not a dev machine, used for other purposes)
@@ -247,20 +285,23 @@ create_desktop_view() {
         return
     fi
 
+    # Get local window configuration
+    local local_window_name=$(get_local_window_name)
+
     # Check if we should create local window first
     local has_local=false
-    if has_local_cm; then
+    if has_local_cm && is_local_window_enabled; then
         has_local=true
-        print_info "检测到本机 cm 命令，将创建本机窗口"
+        print_info "检测到本机 cm 命令，将创建本机窗口: $local_window_name"
     fi
 
     # Create the main session
     # If local cm exists, start with local window, otherwise first VM
     if [ "$has_local" = true ]; then
         # Start with local machine window
-        tmux new-session -d -s machine-desktop-view -n "local" -x 179 -y 50
-        print_info "创建本机 local 窗口"
-        tmux send-keys -t "machine-desktop-view:local" "unset TMUX && tmux -L container attach -d -t container-desktop-view" C-m
+        tmux new-session -d -s machine-desktop-view -n "$local_window_name" -x 179 -y 50
+        print_info "创建本机 $local_window_name 窗口"
+        tmux send-keys -t "machine-desktop-view:$local_window_name" "unset TMUX && tmux -L container attach -d -t container-desktop-view" C-m
     elif [ ${#DEV_VMS[@]} -gt 0 ]; then
         # No local cm, start with first VM
         local first_vm="${DEV_VMS[0]}"
@@ -330,20 +371,23 @@ create_mobile_view() {
         return
     fi
 
+    # Get local window configuration
+    local local_window_name=$(get_local_window_name)
+
     # Check if we should create local window first
     local has_local=false
-    if has_local_cm; then
+    if has_local_cm && is_local_window_enabled; then
         has_local=true
-        print_info "检测到本机 cm 命令，将创建本机窗口"
+        print_info "检测到本机 cm 命令，将创建本机窗口: $local_window_name"
     fi
 
     # Create the main session
     # If local cm exists, start with local window, otherwise first VM
     if [ "$has_local" = true ]; then
         # Start with local machine window
-        tmux new-session -d -s machine-mobile-view -n "local" -x 179 -y 50
-        print_info "创建本机 local 窗口"
-        tmux send-keys -t "machine-mobile-view:local" "unset TMUX && tmux -L container attach -d -t container-mobile-view" C-m
+        tmux new-session -d -s machine-mobile-view -n "$local_window_name" -x 179 -y 50
+        print_info "创建本机 $local_window_name 窗口"
+        tmux send-keys -t "machine-mobile-view:$local_window_name" "unset TMUX && tmux -L container attach -d -t container-mobile-view" C-m
     elif [ ${#DEV_VMS[@]} -gt 0 ]; then
         # No local cm, start with first VM
         local first_vm="${DEV_VMS[0]}"
@@ -632,16 +676,17 @@ refresh_windows() {
 
         # Step 2: Add local window if needed
         local current_windows=$(tmux list-windows -t machine-desktop-view -F "#{window_name}")
-        if has_local_cm && ! echo "$current_windows" | grep -q "^local$"; then
-            print_info "  添加窗口: local"
+        local local_window_name=$(get_local_window_name)
+        if has_local_cm && is_local_window_enabled && ! echo "$current_windows" | grep -q "^$local_window_name$"; then
+            print_info "  添加窗口: $local_window_name"
             # Find the position before machine window
             local machine_manage_index=$(tmux list-windows -t machine-desktop-view -F "#{window_index}:#{window_name}" | grep -E "^[0-9]+:(machine|machine-manage)$" | cut -d: -f1 | head -1)
             if [ -n "$machine_manage_index" ]; then
-                tmux new-window -t "machine-desktop-view:$machine_manage_index" -n "local" -b
+                tmux new-window -t "machine-desktop-view:$machine_manage_index" -n "$local_window_name" -b
             else
-                tmux new-window -t machine-desktop-view -n "local"
+                tmux new-window -t machine-desktop-view -n "$local_window_name"
             fi
-            tmux send-keys -t "machine-desktop-view:local" "unset TMUX && tmux -L container attach -d -t container-desktop-view" C-m
+            tmux send-keys -t "machine-desktop-view:$local_window_name" "unset TMUX && tmux -L container attach -d -t container-desktop-view" C-m
         fi
 
         # Step 3: Add missing VM windows
@@ -694,16 +739,17 @@ refresh_windows() {
 
         # Step 2: Add local window if needed
         local current_windows=$(tmux list-windows -t machine-mobile-view -F "#{window_name}")
-        if has_local_cm && ! echo "$current_windows" | grep -q "^local$"; then
-            print_info "  添加窗口: local"
+        local local_window_name=$(get_local_window_name)
+        if has_local_cm && is_local_window_enabled && ! echo "$current_windows" | grep -q "^$local_window_name$"; then
+            print_info "  添加窗口: $local_window_name"
             # Find the position before machine window
             local machine_manage_index=$(tmux list-windows -t machine-mobile-view -F "#{window_index}:#{window_name}" | grep -E "^[0-9]+:(machine|machine-manage)$" | cut -d: -f1 | head -1)
             if [ -n "$machine_manage_index" ]; then
-                tmux new-window -t "machine-mobile-view:$machine_manage_index" -n "local" -b
+                tmux new-window -t "machine-mobile-view:$machine_manage_index" -n "$local_window_name" -b
             else
-                tmux new-window -t machine-mobile-view -n "local"
+                tmux new-window -t machine-mobile-view -n "$local_window_name"
             fi
-            tmux send-keys -t "machine-mobile-view:local" "unset TMUX && tmux -L container attach -d -t container-mobile-view" C-m
+            tmux send-keys -t "machine-mobile-view:$local_window_name" "unset TMUX && tmux -L container attach -d -t container-mobile-view" C-m
         fi
 
         # Step 3: Add missing VM windows

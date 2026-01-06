@@ -45,7 +45,7 @@ sessions:
     # 本地窗口配置 (连接到本地 machine-mobile-view)
     local_window:
       enabled: true
-      display_name: local
+      display_name: app
       description: "Local machine-mobile-view"
       tmux_path: /opt/homebrew/bin/tmux
       tmux_server: machine
