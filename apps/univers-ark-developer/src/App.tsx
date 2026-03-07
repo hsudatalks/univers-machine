@@ -56,8 +56,8 @@ const OVERVIEW_ZOOM_MIN = 0.8;
 const OVERVIEW_ZOOM_MAX = 1.3;
 const OVERVIEW_ZOOM_STEP = 0.1;
 const OVERVIEW_ZOOM_DEFAULT = 1;
-const DEFAULT_TERMINAL_PANEL_WIDTH_REM = 25;
-const MIN_TERMINAL_PANEL_WIDTH_REM = 25;
+const DEFAULT_TERMINAL_PANEL_WIDTH_REM = 35;
+const MIN_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TOOL_PANEL_WIDTH_REM = 22;
 
 function resolvePreferredTarget(
@@ -401,9 +401,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (isTauri()) {
-      return;
-    }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (

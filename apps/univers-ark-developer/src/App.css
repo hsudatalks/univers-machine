@@ -598,11 +598,11 @@
 }
 
 .container-workspace {
-  --container-terminal-width: 25rem;
+  --container-terminal-width: 35rem;
   min-height: 0;
   display: grid;
   grid-template-columns:
-    minmax(25rem, var(--container-terminal-width))
+    minmax(35rem, var(--container-terminal-width))
     0.45rem
     minmax(0, 1fr);
   gap: 0;
@@ -1040,107 +1040,218 @@
   flex-wrap: wrap;
 }
 
+/* ── Files Panel: VS Code-style Explorer + Editor ──────────────────── */
+
 .files-panel-body {
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(11rem, 1fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
 }
 
-.files-list,
-.files-preview {
+/* ── Explorer Tree ── */
+
+.files-tree {
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-right: 1px solid var(--border);
+  scrollbar-width: thin;
 }
 
-.files-list {
-  border-bottom: 1px solid var(--border);
-  overflow: auto;
+.files-tree-entries {
+  display: flex;
+  flex-direction: column;
 }
 
-.files-entry-list {
-  display: grid;
-}
-
-.files-entry {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.files-tree-entry {
+  display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.52rem 0.8rem;
+  gap: 0.15rem;
+  padding: 0.22rem 0.5rem;
+  padding-right: 0.6rem;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   background: transparent;
-  color: inherit;
+  color: var(--text-2);
   cursor: pointer;
   text-align: left;
-}
-
-.files-entry:hover {
-  background: color-mix(in srgb, var(--accent) 62%, white);
-}
-
-.files-entry.is-selected {
-  background: color-mix(in srgb, var(--accent) 90%, white);
-}
-
-.files-entry-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.82rem;
-  font-weight: 500;
+  min-height: 1.55rem;
+  transition: background 80ms ease;
 }
 
-.files-entry-meta {
-  font-family: var(--font-mono);
-  font-size: 0.67rem;
-  color: var(--text-2);
+.files-tree-entry:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.files-entry.is-directory .files-entry-name {
+.files-tree-entry.is-selected {
+  background: rgba(30, 102, 210, 0.28);
   color: var(--foreground);
 }
 
-.files-entry.is-symlink .files-entry-name {
+.files-tree-entry.is-directory {
+  color: var(--foreground);
+}
+
+.files-tree-entry.is-symlink {
   color: var(--text-2);
+  font-style: italic;
 }
 
-.files-preview {
-  min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+.files-tree-icon {
+  flex-shrink: 0;
+  width: 1rem;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-2);
+  opacity: 0.7;
 }
 
-.files-preview-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.55rem;
-  padding: 0.7rem 0.8rem 0.6rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.files-preview-name {
+.files-tree-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 400;
 }
 
-.files-preview-code {
+.files-tree-size {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-2);
+  opacity: 0.6;
+}
+
+/* ── Editor ── */
+
+.files-editor {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #0d1117;
+}
+
+.files-editor-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(1, 4, 9, 0.6);
+  min-height: 2rem;
+}
+
+.files-editor-tab {
+  font-size: 0.74rem;
+  font-weight: 400;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 20rem;
+}
+
+.files-editor-tab.is-active {
+  color: var(--foreground);
+  font-weight: 500;
+  border-bottom: 1px solid var(--accent);
+  padding-bottom: 0.15rem;
+}
+
+.files-editor-code-area {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.files-editor-gutter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 0.6rem 0.5rem 0.6rem 0.65rem;
+  background: rgba(1, 4, 9, 0.5);
+  border-right: 1px solid rgba(48, 54, 61, 0.5);
+  user-select: none;
+}
+
+.files-editor-line-number {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: rgba(139, 148, 158, 0.4);
+  min-width: 2ch;
+  text-align: right;
+}
+
+.files-editor-code {
   margin: 0;
   min-height: 0;
-  overflow: auto;
-  padding: 0.8rem;
-  background: var(--panel-muted);
+  padding: 0.6rem 0.8rem;
+  background: transparent;
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  color: #c9d1d9;
 }
+
+.files-editor-code code {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* ── highlight.js dark overrides ── */
+
+.files-editor-code .hljs {
+  background: transparent !important;
+  color: #c9d1d9;
+  padding: 0;
+}
+
+.files-editor-code .hljs-keyword,
+.files-editor-code .hljs-built_in { color: #ff7b72; }
+
+.files-editor-code .hljs-type,
+.files-editor-code .hljs-title.class_ { color: #ffa657; }
+
+.files-editor-code .hljs-title.function_,
+.files-editor-code .hljs-title { color: #d2a8ff; }
+
+.files-editor-code .hljs-string,
+.files-editor-code .hljs-meta .hljs-string { color: #a5d6ff; }
+
+.files-editor-code .hljs-number,
+.files-editor-code .hljs-literal { color: #79c0ff; }
+
+.files-editor-code .hljs-comment,
+.files-editor-code .hljs-doctag { color: #8b949e; font-style: italic; }
+
+.files-editor-code .hljs-attr,
+.files-editor-code .hljs-attribute { color: #79c0ff; }
+
+.files-editor-code .hljs-variable,
+.files-editor-code .hljs-template-variable { color: #ffa657; }
+
+.files-editor-code .hljs-regexp { color: #7ee787; }
+
+.files-editor-code .hljs-selector-class,
+.files-editor-code .hljs-selector-id,
+.files-editor-code .hljs-selector-tag { color: #7ee787; }
+
+.files-editor-code .hljs-params { color: #c9d1d9; }
+
+.files-editor-code .hljs-meta { color: #79c0ff; }
+
+.files-editor-code .hljs-punctuation { color: #8b949e; }
+
+/* ── Empty states (shared) ── */
 
 .files-empty-state {
   min-height: 0;
