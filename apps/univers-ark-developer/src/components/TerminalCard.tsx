@@ -1,21 +1,58 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { TerminalPane } from "./TerminalPane";
 import type { DeveloperTarget } from "../types";
 
 interface TerminalCardProps {
-  meta?: string;
+  isGridFocused?: boolean;
+  onFocusRequest?: () => void;
   onOpenWorkspace?: () => void;
   pageVisible?: boolean;
+  registerElement?: (element: HTMLElement | null) => void;
+  scale?: number;
   target: DeveloperTarget;
   title?: string;
 }
 
 const TERMINAL_VISIBILITY_ROOT_MARGIN = "320px 0px";
 
+function WorkspaceButton({
+  onClick,
+}: {
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-label="Open workspace"
+      className="panel-button panel-button-toolbar panel-button-icon"
+      onClick={onClick}
+      title="Open workspace"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        className="panel-button-icon-svg"
+        fill="none"
+        viewBox="0 0 16 16"
+      >
+        <path
+          d="M2.75 6V2.75H6M10 2.75h3.25V6M13.25 10v3.25H10M6 13.25H2.75V10"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.25"
+        />
+      </svg>
+    </button>
+  );
+}
+
 export function TerminalCard({
-  meta,
+  isGridFocused = false,
+  onFocusRequest,
   onOpenWorkspace,
   pageVisible = true,
+  registerElement,
+  scale = 1,
   target,
   title,
 }: TerminalCardProps) {
@@ -25,6 +62,9 @@ export function TerminalCard({
     () => typeof IntersectionObserver === "undefined",
   );
   const shouldRenderLiveTerminal = isVisible && pageVisible;
+  const cardStyle = {
+    "--terminal-card-scale": String(scale),
+  } as CSSProperties;
 
   useEffect(() => {
     pageVisibleRef.current = pageVisible;
@@ -33,8 +73,12 @@ export function TerminalCard({
   useEffect(() => {
     const element = cardRef.current;
 
+    registerElement?.(element);
+
     if (!element || typeof IntersectionObserver === "undefined") {
-      return undefined;
+      return () => {
+        registerElement?.(null);
+      };
     }
 
     const observer = new IntersectionObserver(
@@ -58,27 +102,31 @@ export function TerminalCard({
 
     return () => {
       observer.disconnect();
+      registerElement?.(null);
     };
-  }, []);
+  }, [registerElement]);
 
   return (
-    <article className="panel terminal-card" ref={cardRef}>
+    <article
+      className={`panel terminal-card ${isGridFocused ? "is-grid-focused" : ""}`}
+      onFocusCapture={() => {
+        onFocusRequest?.();
+      }}
+      onMouseDown={() => {
+        onFocusRequest?.();
+      }}
+      ref={cardRef}
+      style={cardStyle}
+    >
       {shouldRenderLiveTerminal ? (
         <TerminalPane
           active={pageVisible}
           actions={
-            onOpenWorkspace ? (
-              <button
-                className="panel-button"
-                onClick={onOpenWorkspace}
-                type="button"
-              >
-                Workspace
-              </button>
-            ) : undefined
+            onOpenWorkspace ? <WorkspaceButton onClick={onOpenWorkspace} /> : undefined
           }
           autoFocus={false}
-          meta={meta}
+          fontScale={scale}
+          isFocused={isGridFocused}
           target={target}
           title={title ?? target.label}
         />
@@ -87,19 +135,10 @@ export function TerminalCard({
           <header className="panel-header terminal-header terminal-header-compact">
             <div className="terminal-copy">
               <span className="panel-title">{title ?? target.label}</span>
-              <span className="panel-meta">{meta ?? target.host}</span>
             </div>
 
             <div className="terminal-meta">
-              {onOpenWorkspace ? (
-                <button
-                  className="panel-button"
-                  onClick={onOpenWorkspace}
-                  type="button"
-                >
-                  Workspace
-                </button>
-              ) : null}
+              {onOpenWorkspace ? <WorkspaceButton onClick={onOpenWorkspace} /> : null}
               <span className="terminal-status status-starting">Standby</span>
             </div>
           </header>

@@ -13,6 +13,7 @@ type StatusListener = () => void;
 interface CachedTerminalSession {
   attachPromise?: Promise<void>;
   fitAddon: FitAddon;
+  fontScale: number;
   hostElement: HTMLDivElement;
   outputUnlisten?: () => void;
   exitUnlisten?: () => void;
@@ -25,6 +26,7 @@ interface CachedTerminalSession {
 }
 
 const DEFAULT_TERMINAL_STATUS = "Connecting";
+const DEFAULT_TERMINAL_FONT_SIZE = 12;
 const terminalSessions = new Map<string, CachedTerminalSession>();
 
 let parkingLotElement: HTMLDivElement | null = null;
@@ -79,6 +81,23 @@ function fitTerminal(session: CachedTerminalSession) {
   }
 
   syncTerminalSize(session);
+}
+
+function applyTerminalFontScale(
+  session: CachedTerminalSession,
+  fontScale: number | undefined,
+) {
+  const nextFontScale = Number.isFinite(fontScale) ? Math.max(fontScale ?? 1, 0.5) : 1;
+
+  if (session.fontScale === nextFontScale) {
+    return;
+  }
+
+  session.fontScale = nextFontScale;
+  session.terminal.options.fontSize = Math.max(
+    9,
+    Math.round(DEFAULT_TERMINAL_FONT_SIZE * nextFontScale * 10) / 10,
+  );
 }
 
 function refreshTerminalSnapshot(session: CachedTerminalSession) {
@@ -139,6 +158,7 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
 
   const session: CachedTerminalSession = {
     fitAddon,
+    fontScale: 1,
     hostElement,
     ownerId: null,
     status: DEFAULT_TERMINAL_STATUS,
@@ -220,7 +240,7 @@ export function claimTerminalSession(
   targetId: string,
   ownerId: symbol,
   mountElement: HTMLDivElement,
-  options?: { autoFocus?: boolean },
+  options?: { autoFocus?: boolean; fontScale?: number },
 ) {
   const session = terminalSession(targetId);
 
@@ -229,6 +249,7 @@ export function claimTerminalSession(
   }
 
   session.ownerId = ownerId;
+  applyTerminalFontScale(session, options?.fontScale);
 
   if (!session.hasAttachedSnapshot || session.status !== "Connected") {
     void refreshTerminalSnapshot(session);

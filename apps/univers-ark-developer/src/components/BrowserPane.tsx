@@ -10,7 +10,6 @@ export interface BrowserFrameInstance {
   cacheKey: string;
   frameVersion: number;
   isActive: boolean;
-  isLoaded: boolean;
   status: TunnelStatus;
   surface: DeveloperSurface;
   target: DeveloperTarget;
@@ -18,12 +17,9 @@ export interface BrowserFrameInstance {
 
 interface BrowserPaneProps {
   activeFrame?: BrowserFrameInstance;
-  isKeepAlive: boolean;
   onReload: () => void;
   onRestart: () => void;
-  onToggleKeepAlive: () => void;
   retainedFrames: BrowserFrameInstance[];
-  showKeepAlive?: boolean;
   slotLabel: string;
 }
 
@@ -37,12 +33,9 @@ const TUNNEL_STATUS_LABELS: Record<string, string> = {
 
 export function BrowserPane({
   activeFrame,
-  isKeepAlive,
   onReload,
   onRestart,
-  onToggleKeepAlive,
   retainedFrames,
-  showKeepAlive = true,
   slotLabel,
 }: BrowserPaneProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -52,7 +45,6 @@ export function BrowserPane({
     : "Unavailable";
   const showBrowserOverlay =
     !activeFrame ||
-    !activeFrame.isLoaded ||
     activeFrame.status.state === "starting" ||
     activeFrame.status.state === "stopped" ||
     activeFrame.status.state === "error";
@@ -87,8 +79,8 @@ export function BrowserPane({
   }, [ownerId]);
 
   return (
-    <article className="panel browser-panel">
-      <header className="panel-header browser-header">
+    <article className="panel browser-panel tool-panel">
+      <header className="panel-header browser-header tool-panel-header">
         <div className="browser-heading">
           <div className="browser-pane-copy">
             <span className="panel-title">{slotLabel}</span>
@@ -108,16 +100,6 @@ export function BrowserPane({
           >
             {tunnelStatusLabel}
           </span>
-          {showKeepAlive ? (
-            <button
-              className={`panel-button ${isKeepAlive ? "is-active" : ""}`}
-              disabled={!activeFrame}
-              onClick={onToggleKeepAlive}
-              type="button"
-            >
-              {isKeepAlive ? "Keep Alive On" : "Keep Alive"}
-            </button>
-          ) : null}
           <button
             className="panel-button"
             disabled={!activeFrame?.surface.tunnelCommand}

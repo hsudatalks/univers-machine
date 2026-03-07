@@ -1,47 +1,44 @@
 :root {
-  font-family: "Inter", "Avenir Next", "Helvetica Neue", sans-serif;
+  font-family: "Geist", "Inter", "Avenir Next", "Helvetica Neue", sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: hsl(222.2 47.4% 11.2%);
-  background:
-    radial-gradient(circle at top left, hsl(210 40% 98%) 0%, transparent 45%),
-    radial-gradient(circle at top right, hsl(214 32% 94%) 0%, transparent 40%),
-    linear-gradient(180deg, hsl(210 40% 98%) 0%, hsl(220 33% 96%) 100%);
+  color: hsl(222.2 84% 4.9%);
+  background: hsl(210 40% 98%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
   --background: hsl(0 0% 100%);
-  --foreground: hsl(222.2 47.4% 11.2%);
-  --card: rgba(255, 255, 255, 0.92);
-  --card-foreground: hsl(222.2 47.4% 11.2%);
+  --foreground: hsl(222.2 84% 4.9%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(222.2 84% 4.9%);
   --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(222.2 47.4% 11.2%);
+  --popover-foreground: hsl(222.2 84% 4.9%);
   --primary: hsl(222.2 47.4% 11.2%);
   --primary-foreground: hsl(210 40% 98%);
   --secondary: hsl(210 40% 96.1%);
-  --secondary-foreground: hsl(222.2 47.4% 11.2%);
+  --secondary-foreground: hsl(222.2 84% 4.9%);
   --muted: hsl(210 40% 96.1%);
   --muted-foreground: hsl(215.4 16.3% 46.9%);
   --accent: hsl(210 40% 96.1%);
-  --accent-foreground: hsl(222.2 47.4% 11.2%);
+  --accent-foreground: hsl(222.2 84% 4.9%);
   --destructive: hsl(0 84.2% 60.2%);
   --destructive-foreground: hsl(210 40% 98%);
   --border: hsl(214.3 31.8% 91.4%);
   --input: hsl(214.3 31.8% 91.4%);
-  --ring: hsl(222.2 84% 4.9%);
-  --radius: 0.85rem;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 12px 30px rgba(15, 23, 42, 0.08);
+  --ring: hsl(221.2 83.2% 53.3%);
+  --radius: 0.8rem;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 10px 24px rgba(15, 23, 42, 0.06);
 
   --font-mono: "Iosevka", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --text-1: var(--foreground);
   --text-2: var(--muted-foreground);
   --border-strong: hsl(215 20.2% 65.1%);
   --panel: var(--card);
-  --panel-strong: rgba(255, 255, 255, 0.98);
-  --panel-muted: var(--muted);
+  --panel-strong: hsl(0 0% 100%);
+  --panel-muted: hsl(210 40% 97.5%);
 }
 
 * {
@@ -61,9 +58,8 @@ body {
   margin: 0;
   overflow: hidden;
   background:
-    radial-gradient(circle at top left, hsl(210 40% 98%) 0%, transparent 45%),
-    radial-gradient(circle at top right, hsl(214 32% 94%) 0%, transparent 40%),
-    linear-gradient(180deg, hsl(210 40% 98%) 0%, hsl(220 33% 96%) 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.74)),
+    hsl(210 40% 98%);
 }
 
 button,

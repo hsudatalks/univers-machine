@@ -7,8 +7,7 @@ interface SidebarNavProps {
   bootstrap: AppBootstrap;
   expandedServerIds: string[];
   isOverviewActive: boolean;
-  isRefreshing: boolean;
-  onRefresh: () => void;
+  isOverviewLayout?: boolean;
   onSelectContainer: (targetId: string) => void;
   onSelectOverview: () => void;
   onSelectServer: (serverId: string) => void;
@@ -37,6 +36,22 @@ function inventoryStateTone(state: string): string {
   }
 }
 
+function StatusDot({
+  state,
+  title,
+}: {
+  state: string;
+  title: string;
+}) {
+  return (
+    <span
+      aria-label={title}
+      className={`terminal-status terminal-status-dot status-${state}`}
+      title={title}
+    />
+  );
+}
+
 export function SidebarNav({
   activeServerId,
   activeTargetId,
@@ -44,8 +59,7 @@ export function SidebarNav({
   bootstrap,
   expandedServerIds,
   isOverviewActive,
-  isRefreshing,
-  onRefresh,
+  isOverviewLayout = false,
   onSelectContainer,
   onSelectOverview,
   onSelectServer,
@@ -62,26 +76,7 @@ export function SidebarNav({
   );
 
   return (
-    <aside className="sidebar">
-      <header className="sidebar-header">
-        <div className="sidebar-brand">
-          <span className="panel-title">Univers Ark</span>
-          <h1 className="sidebar-title">Developer</h1>
-          <p className="panel-description">
-            Overview and per-server navigation for remote development containers.
-          </p>
-        </div>
-
-        <button
-          className="panel-button"
-          disabled={isRefreshing}
-          onClick={onRefresh}
-          type="button"
-        >
-          {isRefreshing ? "Refreshing" : "Refresh"}
-        </button>
-      </header>
-
+    <aside className={`sidebar ${isOverviewLayout ? "sidebar-overview" : ""}`}>
       <nav className="sidebar-nav" aria-label="Workspace navigation">
         <button
           className={`sidebar-node sidebar-node-root ${isOverviewActive ? "is-active" : ""}`}
@@ -90,9 +85,6 @@ export function SidebarNav({
         >
           <span className="sidebar-node-copy">
             <span className="sidebar-node-label">Overview</span>
-            <span className="sidebar-node-meta">
-              All container terminals in one place
-            </span>
           </span>
         </button>
 
@@ -125,16 +117,12 @@ export function SidebarNav({
                     >
                       <span className="sidebar-node-copy">
                         <span className="sidebar-node-label">{server.label}</span>
-                        <span className="sidebar-node-meta">
-                          {server.containers.length} container(s)
-                        </span>
                       </span>
 
-                      <span
-                        className={`terminal-status status-${inventoryStateTone(server.state)}`}
-                      >
-                        {titleCase(server.state)}
-                      </span>
+                      <StatusDot
+                        state={inventoryStateTone(server.state)}
+                        title={titleCase(server.state)}
+                      />
                     </button>
                   </div>
 
@@ -153,19 +141,13 @@ export function SidebarNav({
                             type="button"
                           >
                             <span className="sidebar-node-copy">
-                              <span className="sidebar-node-label">
-                                {container.label}
-                              </span>
-                              <span className="sidebar-node-meta">
-                                {container.ipv4 || container.sshDestination}
-                              </span>
+                              <span className="sidebar-node-label">{container.label}</span>
                             </span>
 
-                            <span
-                              className={`terminal-status status-${container.sshReachable ? "running" : "error"}`}
-                            >
-                              {container.sshState}
-                            </span>
+                            <StatusDot
+                              state={container.sshReachable ? "running" : "error"}
+                              title={container.sshState}
+                            />
                           </button>
                         );
                       })}
@@ -191,7 +173,6 @@ export function SidebarNav({
                 >
                   <span className="sidebar-node-copy">
                     <span className="sidebar-node-label">{target.label}</span>
-                    <span className="sidebar-node-meta">{target.host}</span>
                   </span>
                 </button>
               ))}

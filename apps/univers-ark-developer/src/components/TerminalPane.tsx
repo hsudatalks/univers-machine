@@ -13,7 +13,8 @@ interface TerminalPaneProps {
   active?: boolean;
   actions?: ReactNode;
   autoFocus?: boolean;
-  meta?: string;
+  fontScale?: number;
+  isFocused?: boolean;
   target: DeveloperTarget;
   title?: string;
 }
@@ -22,7 +23,8 @@ export function TerminalPane({
   active = true,
   actions,
   autoFocus = true,
-  meta,
+  fontScale = 1,
+  isFocused = false,
   target,
   title = "Terminal",
 }: TerminalPaneProps) {
@@ -33,6 +35,7 @@ export function TerminalPane({
     () => getTerminalStatus(target.id),
     () => "Connecting",
   );
+  const compactStatus = status === "Connected" || status === "Running";
 
   useEffect(() => {
     const mountElement = mountRef.current;
@@ -41,7 +44,10 @@ export function TerminalPane({
       return undefined;
     }
 
-    claimTerminalSession(target.id, ownerId, mountElement, { autoFocus });
+    claimTerminalSession(target.id, ownerId, mountElement, {
+      autoFocus,
+      fontScale,
+    });
 
     const syncLayout = () => {
       fitClaimedTerminalSession(target.id, ownerId);
@@ -65,21 +71,36 @@ export function TerminalPane({
       window.removeEventListener("resize", syncLayout);
       releaseTerminalSession(target.id, ownerId);
     };
-  }, [active, autoFocus, ownerId, target.id]);
+  }, [active, autoFocus, fontScale, ownerId, target.id]);
+
+  useEffect(() => {
+    if (!active || !isFocused) {
+      return;
+    }
+
+    focusClaimedTerminalSession(target.id, ownerId);
+  }, [active, isFocused, ownerId, target.id]);
 
   return (
     <>
       <header className="panel-header terminal-header">
         <div className="terminal-copy">
           <span className="panel-title">{title}</span>
-          <span className="panel-meta">{meta ?? target.host}</span>
         </div>
 
         <div className="terminal-meta">
           {actions}
-          <span className={`terminal-status status-${status.toLowerCase()}`}>
-            {status}
-          </span>
+          {compactStatus ? (
+            <span
+              aria-label={status}
+              className={`terminal-status terminal-status-dot status-${status.toLowerCase()}`}
+              title={status}
+            />
+          ) : (
+            <span className={`terminal-status status-${status.toLowerCase()}`}>
+              {status}
+            </span>
+          )}
         </div>
       </header>
 

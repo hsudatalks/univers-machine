@@ -1,17 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BrowserPane,
-  type BrowserFrameInstance,
-} from "./components/BrowserPane";
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import { isTauri } from "@tauri-apps/api/core";
+import { BrowserPane, type BrowserFrameInstance } from "./components/BrowserPane";
+import { FilesPane } from "./components/FilesPane";
 import { SidebarNav } from "./components/SidebarNav";
 import { TerminalCard } from "./components/TerminalCard";
 import { TerminalPane } from "./components/TerminalPane";
 import "./App.css";
-import { pruneBrowserFrames } from "./lib/browser-cache";
 import {
   listenTunnelStatus,
+  listenSidebarToggleRequested,
   loadBootstrap,
-  refreshBootstrap,
   restartTunnel,
 } from "./lib/tauri";
 import { warmTargetTunnels } from "./lib/tunnel-manager";
@@ -29,35 +34,25 @@ type ActiveView =
   | { kind: "server"; serverId: string }
   | { kind: "container"; targetId: string };
 
-function surfaceKey(targetId: string, surfaceId: string): string {
-  return `${targetId}::${surfaceId}`;
+type ContainerToolPanel = "files" | `browser:${string}`;
+
+interface ResizeSession {
+  targetId: string;
+  startTerminalWidth: number;
+  startPointerX: number;
+  workspaceWidth: number;
 }
 
-function defaultBrowserSurface(target: DeveloperTarget): DeveloperSurface | undefined {
-  return (
-    target.surfaces.find((surface) => surface.id === "development") ??
-    target.surfaces[0]
-  );
-}
-
-function fallbackTunnelStatus(
-  targetId: string,
-  surface: DeveloperSurface,
-): TunnelStatus {
-  return surface.tunnelCommand
-    ? {
-        targetId,
-        surfaceId: surface.id,
-        state: "starting",
-        message: `Warming the ${surface.label.toLowerCase()} tunnel in the background.`,
-      }
-    : {
-        targetId,
-        surfaceId: surface.id,
-        state: "direct",
-        message: `${surface.label} is using the local URL directly.`,
-      };
-}
+const OVERVIEW_ZOOM_STORAGE_KEY = "univers-ark-developer:overview-zoom";
+const SIDEBAR_VISIBILITY_STORAGE_KEY =
+  "univers-ark-developer:sidebar-hidden";
+const OVERVIEW_ZOOM_MIN = 0.8;
+const OVERVIEW_ZOOM_MAX = 1.3;
+const OVERVIEW_ZOOM_STEP = 0.1;
+const OVERVIEW_ZOOM_DEFAULT = 1;
+const DEFAULT_TERMINAL_PANEL_WIDTH_REM = 25;
+const MIN_TERMINAL_PANEL_WIDTH_REM = 25;
+const MIN_TOOL_PANEL_WIDTH_REM = 22;
 
 function resolvePreferredTarget(
   bootstrap: AppBootstrap,
@@ -93,23 +88,12 @@ function uniqueStrings(values: string[]): string[] {
   });
 }
 
-function normalizeActiveView(
-  bootstrap: AppBootstrap,
-  view: ActiveView,
-): ActiveView {
-  if (view.kind === "overview") {
-    return view;
-  }
+function clampOverviewZoom(value: number): number {
+  return Math.min(OVERVIEW_ZOOM_MAX, Math.max(OVERVIEW_ZOOM_MIN, value));
+}
 
-  if (view.kind === "server") {
-    return bootstrap.servers.some((server) => server.id === view.serverId)
-      ? view
-      : { kind: "overview" };
-  }
-
-  return bootstrap.targets.some((target) => target.id === view.targetId)
-    ? view
-    : { kind: "overview" };
+function roundOverviewZoom(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
 function serverForTargetId(
@@ -121,15 +105,161 @@ function serverForTargetId(
   );
 }
 
-function containerSubtitle(
-  server: ManagedServer | undefined,
-  container: ManagedContainer,
-): string {
-  const segments = [server?.label, container.ipv4 || container.sshDestination].filter(
-    Boolean,
+function surfaceKey(targetId: string, surfaceId: string): string {
+  return `${targetId}::${surfaceId}`;
+}
+
+function fallbackTunnelStatus(
+  targetId: string,
+  surface: DeveloperSurface,
+): TunnelStatus {
+  if (!surface.tunnelCommand.trim()) {
+    return {
+      targetId,
+      surfaceId: surface.id,
+      state: "direct",
+      message: `${surface.label} is available directly without a managed tunnel.`,
+    };
+  }
+
+  return {
+    targetId,
+    surfaceId: surface.id,
+    state: "starting",
+    message: `${surface.label} is warming in the background.`,
+  };
+}
+
+function rootFontSizePx(): number {
+  if (typeof window === "undefined") {
+    return 16;
+  }
+
+  const parsed = Number.parseFloat(
+    window.getComputedStyle(document.documentElement).fontSize,
   );
 
-  return segments.join(" · ");
+  return Number.isFinite(parsed) ? parsed : 16;
+}
+
+function defaultTerminalPanelWidthPx(): number {
+  return DEFAULT_TERMINAL_PANEL_WIDTH_REM * rootFontSizePx();
+}
+
+function minTerminalPanelWidthPx(): number {
+  return MIN_TERMINAL_PANEL_WIDTH_REM * rootFontSizePx();
+}
+
+function minToolPanelWidthPx(): number {
+  return MIN_TOOL_PANEL_WIDTH_REM * rootFontSizePx();
+}
+
+function clampTerminalPanelWidth(value: number, workspaceWidth: number): number {
+  const minTerminalWidth = minTerminalPanelWidthPx();
+  const maxTerminalWidth = Math.max(
+    minTerminalWidth,
+    workspaceWidth - minToolPanelWidthPx(),
+  );
+
+  return Math.min(maxTerminalWidth, Math.max(minTerminalWidth, value));
+}
+
+function isBrowserToolPanel(
+  panel: ContainerToolPanel | null | undefined,
+): panel is `browser:${string}` {
+  return Boolean(panel?.startsWith("browser:"));
+}
+
+function browserSurfaceIdFromPanel(
+  panel: ContainerToolPanel | null | undefined,
+): string | null {
+  if (!isBrowserToolPanel(panel)) {
+    return null;
+  }
+
+  return panel.slice("browser:".length) || null;
+}
+
+type OverviewMoveDirection = "left" | "right" | "up" | "down";
+
+function adjacentOverviewTargetId(
+  direction: OverviewMoveDirection,
+  currentTargetId: string,
+  targetIds: string[],
+  elements: Map<string, HTMLElement>,
+): string {
+  const cards = targetIds
+    .map((targetId) => {
+      const element = elements.get(targetId);
+
+      if (!element) {
+        return null;
+      }
+
+      const rect = element.getBoundingClientRect();
+
+      return {
+        centerX: rect.left + rect.width / 2,
+        centerY: rect.top + rect.height / 2,
+        id: targetId,
+      };
+    })
+    .filter(
+      (
+        card,
+      ): card is {
+        centerX: number;
+        centerY: number;
+        id: string;
+      } => Boolean(card),
+    );
+
+  if (cards.length === 0) {
+    return currentTargetId;
+  }
+
+  const currentCard = cards.find((card) => card.id === currentTargetId) ?? cards[0];
+  const candidates = cards.filter((card) => {
+    switch (direction) {
+      case "left":
+        return card.centerX < currentCard.centerX - 4;
+      case "right":
+        return card.centerX > currentCard.centerX + 4;
+      case "up":
+        return card.centerY < currentCard.centerY - 4;
+      case "down":
+        return card.centerY > currentCard.centerY + 4;
+    }
+  });
+
+  if (candidates.length === 0) {
+    return currentCard.id;
+  }
+
+  const perpendicularWeight = 4;
+
+  const bestCandidate = candidates.reduce((best, candidate) => {
+    const axisDistance =
+      direction === "left" || direction === "right"
+        ? Math.abs(candidate.centerX - currentCard.centerX)
+        : Math.abs(candidate.centerY - currentCard.centerY);
+    const perpendicularDistance =
+      direction === "left" || direction === "right"
+        ? Math.abs(candidate.centerY - currentCard.centerY)
+        : Math.abs(candidate.centerX - currentCard.centerX);
+    const score = axisDistance + perpendicularDistance * perpendicularWeight;
+
+    if (!best || score < best.score) {
+      return {
+        id: candidate.id,
+        score,
+      };
+    }
+
+    return best;
+  }, null as { id: string; score: number } | null);
+
+  return bestCandidate?.id ?? currentCard.id;
 }
 
 function App() {
@@ -137,70 +267,42 @@ function App() {
   const [activeView, setActiveView] = useState<ActiveView>({ kind: "overview" });
   const [visitedContainerIds, setVisitedContainerIds] = useState<string[]>([]);
   const [visitedServerIds, setVisitedServerIds] = useState<string[]>([]);
-  const [selectedTargetId, setSelectedTargetId] = useState("");
-  const [browserFrameVersions, setBrowserFrameVersions] = useState<
-    Record<string, number>
+  const [overviewFocusedTargetId, setOverviewFocusedTargetId] = useState<string>("");
+  const [isSidebarHidden, setIsSidebarHidden] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return (
+      window.localStorage.getItem(SIDEBAR_VISIBILITY_STORAGE_KEY) === "true"
+    );
+  });
+  const [expandedServerIds, setExpandedServerIds] = useState<string[]>([]);
+  const [containerTools, setContainerTools] = useState<
+    Record<string, ContainerToolPanel | undefined>
   >({});
-  const [loadedBrowserKeys, setLoadedBrowserKeys] = useState<string[]>([]);
-  const [tunnelStatuses, setTunnelStatuses] = useState<Record<string, TunnelStatus>>(
+  const [containerTerminalWidths, setContainerTerminalWidths] = useState<Record<string, number>>(
     {},
   );
-  const [expandedServerIds, setExpandedServerIds] = useState<string[]>([]);
+  const [activeResize, setActiveResize] = useState<ResizeSession | null>(null);
+  const [browserFrameVersions, setBrowserFrameVersions] = useState<Record<string, number>>({});
+  const [tunnelStatuses, setTunnelStatuses] = useState<Record<string, TunnelStatus>>({});
   const [error, setError] = useState<string | null>(null);
-  const [isRefreshingInventory, setIsRefreshingInventory] = useState(false);
+  const overviewCardElements = useMemo(() => new Map<string, HTMLElement>(), []);
+  const [overviewZoom, setOverviewZoom] = useState(() => {
+    if (typeof window === "undefined") {
+      return OVERVIEW_ZOOM_DEFAULT;
+    }
 
-  const recordTunnelStatus = useCallback(
-    (
-      status: TunnelStatus,
-      options?: { reloadFrame?: boolean; unloadFrame?: boolean },
-    ) => {
-      const cacheKey = surfaceKey(status.targetId, status.surfaceId);
+    const stored = window.localStorage.getItem(OVERVIEW_ZOOM_STORAGE_KEY);
+    const parsed = stored ? Number(stored) : Number.NaN;
 
-      setTunnelStatuses((current) => ({ ...current, [cacheKey]: status }));
+    if (!Number.isFinite(parsed)) {
+      return OVERVIEW_ZOOM_DEFAULT;
+    }
 
-      if (options?.unloadFrame || status.state === "error" || status.state === "stopped") {
-        setLoadedBrowserKeys((current) =>
-          current.filter((entry) => entry !== cacheKey),
-        );
-      }
-
-      if (status.state === "direct" || status.state === "running") {
-        setLoadedBrowserKeys((current) =>
-          current.includes(cacheKey) ? current : [...current, cacheKey],
-        );
-        setBrowserFrameVersions((current) =>
-          options?.reloadFrame
-            ? { ...current, [cacheKey]: (current[cacheKey] ?? 0) + 1 }
-            : cacheKey in current
-              ? current
-              : { ...current, [cacheKey]: 0 },
-        );
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | null = null;
-
-    void listenTunnelStatus((status) => {
-      recordTunnelStatus(status);
-    }).then((nextUnlisten) => {
-      if (cancelled) {
-        nextUnlisten();
-        return;
-      }
-
-      unlisten = nextUnlisten;
-    });
-
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, [recordTunnelStatus]);
-
+    return clampOverviewZoom(parsed);
+  });
   useEffect(() => {
     let cancelled = false;
 
@@ -216,11 +318,12 @@ function App() {
         setActiveView({ kind: "overview" });
         setVisitedContainerIds([]);
         setVisitedServerIds([]);
-        setSelectedTargetId(initialTarget?.id ?? "");
-        setBrowserFrameVersions({});
-        setLoadedBrowserKeys([]);
-        setTunnelStatuses({});
+        setOverviewFocusedTargetId(initialTarget?.id ?? "");
         setExpandedServerIds(nextBootstrap.servers.map((server) => server.id));
+        setContainerTools({});
+        setContainerTerminalWidths({});
+        setBrowserFrameVersions({});
+        setTunnelStatuses({});
         setError(null);
       })
       .catch((loadError) => {
@@ -239,6 +342,148 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(
+      OVERVIEW_ZOOM_STORAGE_KEY,
+      String(roundOverviewZoom(overviewZoom)),
+    );
+  }, [overviewZoom]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(
+      SIDEBAR_VISIBILITY_STORAGE_KEY,
+      String(isSidebarHidden),
+    );
+  }, [isSidebarHidden]);
+
+  useEffect(() => {
+    if (!isTauri()) {
+      return;
+    }
+
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void listenSidebarToggleRequested(() => {
+      if (cancelled) {
+        return;
+      }
+
+      setIsSidebarHidden((current) => !current);
+    }).then((nextUnlisten) => {
+      if (cancelled) {
+        nextUnlisten();
+        return;
+      }
+
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isTauri()) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        !event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey ||
+        event.code !== "KeyH"
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setIsSidebarHidden((current) => !current);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void listenTunnelStatus((status) => {
+      if (cancelled) {
+        return;
+      }
+
+      setTunnelStatuses((current) => ({
+        ...current,
+        [surfaceKey(status.targetId, status.surfaceId)]: status,
+      }));
+    }).then((nextUnlisten) => {
+      if (cancelled) {
+        nextUnlisten();
+        return;
+      }
+
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activeResize) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const deltaX = event.clientX - activeResize.startPointerX;
+      const nextWidth = clampTerminalPanelWidth(
+        activeResize.startTerminalWidth + deltaX,
+        activeResize.workspaceWidth,
+      );
+
+      setContainerTerminalWidths((current) => ({
+        ...current,
+        [activeResize.targetId]: nextWidth,
+      }));
+    };
+
+    const handlePointerUp = () => {
+      setActiveResize(null);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp, { once: true });
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [activeResize]);
 
   const targetById = useMemo(
     () => new Map(bootstrap?.targets.map((target) => [target.id, target]) ?? []),
@@ -273,6 +518,16 @@ function App() {
     [bootstrap, targetById],
   );
 
+  const overviewTerminalTargets = useMemo(
+    () => [
+      ...overviewContainers
+        .map((entry) => entry.target)
+        .filter((target): target is DeveloperTarget => Boolean(target)),
+      ...standaloneTargets,
+    ],
+    [overviewContainers, standaloneTargets],
+  );
+
   const visitedServers = useMemo(
     () =>
       visitedServerIds
@@ -296,64 +551,43 @@ function App() {
         : undefined,
     [activeContainerTarget, bootstrap],
   );
-
-  const browserFrameForTarget = (target: DeveloperTarget): BrowserFrameInstance | undefined => {
-    const surface = defaultBrowserSurface(target);
-
-    if (!surface) {
-      return undefined;
+  const reachableContainerCount = useMemo(
+    () =>
+      overviewContainers.filter((entry) => entry.container.sshReachable).length,
+    [overviewContainers],
+  );
+  const activeOverviewFocusedTargetId = useMemo(() => {
+    if (overviewTerminalTargets.length === 0) {
+      return "";
     }
 
-    const cacheKey = surfaceKey(target.id, surface.id);
+    if (
+      overviewFocusedTargetId &&
+      overviewTerminalTargets.some((target) => target.id === overviewFocusedTargetId)
+    ) {
+      return overviewFocusedTargetId;
+    }
 
-    return {
-      cacheKey,
-      frameVersion: browserFrameVersions[cacheKey] ?? 0,
-      isActive: true,
-      isLoaded: loadedBrowserKeys.includes(cacheKey),
-      status: tunnelStatuses[cacheKey] ?? fallbackTunnelStatus(target.id, surface),
-      surface,
-      target,
-    };
-  };
+    return overviewTerminalTargets[0]?.id ?? "";
+  }, [overviewFocusedTargetId, overviewTerminalTargets]);
 
-  const reloadBrowserSurface = (targetId: string, surfaceId: string) => {
-    const cacheKey = surfaceKey(targetId, surfaceId);
+  useEffect(() => {
+    if (activeView.kind !== "overview" || !activeOverviewFocusedTargetId) {
+      return;
+    }
 
-    setLoadedBrowserKeys((current) =>
-      current.includes(cacheKey) ? current : [...current, cacheKey],
-    );
-    setBrowserFrameVersions((current) => ({
-      ...current,
-      [cacheKey]: (current[cacheKey] ?? 0) + 1,
-    }));
-  };
+    const element = overviewCardElements.get(activeOverviewFocusedTargetId);
 
-  const restartBrowserSurface = (target: DeveloperTarget, surface: DeveloperSurface) => {
-    const cacheKey = surfaceKey(target.id, surface.id);
+    if (!element) {
+      return;
+    }
 
-    setLoadedBrowserKeys((current) => current.filter((entry) => entry !== cacheKey));
-    setBrowserFrameVersions((current) => ({
-      ...current,
-      [cacheKey]: (current[cacheKey] ?? 0) + 1,
-    }));
-
-    void restartTunnel(target.id, surface.id)
-      .then((status) => {
-        recordTunnelStatus(status, { unloadFrame: status.state === "starting" });
-      })
-      .catch((restartError) => {
-        recordTunnelStatus({
-          targetId: target.id,
-          surfaceId: surface.id,
-          state: "error",
-          message:
-            restartError instanceof Error
-              ? restartError.message
-              : `Failed to restart the ${surface.label.toLowerCase()} tunnel.`,
-        });
-      });
-  };
+    element.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [activeOverviewFocusedTargetId, activeView.kind, overviewCardElements]);
 
   const setContainerView = (targetId: string) => {
     const nextTarget = targetById.get(targetId);
@@ -362,67 +596,263 @@ function App() {
       return;
     }
 
-    setSelectedTargetId(targetId);
     setActiveView({ kind: "container", targetId });
     setVisitedContainerIds((current) => uniqueStrings([...current, targetId]));
+    setContainerTools((current) => ({
+      ...current,
+      [targetId]: current[targetId] ?? "files",
+    }));
+    setContainerTerminalWidths((current) => ({
+      ...current,
+      [targetId]: current[targetId] ?? defaultTerminalPanelWidthPx(),
+    }));
     warmTargetTunnels(nextTarget, undefined, (status) => {
-      recordTunnelStatus(status);
+      setTunnelStatuses((current) => ({
+        ...current,
+        [surfaceKey(status.targetId, status.surfaceId)]: status,
+      }));
     });
   };
 
-  const refreshInventory = () => {
-    setIsRefreshingInventory(true);
+  const openContainerViewFromShortcut = useEffectEvent((targetId: string) => {
+    setContainerView(targetId);
+  });
 
-    void refreshBootstrap()
-      .then((nextBootstrap) => {
-        const nextTarget = resolvePreferredTarget(nextBootstrap, selectedTargetId);
-        const validBrowserKeys = new Set(
-          nextBootstrap.targets.flatMap((target) =>
-            target.surfaces.map((surface) => surfaceKey(target.id, surface.id)),
-          ),
-        );
+  useEffect(() => {
+    if (activeView.kind !== "overview") {
+      return;
+    }
 
-        setBootstrap(nextBootstrap);
-        setSelectedTargetId(nextTarget?.id ?? "");
-        setExpandedServerIds((current) =>
-          uniqueStrings([...current, ...nextBootstrap.servers.map((server) => server.id)]),
-        );
-        setVisitedContainerIds((current) =>
-          current.filter((targetId) =>
-            nextBootstrap.targets.some((target) => target.id === targetId),
-          ),
-        );
-        setVisitedServerIds((current) =>
-          current.filter((serverId) =>
-            nextBootstrap.servers.some((server) => server.id === serverId),
-          ),
-        );
-        setBrowserFrameVersions((current) =>
-          Object.fromEntries(
-            Object.entries(current).filter(([cacheKey]) => validBrowserKeys.has(cacheKey)),
-          ),
-        );
-        setLoadedBrowserKeys((current) =>
-          current.filter((cacheKey) => validBrowserKeys.has(cacheKey)),
-        );
-        setTunnelStatuses((current) =>
-          Object.fromEntries(
-            Object.entries(current).filter(([cacheKey]) => validBrowserKeys.has(cacheKey)),
-          ),
-        );
-        pruneBrowserFrames([...validBrowserKeys]);
-        setActiveView((current) => normalizeActiveView(nextBootstrap, current));
-        setError(null);
+    const fallbackTargetId = overviewTerminalTargets[0]?.id;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+        return;
+      }
+
+      const currentTargetId = activeOverviewFocusedTargetId || fallbackTargetId;
+
+      if (event.key === "Enter") {
+        if (!currentTargetId) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        openContainerViewFromShortcut(currentTargetId);
+        return;
+      }
+
+      let direction: OverviewMoveDirection | null = null;
+
+      switch (event.key) {
+        case "ArrowLeft":
+          direction = "left";
+          break;
+        case "ArrowRight":
+          direction = "right";
+          break;
+        case "ArrowUp":
+          direction = "up";
+          break;
+        case "ArrowDown":
+          direction = "down";
+          break;
+        default:
+          return;
+      }
+
+      if (!direction || !currentTargetId) {
+        return;
+      }
+
+      const nextTargetId = adjacentOverviewTargetId(
+        direction,
+        currentTargetId,
+        overviewTerminalTargets.map((target) => target.id),
+        overviewCardElements,
+      );
+
+      if (!nextTargetId || nextTargetId === currentTargetId) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setOverviewFocusedTargetId(nextTargetId);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [
+    activeOverviewFocusedTargetId,
+    activeView.kind,
+    overviewCardElements,
+    overviewTerminalTargets,
+  ]);
+
+  const selectContainerTool = (
+    target: DeveloperTarget,
+    panel: ContainerToolPanel,
+  ) => {
+    setContainerTools((current) => ({
+      ...current,
+      [target.id]: panel,
+    }));
+
+    if (!(target.id in containerTerminalWidths)) {
+      setContainerTerminalWidths((current) => ({
+        ...current,
+        [target.id]: defaultTerminalPanelWidthPx(),
+      }));
+    }
+
+    if (isBrowserToolPanel(panel)) {
+      const surfaceId = browserSurfaceIdFromPanel(panel);
+      const surface = target.surfaces.find((entry) => entry.id === surfaceId);
+
+      if (surface) {
+        warmTargetTunnels(target, [surface.id], (status) => {
+          setTunnelStatuses((current) => ({
+            ...current,
+            [surfaceKey(status.targetId, status.surfaceId)]: status,
+          }));
+        });
+      }
+    }
+  };
+
+  const selectContainerToolFromShortcut = useEffectEvent(
+    (target: DeveloperTarget, panel: ContainerToolPanel) => {
+      selectContainerTool(target, panel);
+    },
+  );
+
+  useEffect(() => {
+    if (activeView.kind !== "container") {
+      return;
+    }
+
+    const { targetId } = activeView;
+    const target = targetById.get(targetId);
+
+    if (!target) {
+      return;
+    }
+
+    const developmentSurface = target.surfaces.find(
+      (surface) => surface.id === "development",
+    );
+    const previewSurface = target.surfaces.find((surface) => surface.id === "preview");
+    const developmentPanel = developmentSurface
+      ? (`browser:${developmentSurface.id}` as const)
+      : null;
+    const previewPanel = previewSurface
+      ? (`browser:${previewSurface.id}` as const)
+      : null;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+        return;
+      }
+
+      if (event.key === "Backspace" || event.key === "Delete") {
+        event.preventDefault();
+        event.stopPropagation();
+        setOverviewFocusedTargetId(targetId);
+        setActiveView({ kind: "overview" });
+        return;
+      }
+
+      let nextPanel: ContainerToolPanel | null = null;
+
+      switch (event.key) {
+        case "1":
+          nextPanel = "files";
+          break;
+        case "2":
+          nextPanel = developmentPanel;
+          break;
+        case "3":
+          nextPanel = previewPanel;
+          break;
+        default:
+          return;
+      }
+
+      if (!nextPanel) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      selectContainerToolFromShortcut(target, nextPanel);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [activeView, targetById]);
+
+  const startContainerResize = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    targetId: string,
+  ) => {
+    const workspace = event.currentTarget.parentElement;
+
+    if (!workspace) {
+      return;
+    }
+
+    const workspaceWidth = workspace.getBoundingClientRect().width;
+    const startTerminalWidth =
+      containerTerminalWidths[targetId] ?? defaultTerminalPanelWidthPx();
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setActiveResize({
+      targetId,
+      startTerminalWidth,
+      startPointerX: event.clientX,
+      workspaceWidth,
+    });
+  };
+
+  const reloadBrowserFrame = (targetId: string, surfaceId: string) => {
+    const key = surfaceKey(targetId, surfaceId);
+
+    setBrowserFrameVersions((current) => ({
+      ...current,
+      [key]: (current[key] ?? 0) + 1,
+    }));
+  };
+
+  const restartBrowserTunnel = (targetId: string, surfaceId: string) => {
+    void restartTunnel(targetId, surfaceId)
+      .then((status) => {
+        setTunnelStatuses((current) => ({
+          ...current,
+          [surfaceKey(status.targetId, status.surfaceId)]: status,
+        }));
       })
-      .catch((refreshError) => {
-        setError(
-          refreshError instanceof Error
-            ? refreshError.message
-            : "Failed to refresh target inventory.",
-        );
-      })
-      .finally(() => {
-        setIsRefreshingInventory(false);
+      .catch((restartError) => {
+        setTunnelStatuses((current) => ({
+          ...current,
+          [surfaceKey(targetId, surfaceId)]: {
+            targetId,
+            surfaceId,
+            state: "error",
+            message:
+              restartError instanceof Error
+                ? restartError.message
+                : "Failed to restart browser tunnel.",
+          },
+        }));
       });
   };
 
@@ -434,15 +864,11 @@ function App() {
     );
   };
 
-  const renderUnavailableTerminalCard = (
-    container: ManagedContainer,
-    server?: ManagedServer,
-  ) => (
+  const renderUnavailableTerminalCard = (container: ManagedContainer) => (
     <article className="panel terminal-card terminal-card-unavailable" key={container.targetId}>
       <header className="panel-header terminal-placeholder-header">
         <div className="terminal-copy">
           <span className="panel-title">{container.label}</span>
-          <span className="panel-meta">{containerSubtitle(server, container)}</span>
         </div>
 
         <div className="terminal-meta">
@@ -459,17 +885,23 @@ function App() {
   const renderTerminalCard = (
     target: DeveloperTarget,
     options?: {
+      isGridFocused?: boolean;
       key?: string;
-      meta?: string;
+      onFocusRequest?: () => void;
       pageVisible?: boolean;
+      registerElement?: (element: HTMLElement | null) => void;
+      scale?: number;
       title?: string;
     },
   ) => (
     <TerminalCard
+      isGridFocused={options?.isGridFocused}
       key={options?.key ?? target.id}
-      meta={options?.meta}
+      onFocusRequest={options?.onFocusRequest}
       onOpenWorkspace={() => setContainerView(target.id)}
       pageVisible={options?.pageVisible}
+      registerElement={options?.registerElement}
+      scale={options?.scale}
       target={target}
       title={options?.title ?? target.label}
     />
@@ -479,44 +911,118 @@ function App() {
     const reachableContainers = overviewContainers.filter(
       (entry) => entry.container.sshReachable,
     ).length;
+    const overviewZoomStyle = {
+      "--overview-terminal-grid-min-width": `${25 * overviewZoom}rem`,
+      "--overview-terminal-card-height": `${32 * overviewZoom}rem`,
+      "--overview-terminal-min-height": `${30 * overviewZoom}rem`,
+    } as CSSProperties;
 
     return (
       <>
-        <header className="content-header">
+        <header className="content-header content-header-overview">
           <div className="content-header-copy">
-            <span className="panel-title">Overview</span>
-            <h1 className="content-title">All Containers</h1>
+            <h1 className="content-title content-title-overview">Overview</h1>
           </div>
 
-          <div className="content-meta-row">
-            <span className="content-chip">
-              {bootstrap?.servers.length ?? 0} server(s)
-            </span>
-            <span className="content-chip">
-              {overviewContainers.length} container(s)
-            </span>
-            <span className="content-chip">{reachableContainers} SSH ready</span>
+          <div className="content-header-tools">
+            <div className="overview-zoom-controls" aria-label="Overview zoom controls">
+              <button
+                className="panel-button panel-button-toolbar overview-zoom-button"
+                disabled={overviewZoom <= OVERVIEW_ZOOM_MIN}
+                onClick={() => {
+                  setOverviewZoom((current) =>
+                    roundOverviewZoom(
+                      clampOverviewZoom(current - OVERVIEW_ZOOM_STEP),
+                    ),
+                  );
+                }}
+                title="Zoom out overview terminals"
+                type="button"
+              >
+                -
+              </button>
+
+              <button
+                className="content-chip content-chip-button"
+                disabled={overviewZoom === OVERVIEW_ZOOM_DEFAULT}
+                onClick={() => {
+                  setOverviewZoom(OVERVIEW_ZOOM_DEFAULT);
+                }}
+                title="Reset overview zoom"
+                type="button"
+              >
+                {Math.round(overviewZoom * 100)}%
+              </button>
+
+              <button
+                className="panel-button panel-button-toolbar overview-zoom-button"
+                disabled={overviewZoom >= OVERVIEW_ZOOM_MAX}
+                onClick={() => {
+                  setOverviewZoom((current) =>
+                    roundOverviewZoom(
+                      clampOverviewZoom(current + OVERVIEW_ZOOM_STEP),
+                    ),
+                  );
+                }}
+                title="Zoom in overview terminals"
+                type="button"
+              >
+                +
+              </button>
+            </div>
+
+            <div className="content-meta-row">
+              <span className="content-chip">
+                {bootstrap?.servers.length ?? 0} server(s)
+              </span>
+              <span className="content-chip">
+                {overviewContainers.length} container(s)
+              </span>
+              <span className="content-chip">{reachableContainers} SSH ready</span>
+            </div>
           </div>
         </header>
 
         <section className="page-section">
-          <div className="terminal-grid">
-            {overviewContainers.map(({ container, server, target }) =>
+          <div className="terminal-grid" style={overviewZoomStyle}>
+            {overviewContainers.map(({ container, target }) =>
               target
                 ? renderTerminalCard(target, {
+                    isGridFocused: activeOverviewFocusedTargetId === target.id,
                     key: container.targetId,
-                    meta: containerSubtitle(server, container),
+                    onFocusRequest: () => {
+                      setOverviewFocusedTargetId(target.id);
+                    },
                     pageVisible,
+                    registerElement: (element) => {
+                      if (element) {
+                        overviewCardElements.set(target.id, element);
+                      } else {
+                        overviewCardElements.delete(target.id);
+                      }
+                    },
+                    scale: overviewZoom,
                     title: container.label,
                   })
-                : renderUnavailableTerminalCard(container, server),
+                : renderUnavailableTerminalCard(container),
             )}
 
             {standaloneTargets.map((target) =>
               renderTerminalCard(target, {
+                isGridFocused: activeOverviewFocusedTargetId === target.id,
                 key: target.id,
-                meta: target.host,
+                onFocusRequest: () => {
+                  setOverviewFocusedTargetId(target.id);
+                },
                 pageVisible,
+                    registerElement: (element) => {
+                      if (element) {
+                        overviewCardElements.set(target.id, element);
+                      } else {
+                        overviewCardElements.delete(target.id);
+                      }
+                    },
+                scale: overviewZoom,
                 title: target.label,
               }),
             )}
@@ -537,6 +1043,7 @@ function App() {
           <div className="content-header-copy">
             <span className="panel-title">Server</span>
             <h1 className="content-title">{server.label}</h1>
+            <p className="panel-description">{server.description}</p>
           </div>
 
           <div className="content-meta-row">
@@ -556,11 +1063,10 @@ function App() {
               return target
                 ? renderTerminalCard(target, {
                     key: container.targetId,
-                    meta: containerSubtitle(server, container),
                     pageVisible,
                     title: container.label,
                   })
-                : renderUnavailableTerminalCard(container, server);
+                : renderUnavailableTerminalCard(container);
             })}
           </div>
         </section>
@@ -569,80 +1075,122 @@ function App() {
   };
 
   const renderContainerPage = (target: DeveloperTarget, pageVisible: boolean) => {
-    const containerServer = serverForTargetId(bootstrap?.servers ?? [], target.id);
-    const activeBrowserFrame = browserFrameForTarget(target);
+    const activeTool = containerTools[target.id] ?? "files";
+    const developmentSurface = target.surfaces.find(
+      (surface) => surface.id === "development",
+    );
+    const previewSurface = target.surfaces.find((surface) => surface.id === "preview");
+    const developmentPanel = developmentSurface
+      ? (`browser:${developmentSurface.id}` as const)
+      : null;
+    const previewPanel = previewSurface ? (`browser:${previewSurface.id}` as const) : null;
+    const activeBrowserSurfaceId = browserSurfaceIdFromPanel(activeTool);
+    const browserSurface = activeBrowserSurfaceId
+      ? target.surfaces.find((surface) => surface.id === activeBrowserSurfaceId)
+      : undefined;
+    const browserStatus = browserSurface
+      ? tunnelStatuses[surfaceKey(target.id, browserSurface.id)] ??
+        fallbackTunnelStatus(target.id, browserSurface)
+      : undefined;
+    const browserFrame: BrowserFrameInstance | undefined =
+      browserSurface && browserStatus
+        ? {
+            cacheKey: surfaceKey(target.id, browserSurface.id),
+            frameVersion:
+              browserFrameVersions[surfaceKey(target.id, browserSurface.id)] ?? 0,
+            isActive: pageVisible,
+            status: browserStatus,
+            surface: browserSurface,
+            target,
+          }
+        : undefined;
+    const workspaceStyle = {
+      "--container-terminal-width": `${containerTerminalWidths[target.id] ?? defaultTerminalPanelWidthPx()}px`,
+    } as CSSProperties;
 
     return (
       <>
-        <header className="content-header">
+        <header className="content-header content-header-container">
           <div className="content-header-copy">
-            <span className="panel-title">Container</span>
-            <h1 className="content-title">{target.label}</h1>
+            <h1 className="content-title content-title-container">{target.label}</h1>
           </div>
 
-          <div className="content-meta-row">
-            {containerServer ? (
-              <span className="content-chip">{containerServer.label}</span>
-            ) : null}
-            <span className="content-chip">{target.host}</span>
-            {activeBrowserFrame ? (
-              <span className="content-chip">{activeBrowserFrame.surface.label}</span>
-            ) : null}
+          <div className="content-header-tools content-header-tools-container">
+            <button
+              className={`panel-button panel-button-toolbar ${activeTool === "files" ? "is-active" : ""}`}
+              onClick={() => {
+                selectContainerTool(target, "files");
+              }}
+              type="button"
+            >
+              Files
+            </button>
+            <button
+              className={`panel-button panel-button-toolbar ${activeTool === developmentPanel ? "is-active" : ""}`}
+              disabled={!developmentSurface}
+              onClick={() => {
+                if (developmentPanel) {
+                  selectContainerTool(target, developmentPanel);
+                }
+              }}
+              type="button"
+            >
+              Dev
+            </button>
+            <button
+              className={`panel-button panel-button-toolbar ${activeTool === previewPanel ? "is-active" : ""}`}
+              disabled={!previewSurface}
+              onClick={() => {
+                if (previewPanel) {
+                  selectContainerTool(target, previewPanel);
+                }
+              }}
+              type="button"
+            >
+              Pre
+            </button>
           </div>
         </header>
 
-        {pageVisible ? (
-          <section className="workspace">
+        <section className="page-section">
+          <div className={`container-workspace ${isBrowserToolPanel(activeTool) ? "tool-browser" : "tool-files"}`} style={workspaceStyle}>
             <article className="panel terminal-panel">
-              <TerminalPane target={target} />
+              <TerminalPane active={pageVisible} target={target} />
             </article>
 
-            <section className="browser-workspace">
-              <header className="browser-workspace-header">
-                <div className="browser-workspace-copy">
-                  <span className="panel-title">Browser</span>
-                  <p className="panel-description">
-                    Browser attach is passive. The tunnel warms in the background.
-                  </p>
-                </div>
-              </header>
+            <div
+              className="container-resizer"
+              onPointerDown={(event) => {
+                startContainerResize(event, target.id);
+              }}
+              role="separator"
+              aria-label="Resize terminal and tool panels"
+              aria-orientation="vertical"
+            />
 
-              {activeBrowserFrame ? (
-                <div className="browser-grid">
-                  <BrowserPane
-                    activeFrame={activeBrowserFrame}
-                    isKeepAlive={false}
-                    onReload={() => {
-                      reloadBrowserSurface(
-                        activeBrowserFrame.target.id,
-                        activeBrowserFrame.surface.id,
-                      );
-                    }}
-                    onRestart={() => {
-                      restartBrowserSurface(
-                        activeBrowserFrame.target,
-                        activeBrowserFrame.surface,
-                      );
-                    }}
-                    onToggleKeepAlive={() => undefined}
-                    retainedFrames={
-                      activeBrowserFrame.isLoaded ? [activeBrowserFrame] : []
-                    }
-                    showKeepAlive={false}
-                    slotLabel={activeBrowserFrame.surface.label}
-                  />
-                </div>
-              ) : (
-                <section className="state-panel browser-empty-state">
-                  <span className="state-label">No Browser Surface</span>
-                  <p className="state-copy">
-                    The current container does not expose an attachable browser surface.
-                  </p>
-                </section>
-              )}
-            </section>
-          </section>
-        ) : null}
+            {activeTool === "files" ? (
+              <FilesPane active={pageVisible} target={target} />
+            ) : null}
+
+            {isBrowserToolPanel(activeTool) && pageVisible ? (
+              <BrowserPane
+                activeFrame={browserFrame}
+                onReload={() => {
+                  if (browserSurface) {
+                    reloadBrowserFrame(target.id, browserSurface.id);
+                  }
+                }}
+                onRestart={() => {
+                  if (browserSurface) {
+                    restartBrowserTunnel(target.id, browserSurface.id);
+                  }
+                }}
+                retainedFrames={browserFrame ? [browserFrame] : []}
+                slotLabel={browserSurface?.label ?? "Browser"}
+              />
+            ) : null}
+          </div>
+        </section>
       </>
     );
   };
@@ -669,79 +1217,158 @@ function App() {
     );
   }
 
+  const isOverviewView = activeView.kind === "overview";
+  const activeStatusLabel =
+    activeView.kind === "overview"
+      ? "Overview"
+      : activeView.kind === "server"
+        ? `Server ${visitedServers.find((server) => server.id === activeView.serverId)?.label ?? activeView.serverId}`
+        : `Container ${activeContainerTarget?.label ?? activeView.targetId}`;
+
   return (
-    <main className="shell shell-layout">
-      <SidebarNav
-        activeServerId={
-          activeView.kind === "server"
-            ? activeView.serverId
-            : activeView.kind === "container"
-              ? activeContainerServer?.id
-              : undefined
-        }
-        activeTargetId={activeView.kind === "container" ? activeView.targetId : undefined}
-        availableTargetIds={bootstrap.targets.map((target) => target.id)}
-        bootstrap={bootstrap}
-        expandedServerIds={expandedServerIds}
-        isOverviewActive={activeView.kind === "overview"}
-        isRefreshing={isRefreshingInventory}
-        onRefresh={refreshInventory}
-        onSelectContainer={setContainerView}
-        onSelectOverview={() => {
-          setActiveView({ kind: "overview" });
-        }}
-        onSelectServer={(serverId) => {
-          setActiveView({ kind: "server", serverId });
-          setVisitedServerIds((current) => uniqueStrings([...current, serverId]));
-          setExpandedServerIds((current) =>
-            current.includes(serverId) ? current : [...current, serverId],
-          );
-        }}
-        onToggleServer={toggleServerExpansion}
-      />
+    <main className={`shell ${isOverviewView ? "shell-overview" : ""}`}>
+      <section
+        className={`shell-layout ${isOverviewView ? "shell-layout-overview" : ""} ${isSidebarHidden ? "shell-layout-sidebar-hidden" : ""}`}
+      >
+        {!isSidebarHidden ? (
+        <SidebarNav
+          activeServerId={
+            activeView.kind === "server"
+              ? activeView.serverId
+              : activeView.kind === "container"
+                  ? activeContainerServer?.id
+                  : undefined
+            }
+            activeTargetId={activeView.kind === "container" ? activeView.targetId : undefined}
+            availableTargetIds={bootstrap.targets.map((target) => target.id)}
+          bootstrap={bootstrap}
+          expandedServerIds={expandedServerIds}
+          isOverviewActive={activeView.kind === "overview"}
+          isOverviewLayout={isOverviewView}
+          onSelectContainer={setContainerView}
+          onSelectOverview={() => {
+            setActiveView({ kind: "overview" });
+            }}
+            onSelectServer={(serverId) => {
+              setActiveView({ kind: "server", serverId });
+              setVisitedServerIds((current) => uniqueStrings([...current, serverId]));
+              setExpandedServerIds((current) =>
+                current.includes(serverId) ? current : [...current, serverId],
+              );
+            }}
+            onToggleServer={toggleServerExpansion}
+          />
+        ) : null}
 
-      <section className="content-shell">
-        <section
-          className={`content-page ${activeView.kind === "overview" ? "" : "is-hidden"}`}
-        >
-          {renderOverviewPage(activeView.kind === "overview")}
-        </section>
-
-        {visitedServers.map((server) => (
+        <section className={`content-shell ${isOverviewView ? "content-shell-overview" : ""}`}>
           <section
-            key={server.id}
-            className={`content-page ${activeView.kind === "server" && activeView.serverId === server.id ? "" : "is-hidden"}`}
+            className={`content-page content-page-overview ${activeView.kind === "overview" ? "" : "is-hidden"}`}
           >
-            {renderServerPage(
-              server,
-              activeView.kind === "server" && activeView.serverId === server.id,
-            )}
+            {renderOverviewPage(activeView.kind === "overview")}
           </section>
-        ))}
 
-        {visitedContainerIds.map((targetId) => {
-          const target = targetById.get(targetId);
-          const isVisible = activeView.kind === "container" && activeView.targetId === targetId;
-
-          return (
+          {visitedServers.map((server) => (
             <section
-              className={`content-page ${isVisible ? "" : "is-hidden"}`}
-              key={targetId}
+              key={server.id}
+              className={`content-page ${activeView.kind === "server" && activeView.serverId === server.id ? "" : "is-hidden"}`}
             >
-              {target ? (
-                renderContainerPage(target, isVisible)
-              ) : (
-                <section className="state-panel">
-                  <span className="state-label">Unavailable</span>
-                  <p className="state-copy">
-                    The selected navigation target is no longer available.
-                  </p>
-                </section>
+              {renderServerPage(
+                server,
+                activeView.kind === "server" && activeView.serverId === server.id,
               )}
             </section>
-          );
-        })}
+          ))}
+
+          {visitedContainerIds.map((targetId) => {
+            const target = targetById.get(targetId);
+            const isVisible = activeView.kind === "container" && activeView.targetId === targetId;
+
+            return (
+              <section
+                className={`content-page ${isVisible ? "" : "is-hidden"}`}
+                key={targetId}
+              >
+                {target ? (
+                  renderContainerPage(target, isVisible)
+                ) : (
+                  <section className="state-panel">
+                    <span className="state-label">Unavailable</span>
+                    <p className="state-copy">
+                      The selected navigation target is no longer available.
+                    </p>
+                  </section>
+                )}
+              </section>
+            );
+          })}
+        </section>
       </section>
+
+      <footer className="status-bar" role="status">
+        <div className="status-bar-section">
+          <button
+            aria-label={isSidebarHidden ? "Show sidebar menu" : "Hide sidebar menu"}
+            className="panel-button panel-button-toolbar panel-button-icon status-bar-toggle"
+            onClick={() => {
+              setIsSidebarHidden((current) => !current);
+            }}
+            title={isSidebarHidden ? "Show sidebar menu" : "Hide sidebar menu"}
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              className="panel-button-icon-svg"
+              fill="none"
+              viewBox="0 0 16 16"
+            >
+              {isSidebarHidden ? (
+                <path
+                  d="M2.75 3.25h10.5M2.75 8h10.5M2.75 12.75h10.5"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeWidth="1.25"
+                />
+              ) : (
+                <>
+                  <path
+                    d="M3.25 3.25v9.5M6.25 4h6.5M6.25 8h6.5M6.25 12h6.5"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeWidth="1.25"
+                  />
+                  <path
+                    d="M3.25 8h1.5"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeWidth="1.25"
+                  />
+                </>
+              )}
+            </svg>
+          </button>
+          <span className="status-bar-chip">{activeStatusLabel}</span>
+          <span className="status-bar-text">
+            Inventory ready
+          </span>
+        </div>
+
+        <div className="status-bar-section">
+          <span className="status-bar-text">
+            {bootstrap.servers.length} server(s)
+          </span>
+          <span className="status-bar-text">
+            {overviewContainers.length} container(s)
+          </span>
+          <span className="status-bar-text">
+            {reachableContainerCount} SSH ready
+          </span>
+          {isOverviewView ? (
+            <span className="status-bar-text">
+              Overview zoom {Math.round(overviewZoom * 100)}%
+            </span>
+          ) : null}
+        </div>
+      </footer>
     </main>
   );
 }
