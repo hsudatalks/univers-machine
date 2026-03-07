@@ -43,6 +43,8 @@ export function BrowserPane({
   const tunnelStatusLabel = activeFrame
     ? TUNNEL_STATUS_LABELS[activeFrame.status.state] ?? activeFrame.status.state
     : "Unavailable";
+  const compactStatus =
+    activeFrame?.status.state === "direct" || activeFrame?.status.state === "running";
   const showBrowserOverlay =
     !activeFrame ||
     activeFrame.status.state === "starting" ||
@@ -80,26 +82,25 @@ export function BrowserPane({
 
   return (
     <article className="panel browser-panel tool-panel">
-      <header className="panel-header browser-header tool-panel-header">
-        <div className="browser-heading">
-          <div className="browser-pane-copy">
-            <span className="panel-title">{slotLabel}</span>
-            <span className="panel-meta">
-              {activeFrame?.target.host ?? "No surface on current target"}
-            </span>
-          </div>
-
-          <code className="browser-url">
-            {activeFrame?.surface.localUrl ?? "No local browser URL"}
-          </code>
-        </div>
+      <header className="panel-header browser-header browser-header-compact tool-panel-header">
+        <code className="browser-url browser-url-compact">
+          {activeFrame?.surface.localUrl ?? "No local browser URL"}
+        </code>
 
         <div className="browser-bar">
-          <span
-            className={`terminal-status status-${activeFrame?.status.state ?? "stopped"}`}
-          >
-            {tunnelStatusLabel}
-          </span>
+          {compactStatus ? (
+            <span
+              aria-label={tunnelStatusLabel}
+              className={`terminal-status terminal-status-dot status-${activeFrame?.status.state ?? "stopped"}`}
+              title={tunnelStatusLabel}
+            />
+          ) : (
+            <span
+              className={`terminal-status status-${activeFrame?.status.state ?? "stopped"}`}
+            >
+              {tunnelStatusLabel}
+            </span>
+          )}
           <button
             className="panel-button"
             disabled={!activeFrame?.surface.tunnelCommand}

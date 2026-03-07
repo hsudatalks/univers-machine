@@ -898,6 +898,12 @@
   align-items: flex-start;
 }
 
+.browser-header-compact {
+  justify-content: space-between;
+  padding: 0.42rem 0.55rem;
+  border-bottom-color: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
 .browser-heading {
   min-width: 0;
   display: flex;
@@ -925,6 +931,12 @@
   font-family: var(--font-mono);
   font-size: 0.68rem;
   color: var(--text-2);
+}
+
+.browser-url-compact {
+  flex: 1;
+  max-width: none;
+  margin-right: 0.75rem;
 }
 
 .panel-button {
@@ -980,6 +992,10 @@
 
 .tool-panel-header {
   align-items: flex-start;
+}
+
+.browser-header-compact.tool-panel-header {
+  align-items: center;
 }
 
 .tool-panel-heading {
