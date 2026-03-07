@@ -154,6 +154,21 @@ fn default_container_label(name: &str, suffix: &str) -> String {
         .join(" ")
 }
 
+fn container_host_key_alias(server: &RemoteContainerServer, container_name: &str) -> String {
+    format!("univers-ark-developer--{}--{}", server.id, container_name)
+}
+
+fn ssh_options_for_context(server: &RemoteContainerServer, container_name: &str) -> String {
+    let base_options = server.ssh_options.trim();
+    let host_key_alias = container_host_key_alias(server, container_name);
+
+    if base_options.is_empty() {
+        format!("-o HostKeyAlias={}", host_key_alias)
+    } else {
+        format!("{} -o HostKeyAlias={}", base_options, host_key_alias)
+    }
+}
+
 fn replace_remote_placeholders(template: &str, context: &RemoteContainerContext<'_>) -> String {
     template
         .replace("{serverId}", &context.server.id)
@@ -163,7 +178,14 @@ fn replace_remote_placeholders(template: &str, context: &RemoteContainerContext<
         .replace("{containerIp}", context.container_ip)
         .replace("{containerLabel}", context.container_label)
         .replace("{containerName}", context.container_name)
-        .replace("{sshOptions}", &context.server.ssh_options)
+        .replace(
+            "{containerHostKeyAlias}",
+            &container_host_key_alias(context.server, context.container_name),
+        )
+        .replace(
+            "{sshOptions}",
+            &ssh_options_for_context(context.server, context.container_name),
+        )
         .replace("{sshUser}", &context.server.ssh_user)
 }
 
@@ -203,15 +225,16 @@ fn ssh_destination(server: &RemoteContainerServer, container_ip: &str) -> String
 fn build_ssh_command(
     server: &RemoteContainerServer,
     container_ip: &str,
+    container_name: &str,
     extra_options: &[&str],
     remote_command: Option<&str>,
 ) -> String {
-    let ssh_options = server.ssh_options.trim();
+    let ssh_options = ssh_options_for_context(server, container_name);
     let mut command = String::from("ssh");
 
     if !ssh_options.is_empty() {
         command.push(' ');
-        command.push_str(ssh_options);
+        command.push_str(&ssh_options);
     }
 
     for extra_option in extra_options {
@@ -237,14 +260,25 @@ fn terminal_command_for_server(
     context: &RemoteContainerContext<'_>,
 ) -> String {
     render_template(&server.terminal_command_template, context, || {
-        build_ssh_command(server, context.container_ip, &[], None)
+        build_ssh_command(
+            server,
+            context.container_ip,
+            context.container_name,
+            &[],
+            None,
+        )
     })
 }
 
-fn ssh_probe_command_for_server(server: &RemoteContainerServer, container_ip: &str) -> String {
+fn ssh_probe_command_for_server(
+    server: &RemoteContainerServer,
+    container_ip: &str,
+    container_name: &str,
+) -> String {
     build_ssh_command(
         server,
         container_ip,
+        container_name,
         &[
             "-o BatchMode=yes",
             "-o ConnectTimeout=4",
@@ -257,8 +291,9 @@ fn ssh_probe_command_for_server(server: &RemoteContainerServer, container_ip: &s
 fn probe_container_ssh(
     server: &RemoteContainerServer,
     container_ip: &str,
+    container_name: &str,
 ) -> (bool, String, String) {
-    let command = ssh_probe_command_for_server(server, container_ip);
+    let command = ssh_probe_command_for_server(server, container_ip, container_name);
     let output = Command::new("/bin/zsh").arg("-lc").arg(&command).output();
 
     match output {
@@ -425,7 +460,8 @@ fn build_managed_container(
     let target = build_target_from_container(server, container);
     let ssh_command = target.terminal_command.clone();
     let ssh_destination = ssh_destination(server, &container.ipv4);
-    let (ssh_reachable, ssh_state, ssh_message) = probe_container_ssh(server, &container.ipv4);
+    let (ssh_reachable, ssh_state, ssh_message) =
+        probe_container_ssh(server, &container.ipv4, &container.name);
 
     (
         ManagedContainer {
@@ -665,11 +701,11 @@ workflow-dev,RUNNING,10.211.82.202 (eth0)\n";
         assert_eq!(target.host, "mechanism-dev");
         assert_eq!(
             target.terminal_command,
-            "ssh -o StrictHostKeyChecking=accept-new -J mechanism-dev ubuntu@10.211.82.202"
+            "ssh -o StrictHostKeyChecking=accept-new -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -J mechanism-dev ubuntu@10.211.82.202"
         );
         assert_eq!(
             target.surfaces[0].tunnel_command,
-            "ssh -o StrictHostKeyChecking=accept-new -NT -L {localPort}:127.0.0.1:3432 -J mechanism-dev ubuntu@10.211.82.202"
+            "ssh -o StrictHostKeyChecking=accept-new -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -NT -L {localPort}:127.0.0.1:3432 -J mechanism-dev ubuntu@10.211.82.202"
         );
     }
 
