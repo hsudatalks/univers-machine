@@ -1,5 +1,11 @@
 use std::process::Command;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 /// Build a `Command` that executes `command_line` through the platform shell.
 ///
 /// On macOS/Linux this uses `/bin/zsh -lc` so login-profile environment
@@ -8,7 +14,8 @@ use std::process::Command;
 /// On Windows, SSH and related tools are native executables on the PATH, so
 /// we split the command line into tokens and invoke the program directly,
 /// which avoids quoting issues with `cmd /C` and single-quoted SSH arguments
-/// that are common in the existing configuration.
+/// that are common in the existing configuration.  The `CREATE_NO_WINDOW`
+/// flag prevents a console window from flashing when run from a GUI app.
 #[cfg(windows)]
 pub(crate) fn shell_command(command_line: &str) -> Command {
     let tokens = split_command_tokens(command_line);
@@ -16,6 +23,7 @@ pub(crate) fn shell_command(command_line: &str) -> Command {
     if tokens.is_empty() {
         let mut command = Command::new("cmd");
         command.arg("/C").arg(command_line);
+        command.creation_flags(CREATE_NO_WINDOW);
         return command;
     }
 
@@ -23,6 +31,7 @@ pub(crate) fn shell_command(command_line: &str) -> Command {
     for token in &tokens[1..] {
         command.arg(token);
     }
+    command.creation_flags(CREATE_NO_WINDOW);
     command
 }
 
