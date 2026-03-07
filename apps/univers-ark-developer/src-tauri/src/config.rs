@@ -762,10 +762,19 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
     let mut targets = raw_targets_file.targets;
     let mut servers = Vec::new();
 
-    for server in &raw_targets_file.remote_servers {
-        let discovered_inventory = discover_remote_server_inventory(server);
-        targets.extend(discovered_inventory.available_targets);
-        servers.push(discovered_inventory.server);
+    let discovered: Vec<_> = std::thread::scope(|scope| {
+        let handles: Vec<_> = raw_targets_file
+            .remote_servers
+            .iter()
+            .map(|server| scope.spawn(|| discover_remote_server_inventory(server)))
+            .collect();
+
+        handles.into_iter().map(|handle| handle.join().unwrap()).collect()
+    });
+
+    for inventory in discovered {
+        targets.extend(inventory.available_targets);
+        servers.push(inventory.server);
     }
 
     let inventory = ResolvedInventory {
