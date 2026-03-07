@@ -1,189 +1,82 @@
-import { FitAddon } from "@xterm/addon-fit";
-import { useEffect, useRef, useState } from "react";
-import { Terminal } from "xterm";
+import { useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
 import {
-  attachTerminal,
-  listenTerminalExit,
-  listenTerminalOutput,
-  resizeTerminal,
-  writeTerminal,
-} from "../lib/tauri";
+  claimTerminalSession,
+  fitClaimedTerminalSession,
+  focusClaimedTerminalSession,
+  getTerminalStatus,
+  releaseTerminalSession,
+  subscribeTerminalStatus,
+} from "../lib/terminal-cache";
 import type { DeveloperTarget } from "../types";
 
 interface TerminalPaneProps {
+  active?: boolean;
+  actions?: ReactNode;
+  autoFocus?: boolean;
+  meta?: string;
   target: DeveloperTarget;
+  title?: string;
 }
 
-export function TerminalPane({ target }: TerminalPaneProps) {
+export function TerminalPane({
+  active = true,
+  actions,
+  autoFocus = true,
+  meta,
+  target,
+  title = "Terminal",
+}: TerminalPaneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const terminalRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const activeTargetIdRef = useRef(target.id);
-  const [status, setStatus] = useState("Connecting");
+  const ownerId = useMemo(() => Symbol(target.id), [target.id]);
+  const status = useSyncExternalStore(
+    (listener) => subscribeTerminalStatus(target.id, listener),
+    () => getTerminalStatus(target.id),
+    () => "Connecting",
+  );
 
   useEffect(() => {
-    activeTargetIdRef.current = target.id;
-  }, [target.id]);
+    const mountElement = mountRef.current;
 
-  useEffect(() => {
-    if (!mountRef.current) {
+    if (!mountElement || !active) {
       return undefined;
     }
 
-    const terminal = new Terminal({
-      allowTransparency: true,
-      convertEol: true,
-      cursorBlink: false,
-      fontFamily: "Iosevka, SFMono-Regular, Consolas, monospace",
-      fontSize: 12,
-      lineHeight: 1,
-      scrollback: 1500,
-      theme: {
-        background: "#0d1117",
-        cursor: "#d6f3dd",
-        foreground: "#d6f3dd",
-        selectionBackground: "#334155",
-      },
-    });
+    claimTerminalSession(target.id, ownerId, mountElement, { autoFocus });
 
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.open(mountRef.current);
-    fitAddon.fit();
-    terminal.focus();
-
-    terminalRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-
-    const syncSize = () => {
-      const currentTargetId = activeTargetIdRef.current;
-      if (!currentTargetId) {
-        return;
-      }
-
-      void resizeTerminal(
-        currentTargetId,
-        Math.max(terminal.cols, 40),
-        Math.max(terminal.rows, 12),
-      ).catch(() => undefined);
+    const syncLayout = () => {
+      fitClaimedTerminalSession(target.id, ownerId);
     };
 
     const resizeObserver = new ResizeObserver(() => {
-      fitAddon.fit();
-      syncSize();
+      syncLayout();
     });
 
-    resizeObserver.observe(mountRef.current);
+    resizeObserver.observe(mountElement);
 
-    const onWindowResize = () => {
-      fitAddon.fit();
-      syncSize();
-    };
+    window.addEventListener("resize", syncLayout);
+    syncLayout();
 
-    window.addEventListener("resize", onWindowResize);
-
-    const inputDisposable = terminal.onData((data) => {
-      void writeTerminal(activeTargetIdRef.current, data).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        terminal.writeln(`\r\n[write failed] ${message}`);
-      });
-    });
-
-    const resizeDisposable = terminal.onResize(({ cols, rows }) => {
-      void resizeTerminal(activeTargetIdRef.current, cols, rows).catch(
-        () => undefined,
-      );
-    });
-
-    let unlistenOutput: (() => void) | null = null;
-    let unlistenExit: (() => void) | null = null;
-
-    void listenTerminalOutput((payload) => {
-      if (payload.targetId !== activeTargetIdRef.current) {
-        return;
-      }
-
-      terminal.write(payload.data);
-      setStatus("Connected");
-    }).then((unlisten) => {
-      unlistenOutput = unlisten;
-    });
-
-    void listenTerminalExit((payload) => {
-      if (payload.targetId !== activeTargetIdRef.current) {
-        return;
-      }
-
-      terminal.writeln(`\r\n[session closed] ${payload.reason}`);
-      setStatus("Disconnected");
-    }).then((unlisten) => {
-      unlistenExit = unlisten;
-    });
+    if (autoFocus) {
+      focusClaimedTerminalSession(target.id, ownerId);
+    }
 
     return () => {
       resizeObserver.disconnect();
-      window.removeEventListener("resize", onWindowResize);
-      inputDisposable.dispose();
-      resizeDisposable.dispose();
-      unlistenOutput?.();
-      unlistenExit?.();
-      terminal.dispose();
-      terminalRef.current = null;
-      fitAddonRef.current = null;
+      window.removeEventListener("resize", syncLayout);
+      releaseTerminalSession(target.id, ownerId);
     };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const terminal = terminalRef.current;
-
-    if (!terminal) {
-      return undefined;
-    }
-
-    void attachTerminal(target.id)
-      .then((snapshot) => {
-        if (cancelled || !terminalRef.current) {
-          return;
-        }
-
-        terminalRef.current.reset();
-        if (snapshot.output) {
-          terminalRef.current.write(snapshot.output);
-        }
-
-        fitAddonRef.current?.fit();
-        void resizeTerminal(
-          target.id,
-          Math.max(terminalRef.current.cols, 40),
-          Math.max(terminalRef.current.rows, 12),
-        ).catch(() => undefined);
-        terminalRef.current.focus();
-        setStatus("Connected");
-      })
-      .catch((error) => {
-        if (cancelled || !terminalRef.current) {
-          return;
-        }
-
-        const message = error instanceof Error ? error.message : String(error);
-        terminalRef.current.reset();
-        terminalRef.current.writeln(`[attach failed] ${message}`);
-        setStatus("Error");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [target.id]);
+  }, [active, autoFocus, ownerId, target.id]);
 
   return (
     <>
       <header className="panel-header terminal-header">
-        <span className="panel-title">Terminal</span>
+        <div className="terminal-copy">
+          <span className="panel-title">{title}</span>
+          <span className="panel-meta">{meta ?? target.host}</span>
+        </div>
 
         <div className="terminal-meta">
-          <span className="panel-meta">{target.host}</span>
+          {actions}
           <span className={`terminal-status status-${status.toLowerCase()}`}>
             {status}
           </span>
@@ -192,7 +85,11 @@ export function TerminalPane({ target }: TerminalPaneProps) {
 
       <div
         className="terminal-mount"
-        onClick={() => terminalRef.current?.focus()}
+        onClick={() => {
+          if (active) {
+            focusClaimedTerminalSession(target.id, ownerId);
+          }
+        }}
         ref={mountRef}
       />
     </>
