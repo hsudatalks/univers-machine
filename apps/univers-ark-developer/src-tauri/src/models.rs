@@ -1,0 +1,181 @@
+use portable_pty::MasterPty;
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    io::Write,
+    process::Child,
+    sync::{
+        atomic::{AtomicBool, AtomicU64},
+        Arc, Mutex,
+    },
+    time::Instant,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BrowserSurface {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    pub(crate) tunnel_command: String,
+    pub(crate) local_url: String,
+    pub(crate) remote_url: String,
+    #[serde(default)]
+    pub(crate) vite_hmr_tunnel_command: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DeveloperTarget {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    pub(crate) host: String,
+    pub(crate) description: String,
+    pub(crate) terminal_command: String,
+    #[serde(default)]
+    pub(crate) notes: Vec<String>,
+    pub(crate) surfaces: Vec<BrowserSurface>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TargetsFile {
+    pub(crate) selected_target_id: Option<String>,
+    pub(crate) targets: Vec<DeveloperTarget>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AppBootstrap {
+    pub(crate) app_name: String,
+    pub(crate) config_path: String,
+    pub(crate) selected_target_id: Option<String>,
+    pub(crate) targets: Vec<DeveloperTarget>,
+    pub(crate) servers: Vec<ManagedServer>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedContainer {
+    pub(crate) server_id: String,
+    pub(crate) server_label: String,
+    pub(crate) target_id: String,
+    pub(crate) name: String,
+    pub(crate) label: String,
+    pub(crate) status: String,
+    pub(crate) ipv4: String,
+    pub(crate) ssh_user: String,
+    pub(crate) ssh_destination: String,
+    pub(crate) ssh_command: String,
+    pub(crate) ssh_state: String,
+    pub(crate) ssh_message: String,
+    pub(crate) ssh_reachable: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedServer {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    pub(crate) host: String,
+    pub(crate) description: String,
+    pub(crate) state: String,
+    pub(crate) message: String,
+    pub(crate) containers: Vec<ManagedContainer>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TerminalSnapshot {
+    pub(crate) target_id: String,
+    pub(crate) output: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TerminalOutputEvent {
+    pub(crate) target_id: String,
+    pub(crate) data: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TerminalExitEvent {
+    pub(crate) target_id: String,
+    pub(crate) reason: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TunnelStatus {
+    pub(crate) target_id: String,
+    pub(crate) surface_id: String,
+    pub(crate) state: String,
+    pub(crate) message: String,
+}
+
+#[derive(Clone)]
+pub(crate) struct TerminalSession {
+    pub(crate) master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
+    pub(crate) writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    pub(crate) output: Arc<Mutex<String>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct TunnelProcess {
+    pub(crate) label: String,
+    pub(crate) child: Arc<Mutex<Child>>,
+    pub(crate) output: Arc<Mutex<String>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct LocalProxyHandle {
+    pub(crate) stop_requested: Arc<AtomicBool>,
+    pub(crate) running: Arc<AtomicBool>,
+    pub(crate) error: Arc<Mutex<Option<String>>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct TunnelSession {
+    pub(crate) session_id: u64,
+    pub(crate) started_at: Instant,
+    pub(crate) processes: Vec<TunnelProcess>,
+    pub(crate) proxy: Option<LocalProxyHandle>,
+    pub(crate) ready: Arc<AtomicBool>,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct TerminalState {
+    pub(crate) sessions: Arc<Mutex<HashMap<String, TerminalSession>>>,
+}
+
+pub(crate) struct TunnelState {
+    pub(crate) sessions: Arc<Mutex<HashMap<String, TunnelSession>>>,
+    pub(crate) local_ports: Arc<Mutex<HashMap<String, u16>>>,
+    pub(crate) next_session_id: AtomicU64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ManagedTunnelSignature {
+    pub(crate) ssh_destination: String,
+    pub(crate) remote_host: String,
+    pub(crate) remote_port: u16,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ObservedTunnelProcess {
+    pub(crate) pid: u32,
+    pub(crate) local_port: u16,
+    pub(crate) ssh_destination: String,
+    pub(crate) remote_host: String,
+    pub(crate) remote_port: u16,
+}
+
+impl Default for TunnelState {
+    fn default() -> Self {
+        Self {
+            sessions: Arc::new(Mutex::new(HashMap::new())),
+            local_ports: Arc::new(Mutex::new(HashMap::new())),
+            next_session_id: AtomicU64::new(1),
+        }
+    }
+}

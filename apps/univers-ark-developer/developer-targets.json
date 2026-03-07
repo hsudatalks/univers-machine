@@ -1,5 +1,5 @@
 {
-  "selectedTargetId": "automation-dev",
+  "selectedTargetId": "mechanism-dev::automation-dev",
   "targets": [
     {
       "id": "local",
@@ -24,14 +24,21 @@
           "remoteUrl": "http://127.0.0.1:4173/"
         }
       ]
-    },
+    }
+  ],
+  "remoteServers": [
     {
-      "id": "automation-dev",
-      "label": "Automation",
-      "host": "automation-dev",
-      "description": "Automation development container routed through univers-machine SSH aliases with separate development and preview surfaces.",
-      "terminalCommand": "ssh automation-dev",
+      "id": "mechanism-dev",
+      "label": "Mechanism",
+      "host": "mechanism-dev",
+      "description": "Mechanism development server hosting LXD development containers.",
+      "discoveryCommand": "ssh mechanism-dev 'lxc list --format csv -c ns4'",
+      "sshUser": "ubuntu",
+      "sshOptions": "-o StrictHostKeyChecking=accept-new",
+      "targetHostTemplate": "{serverHost}",
+      "targetDescriptionTemplate": "{containerLabel} development container routed through {serverLabel}.",
       "notes": [
+        "SSH target: {sshUser}@{containerIp} via {serverHost}.",
         "Development maps the container's 3432 port for the live app surface.",
         "Preview maps the container's 4173 port for the production-like preview build.",
         "The desktop app allocates a free local browser port in the 43000-43999 range for each surface and expands {localPort} before starting the tunnel."
@@ -40,15 +47,15 @@
         {
           "id": "development",
           "label": "Development",
-          "tunnelCommand": "ssh -NT -L {localPort}:127.0.0.1:3432 automation-dev",
-          "viteHmrTunnelCommand": "ssh -NT -L {localPort}:127.0.0.1:3433 automation-dev",
+          "tunnelCommand": "ssh {sshOptions} -NT -L {localPort}:127.0.0.1:3432 -J {serverHost} {sshUser}@{containerIp}",
+          "viteHmrTunnelCommand": "ssh {sshOptions} -NT -L {localPort}:127.0.0.1:3433 -J {serverHost} {sshUser}@{containerIp}",
           "localUrl": "http://127.0.0.1:{localPort}/",
           "remoteUrl": "http://127.0.0.1:3432/"
         },
         {
           "id": "preview",
           "label": "Preview",
-          "tunnelCommand": "ssh -NT -L {localPort}:127.0.0.1:4173 automation-dev",
+          "tunnelCommand": "ssh {sshOptions} -NT -L {localPort}:127.0.0.1:4173 -J {serverHost} {sshUser}@{containerIp}",
           "localUrl": "http://127.0.0.1:{localPort}/",
           "remoteUrl": "http://127.0.0.1:4173/"
         }

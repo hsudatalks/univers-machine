@@ -1,0 +1,716 @@
+use crate::models::{
+    BrowserSurface, DeveloperTarget, ManagedContainer, ManagedServer, TargetsFile,
+};
+use serde::Deserialize;
+use std::{
+    fs,
+    path::PathBuf,
+    process::Command,
+    sync::{Mutex, OnceLock},
+};
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawTargetsFile {
+    selected_target_id: Option<String>,
+    #[serde(default)]
+    targets: Vec<DeveloperTarget>,
+    #[serde(default)]
+    remote_servers: Vec<RemoteContainerServer>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteContainerServer {
+    id: String,
+    label: String,
+    host: String,
+    description: String,
+    #[serde(default)]
+    discovery_command: String,
+    ssh_user: String,
+    #[serde(default = "default_remote_server_ssh_options")]
+    ssh_options: String,
+    #[serde(default = "default_container_name_suffix")]
+    container_name_suffix: String,
+    #[serde(default)]
+    include_stopped: bool,
+    #[serde(default)]
+    target_label_template: String,
+    #[serde(default)]
+    target_host_template: String,
+    #[serde(default)]
+    target_description_template: String,
+    #[serde(default)]
+    terminal_command_template: String,
+    #[serde(default)]
+    notes: Vec<String>,
+    surfaces: Vec<BrowserSurface>,
+}
+
+#[derive(Debug, Clone)]
+struct DiscoveredContainer {
+    name: String,
+    status: String,
+    ipv4: String,
+}
+
+struct RemoteContainerContext<'a> {
+    container_ip: &'a str,
+    container_label: &'a str,
+    container_name: &'a str,
+    server: &'a RemoteContainerServer,
+}
+
+#[derive(Clone)]
+struct ResolvedInventory {
+    targets_file: TargetsFile,
+    servers: Vec<ManagedServer>,
+}
+
+#[derive(Clone)]
+struct CachedResolvedInventory {
+    inventory: ResolvedInventory,
+}
+
+struct DiscoveredServerInventory {
+    server: ManagedServer,
+    available_targets: Vec<DeveloperTarget>,
+}
+
+fn default_remote_server_ssh_options() -> String {
+    String::from("-o StrictHostKeyChecking=accept-new")
+}
+
+fn default_container_name_suffix() -> String {
+    String::from("-dev")
+}
+
+pub(crate) fn app_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
+}
+
+pub(crate) fn targets_file_path() -> PathBuf {
+    app_root().join("developer-targets.json")
+}
+
+fn targets_cache() -> &'static Mutex<Option<CachedResolvedInventory>> {
+    static TARGETS_CACHE: OnceLock<Mutex<Option<CachedResolvedInventory>>> = OnceLock::new();
+
+    TARGETS_CACHE.get_or_init(|| Mutex::new(None))
+}
+
+fn read_raw_targets_file() -> Result<RawTargetsFile, String> {
+    let config_path = targets_file_path();
+    let content = fs::read_to_string(&config_path)
+        .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))?;
+
+    serde_json::from_str::<RawTargetsFile>(&content)
+        .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))
+}
+
+fn default_discovery_command(server: &RemoteContainerServer) -> String {
+    format!("ssh {} 'lxc list --format csv -c ns4'", server.host)
+}
+
+fn trim_quotes(value: &str) -> &str {
+    value.trim().trim_matches('"').trim_matches('\'')
+}
+
+fn extract_ipv4(raw_ipv4: &str) -> Option<String> {
+    raw_ipv4
+        .split(|character: char| {
+            character.is_whitespace() || matches!(character, ',' | ';' | '(' | ')')
+        })
+        .map(str::trim)
+        .find(|token| !token.is_empty() && token.parse::<std::net::Ipv4Addr>().is_ok())
+        .map(ToString::to_string)
+}
+
+fn title_case_word(word: &str) -> String {
+    let mut characters = word.chars();
+    let Some(first) = characters.next() else {
+        return String::new();
+    };
+
+    let mut title_cased = String::new();
+    title_cased.extend(first.to_uppercase());
+    title_cased.push_str(characters.as_str());
+    title_cased
+}
+
+fn default_container_label(name: &str, suffix: &str) -> String {
+    let trimmed = if !suffix.is_empty() && name.ends_with(suffix) {
+        &name[..name.len() - suffix.len()]
+    } else {
+        name
+    };
+
+    trimmed
+        .split(['-', '_', ' '])
+        .filter(|part| !part.is_empty())
+        .map(title_case_word)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn replace_remote_placeholders(template: &str, context: &RemoteContainerContext<'_>) -> String {
+    template
+        .replace("{serverId}", &context.server.id)
+        .replace("{serverLabel}", &context.server.label)
+        .replace("{serverHost}", &context.server.host)
+        .replace("{serverDescription}", &context.server.description)
+        .replace("{containerIp}", context.container_ip)
+        .replace("{containerLabel}", context.container_label)
+        .replace("{containerName}", context.container_name)
+        .replace("{sshOptions}", &context.server.ssh_options)
+        .replace("{sshUser}", &context.server.ssh_user)
+}
+
+fn render_template(
+    template: &str,
+    context: &RemoteContainerContext<'_>,
+    fallback: impl FnOnce() -> String,
+) -> String {
+    if template.trim().is_empty() {
+        return fallback();
+    }
+
+    replace_remote_placeholders(template, context)
+}
+
+fn render_surface(
+    surface: &BrowserSurface,
+    context: &RemoteContainerContext<'_>,
+) -> BrowserSurface {
+    BrowserSurface {
+        id: surface.id.clone(),
+        label: replace_remote_placeholders(&surface.label, context),
+        tunnel_command: replace_remote_placeholders(&surface.tunnel_command, context),
+        local_url: replace_remote_placeholders(&surface.local_url, context),
+        remote_url: replace_remote_placeholders(&surface.remote_url, context),
+        vite_hmr_tunnel_command: replace_remote_placeholders(
+            &surface.vite_hmr_tunnel_command,
+            context,
+        ),
+    }
+}
+
+fn ssh_destination(server: &RemoteContainerServer, container_ip: &str) -> String {
+    format!("{}@{}", server.ssh_user, container_ip)
+}
+
+fn build_ssh_command(
+    server: &RemoteContainerServer,
+    container_ip: &str,
+    extra_options: &[&str],
+    remote_command: Option<&str>,
+) -> String {
+    let ssh_options = server.ssh_options.trim();
+    let mut command = String::from("ssh");
+
+    if !ssh_options.is_empty() {
+        command.push(' ');
+        command.push_str(ssh_options);
+    }
+
+    for extra_option in extra_options {
+        command.push(' ');
+        command.push_str(extra_option);
+    }
+
+    command.push_str(" -J ");
+    command.push_str(&server.host);
+    command.push(' ');
+    command.push_str(&ssh_destination(server, container_ip));
+
+    if let Some(remote_command) = remote_command {
+        command.push(' ');
+        command.push_str(remote_command);
+    }
+
+    command
+}
+
+fn terminal_command_for_server(
+    server: &RemoteContainerServer,
+    context: &RemoteContainerContext<'_>,
+) -> String {
+    render_template(&server.terminal_command_template, context, || {
+        build_ssh_command(server, context.container_ip, &[], None)
+    })
+}
+
+fn ssh_probe_command_for_server(server: &RemoteContainerServer, container_ip: &str) -> String {
+    build_ssh_command(
+        server,
+        container_ip,
+        &[
+            "-o BatchMode=yes",
+            "-o ConnectTimeout=4",
+            "-o ConnectionAttempts=1",
+        ],
+        Some("true"),
+    )
+}
+
+fn probe_container_ssh(
+    server: &RemoteContainerServer,
+    container_ip: &str,
+) -> (bool, String, String) {
+    let command = ssh_probe_command_for_server(server, container_ip);
+    let output = Command::new("/bin/zsh").arg("-lc").arg(&command).output();
+
+    match output {
+        Ok(output) if output.status.success() => (
+            true,
+            String::from("ready"),
+            format!("SSH ready via {}.", server.host),
+        ),
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let detail = if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                format!("Probe command exited with {}", output.status)
+            };
+
+            (false, String::from("error"), detail)
+        }
+        Err(error) => (
+            false,
+            String::from("error"),
+            format!("Failed to run SSH probe: {}", error),
+        ),
+    }
+}
+
+fn discover_server_containers_output(server: &RemoteContainerServer) -> Result<String, String> {
+    let command = if server.discovery_command.trim().is_empty() {
+        default_discovery_command(server)
+    } else {
+        server.discovery_command.clone()
+    };
+
+    let output = Command::new("/bin/zsh")
+        .arg("-lc")
+        .arg(&command)
+        .output()
+        .map_err(|error| {
+            format!(
+                "Failed to discover containers on {} with `{}`: {}",
+                server.host, command, error
+            )
+        })?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Failed to discover containers on {} with `{}`: {}",
+            server.host,
+            command,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn parse_discovered_containers(
+    server: &RemoteContainerServer,
+    discovery_output: &str,
+) -> Result<Vec<DiscoveredContainer>, String> {
+    let mut containers = Vec::new();
+
+    for line in discovery_output.lines() {
+        let line = line.trim();
+
+        if line.is_empty() {
+            continue;
+        }
+
+        let mut columns = line.splitn(3, ',');
+        let name = trim_quotes(columns.next().unwrap_or_default());
+        let status = trim_quotes(columns.next().unwrap_or_default());
+        let raw_ipv4 = trim_quotes(columns.next().unwrap_or_default());
+
+        if name.is_empty() || status.is_empty() {
+            continue;
+        }
+
+        if !server.include_stopped && !status.eq_ignore_ascii_case("running") {
+            continue;
+        }
+
+        if !server.container_name_suffix.is_empty()
+            && !name.ends_with(&server.container_name_suffix)
+        {
+            continue;
+        }
+
+        let Some(ipv4) = extract_ipv4(raw_ipv4) else {
+            continue;
+        };
+
+        containers.push(DiscoveredContainer {
+            name: name.to_string(),
+            status: status.to_string(),
+            ipv4,
+        });
+    }
+
+    Ok(containers)
+}
+
+fn discover_server_containers(
+    server: &RemoteContainerServer,
+) -> Result<Vec<DiscoveredContainer>, String> {
+    let output = discover_server_containers_output(server)?;
+    parse_discovered_containers(server, &output)
+}
+
+fn build_target_from_container(
+    server: &RemoteContainerServer,
+    container: &DiscoveredContainer,
+) -> DeveloperTarget {
+    let container_label = default_container_label(&container.name, &server.container_name_suffix);
+    let context = RemoteContainerContext {
+        container_ip: &container.ipv4,
+        container_label: &container_label,
+        container_name: &container.name,
+        server,
+    };
+
+    let label = render_template(&server.target_label_template, &context, || {
+        container_label.clone()
+    });
+    let host = render_template(&server.target_host_template, &context, || {
+        server.host.clone()
+    });
+    let description = render_template(&server.target_description_template, &context, || {
+        format!(
+            "{} development container on {} ({})",
+            container_label, server.label, container.status
+        )
+    });
+    let terminal_command = terminal_command_for_server(server, &context);
+    let notes = server
+        .notes
+        .iter()
+        .map(|note| replace_remote_placeholders(note, &context))
+        .collect::<Vec<_>>();
+    let surfaces = server
+        .surfaces
+        .iter()
+        .map(|surface| render_surface(surface, &context))
+        .collect::<Vec<_>>();
+
+    DeveloperTarget {
+        id: format!("{}::{}", server.id, container.name),
+        label,
+        host,
+        description,
+        terminal_command,
+        notes,
+        surfaces,
+    }
+}
+
+fn build_managed_container(
+    server: &RemoteContainerServer,
+    container: &DiscoveredContainer,
+) -> (ManagedContainer, Option<DeveloperTarget>) {
+    let target = build_target_from_container(server, container);
+    let ssh_command = target.terminal_command.clone();
+    let ssh_destination = ssh_destination(server, &container.ipv4);
+    let (ssh_reachable, ssh_state, ssh_message) = probe_container_ssh(server, &container.ipv4);
+
+    (
+        ManagedContainer {
+            server_id: server.id.clone(),
+            server_label: server.label.clone(),
+            target_id: target.id.clone(),
+            name: container.name.clone(),
+            label: target.label.clone(),
+            status: container.status.clone(),
+            ipv4: container.ipv4.clone(),
+            ssh_user: server.ssh_user.clone(),
+            ssh_destination,
+            ssh_command,
+            ssh_state,
+            ssh_message,
+            ssh_reachable,
+        },
+        ssh_reachable.then_some(target),
+    )
+}
+
+fn server_state_for_containers(containers: &[ManagedContainer]) -> (String, String) {
+    if containers.is_empty() {
+        return (
+            String::from("empty"),
+            String::from("No matching development containers were detected."),
+        );
+    }
+
+    let reachable = containers
+        .iter()
+        .filter(|container| container.ssh_reachable)
+        .count();
+
+    if reachable == containers.len() {
+        return (
+            String::from("ready"),
+            format!("{} development container(s) are SSH reachable.", reachable),
+        );
+    }
+
+    if reachable > 0 {
+        return (
+            String::from("degraded"),
+            format!(
+                "{} of {} development container(s) are SSH reachable.",
+                reachable,
+                containers.len()
+            ),
+        );
+    }
+
+    (
+        String::from("error"),
+        format!(
+            "Detected {} development container(s), but none are SSH reachable.",
+            containers.len()
+        ),
+    )
+}
+
+fn discover_remote_server_inventory(server: &RemoteContainerServer) -> DiscoveredServerInventory {
+    match discover_server_containers(server) {
+        Ok(containers) => {
+            let mut managed_containers = Vec::new();
+            let mut available_targets = Vec::new();
+
+            for container in containers {
+                let (managed_container, available_target) =
+                    build_managed_container(server, &container);
+                managed_containers.push(managed_container);
+
+                if let Some(available_target) = available_target {
+                    available_targets.push(available_target);
+                }
+            }
+
+            let (state, message) = server_state_for_containers(&managed_containers);
+
+            DiscoveredServerInventory {
+                server: ManagedServer {
+                    id: server.id.clone(),
+                    label: server.label.clone(),
+                    host: server.host.clone(),
+                    description: server.description.clone(),
+                    state,
+                    message,
+                    containers: managed_containers,
+                },
+                available_targets,
+            }
+        }
+        Err(error) => DiscoveredServerInventory {
+            server: ManagedServer {
+                id: server.id.clone(),
+                label: server.label.clone(),
+                host: server.host.clone(),
+                description: server.description.clone(),
+                state: String::from("error"),
+                message: error,
+                containers: Vec::new(),
+            },
+            available_targets: Vec::new(),
+        },
+    }
+}
+
+fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
+    if !force_refresh {
+        if let Ok(cache) = targets_cache().lock() {
+            if let Some(cached) = cache.as_ref() {
+                return Ok(cached.inventory.clone());
+            }
+        }
+    }
+
+    let raw_targets_file = read_raw_targets_file()?;
+    let mut targets = raw_targets_file.targets;
+    let mut servers = Vec::new();
+
+    for server in &raw_targets_file.remote_servers {
+        let discovered_inventory = discover_remote_server_inventory(server);
+        targets.extend(discovered_inventory.available_targets);
+        servers.push(discovered_inventory.server);
+    }
+
+    let inventory = ResolvedInventory {
+        targets_file: TargetsFile {
+            selected_target_id: raw_targets_file.selected_target_id,
+            targets,
+        },
+        servers,
+    };
+
+    if let Ok(mut cache) = targets_cache().lock() {
+        *cache = Some(CachedResolvedInventory {
+            inventory: inventory.clone(),
+        });
+    }
+
+    Ok(inventory)
+}
+
+pub(crate) fn read_server_inventory(force_refresh: bool) -> Result<Vec<ManagedServer>, String> {
+    load_inventory(force_refresh).map(|inventory| inventory.servers)
+}
+
+pub(crate) fn read_targets_file() -> Result<TargetsFile, String> {
+    load_inventory(false).map(|inventory| inventory.targets_file)
+}
+
+pub(crate) fn resolve_raw_target(target_id: &str) -> Result<DeveloperTarget, String> {
+    let targets_file = read_targets_file()?;
+
+    targets_file
+        .targets
+        .into_iter()
+        .find(|target| target.id == target_id)
+        .ok_or_else(|| format!("Unknown target: {}", target_id))
+}
+
+pub(crate) fn read_bootstrap_data(
+    force_refresh: bool,
+) -> Result<(TargetsFile, Vec<ManagedServer>), String> {
+    let inventory = load_inventory(force_refresh)?;
+    Ok((inventory.targets_file, inventory.servers))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture_server() -> RemoteContainerServer {
+        RemoteContainerServer {
+            id: String::from("mechanism-dev"),
+            label: String::from("Mechanism"),
+            host: String::from("mechanism-dev"),
+            description: String::from("Mechanism development server."),
+            discovery_command: String::new(),
+            ssh_user: String::from("ubuntu"),
+            ssh_options: String::from("-o StrictHostKeyChecking=accept-new"),
+            container_name_suffix: String::from("-dev"),
+            include_stopped: false,
+            target_label_template: String::new(),
+            target_host_template: String::from("{serverHost}"),
+            target_description_template: String::new(),
+            terminal_command_template: String::new(),
+            notes: vec![String::from(
+                "SSH target: {sshUser}@{containerIp} via {serverHost}.",
+            )],
+            surfaces: vec![BrowserSurface {
+                id: String::from("development"),
+                label: String::from("Development"),
+                tunnel_command: String::from(
+                    "ssh {sshOptions} -NT -L {localPort}:127.0.0.1:3432 -J {serverHost} {sshUser}@{containerIp}",
+                ),
+                local_url: String::from("http://127.0.0.1:{localPort}/"),
+                remote_url: String::from("http://127.0.0.1:3432/"),
+                vite_hmr_tunnel_command: String::from(
+                    "ssh {sshOptions} -NT -L {localPort}:127.0.0.1:3433 -J {serverHost} {sshUser}@{containerIp}",
+                ),
+            }],
+        }
+    }
+
+    #[test]
+    fn parses_running_dev_containers_from_lxd_csv() {
+        let server = fixture_server();
+        let discovery_output = "\
+automation-dev,RUNNING,10.211.82.78 (eth0)\n\
+runtime-dev,RUNNING,10.211.82.38 (eth0)\n\
+tooling,STOPPED,\n\
+workflow-dev,RUNNING,10.211.82.202 (eth0)\n";
+
+        let containers = parse_discovered_containers(&server, discovery_output).unwrap();
+
+        assert_eq!(containers.len(), 3);
+        assert_eq!(containers[0].name, "automation-dev");
+        assert_eq!(containers[0].ipv4, "10.211.82.78");
+        assert_eq!(containers[1].name, "runtime-dev");
+        assert_eq!(containers[2].name, "workflow-dev");
+    }
+
+    #[test]
+    fn renders_terminal_and_tunnel_commands_for_discovered_container() {
+        let server = fixture_server();
+        let container = DiscoveredContainer {
+            name: String::from("workflow-dev"),
+            status: String::from("RUNNING"),
+            ipv4: String::from("10.211.82.202"),
+        };
+
+        let target = build_target_from_container(&server, &container);
+
+        assert_eq!(target.id, "mechanism-dev::workflow-dev");
+        assert_eq!(target.label, "Workflow");
+        assert_eq!(target.host, "mechanism-dev");
+        assert_eq!(
+            target.terminal_command,
+            "ssh -o StrictHostKeyChecking=accept-new -J mechanism-dev ubuntu@10.211.82.202"
+        );
+        assert_eq!(
+            target.surfaces[0].tunnel_command,
+            "ssh -o StrictHostKeyChecking=accept-new -NT -L {localPort}:127.0.0.1:3432 -J mechanism-dev ubuntu@10.211.82.202"
+        );
+    }
+
+    #[test]
+    fn builds_ready_server_state_from_reachable_containers() {
+        let containers = vec![
+            ManagedContainer {
+                server_id: String::from("mechanism-dev"),
+                server_label: String::from("Mechanism"),
+                target_id: String::from("mechanism-dev::automation-dev"),
+                name: String::from("automation-dev"),
+                label: String::from("Automation"),
+                status: String::from("RUNNING"),
+                ipv4: String::from("10.211.82.78"),
+                ssh_user: String::from("ubuntu"),
+                ssh_destination: String::from("ubuntu@10.211.82.78"),
+                ssh_command: String::from("ssh -J mechanism-dev ubuntu@10.211.82.78"),
+                ssh_state: String::from("ready"),
+                ssh_message: String::from("SSH ready via mechanism-dev."),
+                ssh_reachable: true,
+            },
+            ManagedContainer {
+                server_id: String::from("mechanism-dev"),
+                server_label: String::from("Mechanism"),
+                target_id: String::from("mechanism-dev::runtime-dev"),
+                name: String::from("runtime-dev"),
+                label: String::from("Runtime"),
+                status: String::from("RUNNING"),
+                ipv4: String::from("10.211.82.38"),
+                ssh_user: String::from("ubuntu"),
+                ssh_destination: String::from("ubuntu@10.211.82.38"),
+                ssh_command: String::from("ssh -J mechanism-dev ubuntu@10.211.82.38"),
+                ssh_state: String::from("ready"),
+                ssh_message: String::from("SSH ready via mechanism-dev."),
+                ssh_reachable: true,
+            },
+        ];
+
+        let (state, message) = server_state_for_containers(&containers);
+
+        assert_eq!(state, "ready");
+        assert!(message.contains("2 development container(s)"));
+    }
+}

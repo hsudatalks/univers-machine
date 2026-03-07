@@ -4,6 +4,7 @@ import type {
   AppBootstrap,
   DeveloperSurface,
   DeveloperTarget,
+  ManagedServer,
   TerminalExitEvent,
   TerminalOutputEvent,
   TerminalSnapshot,
@@ -18,6 +19,7 @@ const fallbackBootstrapSeed: AppBootstrap = {
   appName: "Univers Ark Developer",
   configPath: "developer-targets.json",
   selectedTargetId: "automation-dev",
+  servers: [],
   targets: [
     {
       id: "local",
@@ -285,6 +287,30 @@ export async function loadBootstrap(): Promise<AppBootstrap> {
     );
     return fallbackBootstrap;
   }
+}
+
+export async function refreshBootstrap(): Promise<AppBootstrap> {
+  if (!isTauri()) {
+    return fallbackBootstrap;
+  }
+
+  return invoke<AppBootstrap>("refresh_bootstrap");
+}
+
+export async function loadServerInventory(): Promise<ManagedServer[]> {
+  if (!isTauri()) {
+    return fallbackBootstrap.servers;
+  }
+
+  return invoke<ManagedServer[]>("load_server_inventory");
+}
+
+export async function refreshServerInventory(): Promise<ManagedServer[]> {
+  if (!isTauri()) {
+    return fallbackBootstrap.servers;
+  }
+
+  return invoke<ManagedServer[]>("refresh_server_inventory");
 }
 
 export async function attachTerminal(

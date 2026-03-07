@@ -17,11 +17,38 @@ export interface DeveloperTarget {
   surfaces: DeveloperSurface[];
 }
 
+export interface ManagedContainer {
+  serverId: string;
+  serverLabel: string;
+  targetId: string;
+  name: string;
+  label: string;
+  status: string;
+  ipv4: string;
+  sshUser: string;
+  sshDestination: string;
+  sshCommand: string;
+  sshState: string;
+  sshMessage: string;
+  sshReachable: boolean;
+}
+
+export interface ManagedServer {
+  id: string;
+  label: string;
+  host: string;
+  description: string;
+  state: string;
+  message: string;
+  containers: ManagedContainer[];
+}
+
 export interface AppBootstrap {
   appName: string;
   configPath: string;
   selectedTargetId: string | null;
   targets: DeveloperTarget[];
+  servers: ManagedServer[];
 }
 
 export interface TerminalSnapshot {
