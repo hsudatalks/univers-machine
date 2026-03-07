@@ -101,6 +101,7 @@ fn collect_managed_tunnel_signatures() -> Result<Vec<ManagedTunnelSignature>, St
     Ok(signatures)
 }
 
+#[cfg(not(windows))]
 fn list_processes() -> Result<Vec<(u32, String)>, String> {
     let output = Command::new("/bin/ps")
         .args(["-axo", "pid=,command="])
@@ -141,6 +142,7 @@ fn list_processes() -> Result<Vec<(u32, String)>, String> {
     Ok(processes)
 }
 
+#[cfg(not(windows))]
 fn process_exists(pid: u32) -> bool {
     Command::new("/bin/kill")
         .args(["-0", &pid.to_string()])
@@ -151,6 +153,7 @@ fn process_exists(pid: u32) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(not(windows))]
 fn terminate_process(pid: u32) {
     let _ = Command::new("/bin/kill")
         .args(["-TERM", &pid.to_string()])
@@ -185,6 +188,12 @@ fn matches_managed_tunnel(
         })
 }
 
+#[cfg(windows)]
+pub(crate) fn cleanup_stale_ssh_tunnels() -> Result<usize, String> {
+    Ok(0)
+}
+
+#[cfg(not(windows))]
 pub(crate) fn cleanup_stale_ssh_tunnels() -> Result<usize, String> {
     let signatures = collect_managed_tunnel_signatures()?;
 
