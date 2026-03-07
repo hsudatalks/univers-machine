@@ -111,7 +111,33 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
 
 #[cfg(not(target_os = "macos"))]
 fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
-    Menu::default(app_handle)
+    let toggle_sidebar = MenuItem::with_id(
+        app_handle,
+        TOGGLE_SIDEBAR_MENU_ID,
+        "Toggle Sidebar",
+        true,
+        Some("Ctrl+H"),
+    )?;
+
+    let file_menu = Submenu::with_items(
+        app_handle,
+        "File",
+        true,
+        &[
+            &toggle_sidebar,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &PredefinedMenuItem::quit(app_handle, None)?,
+        ],
+    )?;
+
+    let view_menu = Submenu::with_items(
+        app_handle,
+        "View",
+        true,
+        &[&PredefinedMenuItem::fullscreen(app_handle, None)?],
+    )?;
+
+    Menu::with_items(app_handle, &[&file_menu, &view_menu])
 }
 
 pub(crate) fn run() {

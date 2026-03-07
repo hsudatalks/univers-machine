@@ -36,6 +36,12 @@ type ActiveView =
 
 type ContainerToolPanel = "files" | `browser:${string}`;
 
+const IS_MAC = navigator.platform.toUpperCase().includes("MAC");
+
+function isPlatformModifier(event: KeyboardEvent): boolean {
+  return IS_MAC ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+}
+
 interface ResizeSession {
   targetId: string;
   startTerminalWidth: number;
@@ -401,8 +407,7 @@ function App() {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
-        !event.metaKey ||
-        event.ctrlKey ||
+        !isPlatformModifier(event) ||
         event.altKey ||
         event.shiftKey ||
         event.code !== "KeyH"
@@ -626,7 +631,7 @@ function App() {
     const fallbackTargetId = overviewTerminalTargets[0]?.id;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+      if (!isPlatformModifier(event) || event.altKey || event.shiftKey) {
         return;
       }
 
@@ -755,7 +760,7 @@ function App() {
       : null;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+      if (!isPlatformModifier(event) || event.altKey || event.shiftKey) {
         return;
       }
 
