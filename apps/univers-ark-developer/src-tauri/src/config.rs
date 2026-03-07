@@ -1,11 +1,12 @@
 use crate::models::{
     BrowserSurface, DeveloperTarget, ManagedContainer, ManagedServer, TargetsFile,
 };
+use csv::ReaderBuilder;
 use serde::Deserialize;
 use std::{
     fs,
     path::PathBuf,
-    process::Command,
+    process::{Command, Output},
     sync::{Mutex, OnceLock},
 };
 
@@ -117,14 +118,61 @@ fn trim_quotes(value: &str) -> &str {
     value.trim().trim_matches('"').trim_matches('\'')
 }
 
+fn managed_known_hosts_file() -> String {
+    match std::env::var("HOME") {
+        Ok(home) if !home.trim().is_empty() => {
+            format!("{}/.ssh/univers-ark-developer-known_hosts", home)
+        }
+        _ => String::from("~/.ssh/univers-ark-developer-known_hosts"),
+    }
+}
+
 fn extract_ipv4(raw_ipv4: &str) -> Option<String> {
-    raw_ipv4
-        .split(|character: char| {
-            character.is_whitespace() || matches!(character, ',' | ';' | '(' | ')')
+    let mut interface_matches = Vec::new();
+
+    for raw_entry in raw_ipv4.split(['\n', ';']) {
+        let entry = trim_quotes(raw_entry);
+        if entry.is_empty() {
+            continue;
+        }
+
+        let Some(ipv4) = entry
+            .split(|character: char| {
+                character.is_whitespace() || matches!(character, ',' | ';' | '(' | ')')
+            })
+            .map(str::trim)
+            .find(|token| !token.is_empty() && token.parse::<std::net::Ipv4Addr>().is_ok())
+        else {
+            continue;
+        };
+
+        let interface = entry
+            .split_once('(')
+            .and_then(|(_, tail)| tail.split_once(')'))
+            .map(|(name, _)| name.trim())
+            .unwrap_or_default()
+            .to_string();
+
+        interface_matches.push((ipv4.to_string(), interface));
+    }
+
+    interface_matches
+        .iter()
+        .find(|(_, interface)| interface.eq_ignore_ascii_case("eth0"))
+        .map(|(ipv4, _)| ipv4.clone())
+        .or_else(|| {
+            interface_matches
+                .iter()
+                .find(|(_, interface)| {
+                    !interface.is_empty()
+                        && !interface.eq_ignore_ascii_case("docker0")
+                        && !interface.starts_with("br-")
+                        && !interface.eq_ignore_ascii_case("lxdbr0")
+                        && !interface.eq_ignore_ascii_case("lo")
+                })
+                .map(|(ipv4, _)| ipv4.clone())
         })
-        .map(str::trim)
-        .find(|token| !token.is_empty() && token.parse::<std::net::Ipv4Addr>().is_ok())
-        .map(ToString::to_string)
+        .or_else(|| interface_matches.first().map(|(ipv4, _)| ipv4.clone()))
 }
 
 fn title_case_word(word: &str) -> String {
@@ -161,11 +209,19 @@ fn container_host_key_alias(server: &RemoteContainerServer, container_name: &str
 fn ssh_options_for_context(server: &RemoteContainerServer, container_name: &str) -> String {
     let base_options = server.ssh_options.trim();
     let host_key_alias = container_host_key_alias(server, container_name);
+    let known_hosts_file = managed_known_hosts_file();
+    let managed_known_hosts_option = format!("-o UserKnownHostsFile={}", known_hosts_file);
 
     if base_options.is_empty() {
-        format!("-o HostKeyAlias={}", host_key_alias)
+        format!(
+            "{} -o HostKeyAlias={}",
+            managed_known_hosts_option, host_key_alias
+        )
     } else {
-        format!("{} -o HostKeyAlias={}", base_options, host_key_alias)
+        format!(
+            "{} {} -o HostKeyAlias={}",
+            base_options, managed_known_hosts_option, host_key_alias
+        )
     }
 }
 
@@ -201,6 +257,10 @@ fn render_template(
     replace_remote_placeholders(template, context)
 }
 
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
 fn render_surface(
     surface: &BrowserSurface,
     context: &RemoteContainerContext<'_>,
@@ -220,6 +280,12 @@ fn render_surface(
 
 fn ssh_destination(server: &RemoteContainerServer, container_ip: &str) -> String {
     format!("{}@{}", server.ssh_user, container_ip)
+}
+
+fn default_container_terminal_remote_command() -> String {
+    String::from(
+        "tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l",
+    )
 }
 
 fn build_ssh_command(
@@ -260,12 +326,14 @@ fn terminal_command_for_server(
     context: &RemoteContainerContext<'_>,
 ) -> String {
     render_template(&server.terminal_command_template, context, || {
+        let remote_command = default_container_terminal_remote_command();
+
         build_ssh_command(
             server,
             context.container_ip,
             context.container_name,
-            &[],
-            None,
+            &["-tt"],
+            Some(&shell_single_quote(&remote_command)),
         )
     })
 }
@@ -358,18 +426,21 @@ fn parse_discovered_containers(
     discovery_output: &str,
 ) -> Result<Vec<DiscoveredContainer>, String> {
     let mut containers = Vec::new();
+    let mut reader = ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(discovery_output.as_bytes());
 
-    for line in discovery_output.lines() {
-        let line = line.trim();
+    for row in reader.records() {
+        let row = row.map_err(|error| {
+            format!(
+                "Failed to parse discovery output for {} as CSV: {}",
+                server.host, error
+            )
+        })?;
 
-        if line.is_empty() {
-            continue;
-        }
-
-        let mut columns = line.splitn(3, ',');
-        let name = trim_quotes(columns.next().unwrap_or_default());
-        let status = trim_quotes(columns.next().unwrap_or_default());
-        let raw_ipv4 = trim_quotes(columns.next().unwrap_or_default());
+        let name = trim_quotes(row.get(0).unwrap_or_default());
+        let status = trim_quotes(row.get(1).unwrap_or_default());
+        let raw_ipv4 = trim_quotes(row.get(2).unwrap_or_default());
 
         if name.is_empty() || status.is_empty() {
             continue;
@@ -623,6 +694,57 @@ pub(crate) fn resolve_raw_target(target_id: &str) -> Result<DeveloperTarget, Str
         .ok_or_else(|| format!("Unknown target: {}", target_id))
 }
 
+pub(crate) fn run_target_shell_command(
+    target_id: &str,
+    shell_command: &str,
+) -> Result<Output, String> {
+    let inventory = load_inventory(false)?;
+
+    if let Some(container) = inventory
+        .servers
+        .iter()
+        .flat_map(|server| server.containers.iter())
+        .find(|container| container.target_id == target_id)
+    {
+        let raw_targets_file = read_raw_targets_file()?;
+        let server = raw_targets_file
+            .remote_servers
+            .iter()
+            .find(|server| server.id == container.server_id)
+            .ok_or_else(|| format!("Unknown remote server for {}", target_id))?;
+        let quoted_remote_command = shell_single_quote(shell_command);
+        let ssh_command = build_ssh_command(
+            server,
+            &container.ipv4,
+            &container.name,
+            &[],
+            Some(&quoted_remote_command),
+        );
+
+        return Command::new("/bin/zsh")
+            .arg("-lc")
+            .arg(&ssh_command)
+            .output()
+            .map_err(|error| {
+                format!(
+                    "Failed to execute remote shell command for {}: {}",
+                    target_id, error
+                )
+            });
+    }
+
+    Command::new("/bin/zsh")
+        .arg("-lc")
+        .arg(shell_command)
+        .output()
+        .map_err(|error| {
+            format!(
+                "Failed to execute local shell command for {}: {}",
+                target_id, error
+            )
+        })
+}
+
 pub(crate) fn read_bootstrap_data(
     force_refresh: bool,
 ) -> Result<(TargetsFile, Vec<ManagedServer>), String> {
@@ -686,6 +808,20 @@ workflow-dev,RUNNING,10.211.82.202 (eth0)\n";
     }
 
     #[test]
+    fn prefers_eth0_address_from_multiline_csv_field() {
+        let server = fixture_server();
+        let discovery_output = "\
+env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
+10.197.97.142 (eth0)\"\n";
+
+        let containers = parse_discovered_containers(&server, discovery_output).unwrap();
+
+        assert_eq!(containers.len(), 1);
+        assert_eq!(containers[0].name, "env-dev");
+        assert_eq!(containers[0].ipv4, "10.197.97.142");
+    }
+
+    #[test]
     fn renders_terminal_and_tunnel_commands_for_discovered_container() {
         let server = fixture_server();
         let container = DiscoveredContainer {
@@ -699,13 +835,23 @@ workflow-dev,RUNNING,10.211.82.202 (eth0)\n";
         assert_eq!(target.id, "mechanism-dev::workflow-dev");
         assert_eq!(target.label, "Workflow");
         assert_eq!(target.host, "mechanism-dev");
+        let expected_known_hosts_file = format!(
+            "{}/.ssh/univers-ark-developer-known_hosts",
+            std::env::var("HOME").unwrap()
+        );
         assert_eq!(
             target.terminal_command,
-            "ssh -o StrictHostKeyChecking=accept-new -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -J mechanism-dev ubuntu@10.211.82.202"
+            format!(
+                "ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -J mechanism-dev ubuntu@10.211.82.202",
+                expected_known_hosts_file
+            )
         );
         assert_eq!(
             target.surfaces[0].tunnel_command,
-            "ssh -o StrictHostKeyChecking=accept-new -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -NT -L {localPort}:127.0.0.1:3432 -J mechanism-dev ubuntu@10.211.82.202"
+            format!(
+                "ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -NT -L {{localPort}}:127.0.0.1:3432 -J mechanism-dev ubuntu@10.211.82.202",
+                expected_known_hosts_file
+            )
         );
     }
 

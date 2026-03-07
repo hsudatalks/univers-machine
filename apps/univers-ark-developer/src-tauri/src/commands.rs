@@ -1,7 +1,12 @@
 use crate::{
     config::{read_bootstrap_data, read_server_inventory, resolve_raw_target, targets_file_path},
+    files::{
+        list_remote_directory as load_remote_directory,
+        read_remote_file_preview as load_remote_file_preview,
+    },
     models::{
-        AppBootstrap, ManagedServer, TerminalSnapshot, TerminalState, TunnelState, TunnelStatus,
+        AppBootstrap, ManagedServer, RemoteDirectoryListing, RemoteFilePreview, TerminalSnapshot,
+        TerminalState, TunnelState, TunnelStatus,
     },
     runtime::{read_runtime_targets_file, resolve_runtime_surface, surface_key},
     terminal::{snapshot_for, spawn_terminal_session},
@@ -193,4 +198,20 @@ pub(crate) fn resize_terminal(
             pixel_height: 0,
         })
         .map_err(|error| format!("Failed to resize {}: {}", target_id, error))
+}
+
+#[tauri::command]
+pub(crate) fn list_remote_directory(
+    target_id: String,
+    path: Option<String>,
+) -> Result<RemoteDirectoryListing, String> {
+    load_remote_directory(&target_id, path)
+}
+
+#[tauri::command]
+pub(crate) fn read_remote_file_preview(
+    target_id: String,
+    path: String,
+) -> Result<RemoteFilePreview, String> {
+    load_remote_file_preview(&target_id, &path)
 }

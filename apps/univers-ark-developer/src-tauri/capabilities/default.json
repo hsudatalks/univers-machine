@@ -3,5 +3,8 @@
   "identifier": "default",
   "description": "Default desktop capability for Univers Ark Developer.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    "core:webview:allow-set-webview-zoom"
+  ]
 }

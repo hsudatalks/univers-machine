@@ -43,6 +43,29 @@ export interface ManagedServer {
   containers: ManagedContainer[];
 }
 
+export interface RemoteFileEntry {
+  name: string;
+  path: string;
+  kind: string;
+  size: number;
+  isHidden: boolean;
+}
+
+export interface RemoteDirectoryListing {
+  targetId: string;
+  path: string;
+  parentPath: string | null;
+  entries: RemoteFileEntry[];
+}
+
+export interface RemoteFilePreview {
+  targetId: string;
+  path: string;
+  content: string;
+  isBinary: boolean;
+  truncated: boolean;
+}
+
 export interface AppBootstrap {
   appName: string;
   configPath: string;

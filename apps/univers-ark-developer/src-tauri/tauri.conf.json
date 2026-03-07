@@ -18,7 +18,8 @@
         "height": 940,
         "minWidth": 1180,
         "minHeight": 760,
-        "resizable": true
+        "resizable": true,
+        "zoomHotkeysEnabled": true
       }
     ],
     "security": {

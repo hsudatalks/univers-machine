@@ -4,12 +4,126 @@ use crate::{
     models::{TerminalState, TunnelState},
     tunnel::stop_all_tunnels,
 };
-use tauri::Manager;
+use tauri::{
+    menu::{
+        AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
+        WINDOW_SUBMENU_ID,
+    },
+    AppHandle, Emitter, Manager, Runtime,
+};
+
+const TOGGLE_SIDEBAR_MENU_ID: &str = "toggle_sidebar";
+const TOGGLE_SIDEBAR_EVENT: &str = "toggle-sidebar-requested";
+
+#[cfg(target_os = "macos")]
+fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let pkg_info = app_handle.package_info();
+    let config = app_handle.config();
+    let about_metadata = AboutMetadata {
+        name: Some(pkg_info.name.clone()),
+        version: Some(pkg_info.version.to_string()),
+        copyright: config.bundle.copyright.clone(),
+        authors: config.bundle.publisher.clone().map(|publisher| vec![publisher]),
+        ..Default::default()
+    };
+
+    let toggle_sidebar = MenuItem::with_id(
+        app_handle,
+        TOGGLE_SIDEBAR_MENU_ID,
+        "Toggle Sidebar Menu",
+        true,
+        Some("Cmd+H"),
+    )?;
+
+    let app_menu = Submenu::with_items(
+        app_handle,
+        pkg_info.name.clone(),
+        true,
+        &[
+            &PredefinedMenuItem::about(app_handle, None, Some(about_metadata))?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &PredefinedMenuItem::services(app_handle, None)?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &toggle_sidebar,
+            &PredefinedMenuItem::hide_others(app_handle, None)?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &PredefinedMenuItem::quit(app_handle, None)?,
+        ],
+    )?;
+
+    let file_menu = Submenu::with_items(
+        app_handle,
+        "File",
+        true,
+        &[&PredefinedMenuItem::close_window(app_handle, None)?],
+    )?;
+
+    let edit_menu = Submenu::with_items(
+        app_handle,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app_handle, None)?,
+            &PredefinedMenuItem::redo(app_handle, None)?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &PredefinedMenuItem::cut(app_handle, None)?,
+            &PredefinedMenuItem::copy(app_handle, None)?,
+            &PredefinedMenuItem::paste(app_handle, None)?,
+            &PredefinedMenuItem::select_all(app_handle, None)?,
+        ],
+    )?;
+
+    let view_menu = Submenu::with_items(
+        app_handle,
+        "View",
+        true,
+        &[&PredefinedMenuItem::fullscreen(app_handle, None)?],
+    )?;
+
+    let window_menu = Submenu::with_id_and_items(
+        app_handle,
+        WINDOW_SUBMENU_ID,
+        "Window",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(app_handle, None)?,
+            &PredefinedMenuItem::maximize(app_handle, None)?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &PredefinedMenuItem::close_window(app_handle, None)?,
+        ],
+    )?;
+
+    let help_menu =
+        Submenu::with_id_and_items(app_handle, HELP_SUBMENU_ID, "Help", true, &[])?;
+
+    Menu::with_items(
+        app_handle,
+        &[
+            &app_menu,
+            &file_menu,
+            &edit_menu,
+            &view_menu,
+            &window_menu,
+            &help_menu,
+        ],
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    Menu::default(app_handle)
+}
 
 pub(crate) fn run() {
     tauri::Builder::default()
         .manage(TerminalState::default())
         .manage(TunnelState::default())
+        .menu(build_app_menu)
+        .on_menu_event(|app_handle, event| {
+            if event.id().as_ref() == TOGGLE_SIDEBAR_MENU_ID {
+                let _ = app_handle.emit(TOGGLE_SIDEBAR_EVENT, ());
+            }
+        })
         .setup(|_| {
             match cleanup_stale_ssh_tunnels() {
                 Ok(cleaned) if cleaned > 0 => {
@@ -34,6 +148,8 @@ pub(crate) fn run() {
             commands::attach_terminal,
             commands::ensure_tunnel,
             commands::restart_tunnel,
+            commands::list_remote_directory,
+            commands::read_remote_file_preview,
             commands::write_terminal,
             commands::resize_terminal
         ])

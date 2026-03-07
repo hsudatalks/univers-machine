@@ -5,6 +5,8 @@ import type {
   DeveloperSurface,
   DeveloperTarget,
   ManagedServer,
+  RemoteDirectoryListing,
+  RemoteFilePreview,
   TerminalExitEvent,
   TerminalOutputEvent,
   TerminalSnapshot,
@@ -14,6 +16,7 @@ import type {
 const SURFACE_PORT_START = 43000;
 const SURFACE_PORT_END = 43999;
 const SURFACE_HOST = "127.0.0.1";
+const SIDEBAR_TOGGLE_REQUESTED_EVENT = "toggle-sidebar-requested";
 
 const fallbackBootstrapSeed: AppBootstrap = {
   appName: "Univers Ark Developer",
@@ -410,4 +413,52 @@ export async function listenTunnelStatus(
   return listen<TunnelStatus>("tunnel-status", (event) => {
     handler(event.payload);
   });
+}
+
+export async function listenSidebarToggleRequested(
+  handler: () => void,
+): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => undefined;
+  }
+
+  return listen(SIDEBAR_TOGGLE_REQUESTED_EVENT, () => {
+    handler();
+  });
+}
+
+export async function listRemoteDirectory(
+  targetId: string,
+  path?: string | null,
+): Promise<RemoteDirectoryListing> {
+  if (!isTauri()) {
+    return {
+      targetId,
+      path: "~",
+      parentPath: null,
+      entries: [],
+    };
+  }
+
+  return invoke<RemoteDirectoryListing>("list_remote_directory", {
+    path: path ?? null,
+    targetId,
+  });
+}
+
+export async function readRemoteFilePreview(
+  targetId: string,
+  path: string,
+): Promise<RemoteFilePreview> {
+  if (!isTauri()) {
+    return {
+      targetId,
+      path,
+      content: "Remote file previews require the Tauri backend.",
+      isBinary: false,
+      truncated: false,
+    };
+  }
+
+  return invoke<RemoteFilePreview>("read_remote_file_preview", { path, targetId });
 }
