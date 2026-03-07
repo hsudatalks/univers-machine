@@ -1,12 +1,13 @@
 use crate::models::{
     BrowserSurface, DeveloperTarget, ManagedContainer, ManagedServer, TargetsFile,
 };
+use crate::shell;
 use csv::ReaderBuilder;
 use serde::Deserialize;
 use std::{
     fs,
     path::PathBuf,
-    process::{Command, Output},
+    process::Output,
     sync::{Mutex, OnceLock},
 };
 
@@ -119,9 +120,20 @@ fn trim_quotes(value: &str) -> &str {
 }
 
 fn managed_known_hosts_file() -> String {
-    match std::env::var("HOME") {
-        Ok(home) if !home.trim().is_empty() => {
-            format!("{}/.ssh/univers-ark-developer-known_hosts", home)
+    let home = if cfg!(windows) {
+        std::env::var("USERPROFILE").ok()
+    } else {
+        std::env::var("HOME").ok()
+    };
+
+    match home {
+        Some(home) if !home.trim().is_empty() => {
+            let normalized = if cfg!(windows) {
+                home.replace('\\', "/")
+            } else {
+                home
+            };
+            format!("{}/.ssh/univers-ark-developer-known_hosts", normalized)
         }
         _ => String::from("~/.ssh/univers-ark-developer-known_hosts"),
     }
@@ -362,7 +374,7 @@ fn probe_container_ssh(
     container_name: &str,
 ) -> (bool, String, String) {
     let command = ssh_probe_command_for_server(server, container_ip, container_name);
-    let output = Command::new("/bin/zsh").arg("-lc").arg(&command).output();
+    let output = shell::shell_command(&command).output();
 
     match output {
         Ok(output) if output.status.success() => (
@@ -391,6 +403,82 @@ fn probe_container_ssh(
     }
 }
 
+fn local_public_key() -> Option<String> {
+    let home = if cfg!(windows) {
+        std::env::var("USERPROFILE").ok()
+    } else {
+        std::env::var("HOME").ok()
+    };
+
+    let home = home?;
+    let ssh_dir = PathBuf::from(&home).join(".ssh");
+
+    for key_name in &["id_ed25519.pub", "id_rsa.pub"] {
+        let path = ssh_dir.join(key_name);
+        if let Ok(content) = fs::read_to_string(&path) {
+            let trimmed = content.trim().to_string();
+            if !trimmed.is_empty() {
+                return Some(trimmed);
+            }
+        }
+    }
+
+    None
+}
+
+fn deploy_key_command(
+    server: &RemoteContainerServer,
+    container_name: &str,
+    public_key: &str,
+) -> String {
+    let user_home = format!("/home/{}", server.ssh_user);
+    let inject_script = format!(
+        "mkdir -p {home}/.ssh && chmod 700 {home}/.ssh && echo {key} >> {home}/.ssh/authorized_keys && chmod 600 {home}/.ssh/authorized_keys",
+        home = user_home,
+        key = shell_single_quote(public_key),
+    );
+
+    let is_orbstack = server
+        .discovery_command
+        .to_ascii_lowercase()
+        .contains("orb");
+
+    if is_orbstack {
+        format!(
+            "ssh {} \"orb run -m {} -u {} bash -c {}\"",
+            server.host,
+            container_name,
+            server.ssh_user,
+            shell_single_quote(&inject_script),
+        )
+    } else {
+        format!(
+            "ssh {} \"lxc exec {} -- bash -c {}\"",
+            server.host,
+            container_name,
+            shell_single_quote(&inject_script),
+        )
+    }
+}
+
+fn auto_deploy_public_key(
+    server: &RemoteContainerServer,
+    container_name: &str,
+) -> Option<String> {
+    let public_key = local_public_key()?;
+    let command = deploy_key_command(server, container_name, &public_key);
+    let output = shell::shell_command(&command).output().ok()?;
+
+    if output.status.success() {
+        Some(format!(
+            "Automatically deployed local SSH public key to {} via {}.",
+            container_name, server.host
+        ))
+    } else {
+        None
+    }
+}
+
 fn discover_server_containers_output(server: &RemoteContainerServer) -> Result<String, String> {
     let command = if server.discovery_command.trim().is_empty() {
         default_discovery_command(server)
@@ -398,9 +486,7 @@ fn discover_server_containers_output(server: &RemoteContainerServer) -> Result<S
         server.discovery_command.clone()
     };
 
-    let output = Command::new("/bin/zsh")
-        .arg("-lc")
-        .arg(&command)
+    let output = shell::shell_command(&command)
         .output()
         .map_err(|error| {
             format!(
@@ -530,9 +616,32 @@ fn build_managed_container(
 ) -> (ManagedContainer, Option<DeveloperTarget>) {
     let target = build_target_from_container(server, container);
     let ssh_command = target.terminal_command.clone();
-    let ssh_destination = ssh_destination(server, &container.ipv4);
-    let (ssh_reachable, ssh_state, ssh_message) =
+    let ssh_dest = ssh_destination(server, &container.ipv4);
+    let (mut ssh_reachable, mut ssh_state, mut ssh_message) =
         probe_container_ssh(server, &container.ipv4, &container.name);
+
+    if !ssh_reachable && ssh_message.contains("Permission denied") {
+        if let Some(deploy_message) =
+            auto_deploy_public_key(server, &container.name)
+        {
+            let (retry_reachable, retry_state, retry_message) =
+                probe_container_ssh(server, &container.ipv4, &container.name);
+
+            if retry_reachable {
+                ssh_reachable = true;
+                ssh_state = retry_state;
+                ssh_message = format!(
+                    "{} {}",
+                    retry_message, deploy_message
+                );
+            } else {
+                ssh_message = format!(
+                    "Key deployed but SSH still failed: {}",
+                    retry_message
+                );
+            }
+        }
+    }
 
     (
         ManagedContainer {
@@ -544,7 +653,7 @@ fn build_managed_container(
             status: container.status.clone(),
             ipv4: container.ipv4.clone(),
             ssh_user: server.ssh_user.clone(),
-            ssh_destination,
+            ssh_destination: ssh_dest,
             ssh_command,
             ssh_state,
             ssh_message,
@@ -696,7 +805,7 @@ pub(crate) fn resolve_raw_target(target_id: &str) -> Result<DeveloperTarget, Str
 
 pub(crate) fn run_target_shell_command(
     target_id: &str,
-    shell_command: &str,
+    remote_command: &str,
 ) -> Result<Output, String> {
     let inventory = load_inventory(false)?;
 
@@ -712,7 +821,7 @@ pub(crate) fn run_target_shell_command(
             .iter()
             .find(|server| server.id == container.server_id)
             .ok_or_else(|| format!("Unknown remote server for {}", target_id))?;
-        let quoted_remote_command = shell_single_quote(shell_command);
+        let quoted_remote_command = shell_single_quote(remote_command);
         let ssh_command = build_ssh_command(
             server,
             &container.ipv4,
@@ -721,9 +830,7 @@ pub(crate) fn run_target_shell_command(
             Some(&quoted_remote_command),
         );
 
-        return Command::new("/bin/zsh")
-            .arg("-lc")
-            .arg(&ssh_command)
+        return shell::shell_command(&ssh_command)
             .output()
             .map_err(|error| {
                 format!(
@@ -733,9 +840,7 @@ pub(crate) fn run_target_shell_command(
             });
     }
 
-    Command::new("/bin/zsh")
-        .arg("-lc")
-        .arg(shell_command)
+    shell::shell_command(remote_command)
         .output()
         .map_err(|error| {
             format!(
@@ -835,17 +940,20 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
         assert_eq!(target.id, "mechanism-dev::workflow-dev");
         assert_eq!(target.label, "Workflow");
         assert_eq!(target.host, "mechanism-dev");
+        let home = if cfg!(windows) {
+            std::env::var("USERPROFILE").unwrap().replace('\\', "/")
+        } else {
+            std::env::var("HOME").unwrap()
+        };
         let expected_known_hosts_file = format!(
             "{}/.ssh/univers-ark-developer-known_hosts",
-            std::env::var("HOME").unwrap()
+            home
         );
-        assert_eq!(
-            target.terminal_command,
-            format!(
-                "ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -J mechanism-dev ubuntu@10.211.82.202",
-                expected_known_hosts_file
-            )
+        let expected_terminal_command = format!(
+            "ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={kh} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -tt -J mechanism-dev ubuntu@10.211.82.202 'tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l'",
+            kh = expected_known_hosts_file
         );
+        assert_eq!(target.terminal_command, expected_terminal_command);
         assert_eq!(
             target.surfaces[0].tunnel_command,
             format!(

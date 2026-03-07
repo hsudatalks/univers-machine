@@ -12,7 +12,7 @@ use std::{
     collections::HashMap,
     io::{ErrorKind, Read, Write},
     net::{TcpStream, ToSocketAddrs},
-    process::{Command, Stdio},
+    process::Stdio,
     sync::{atomic::Ordering, Arc, Mutex},
     time::Instant,
 };
@@ -323,9 +323,7 @@ fn spawn_tunnel_process(
     label: impl Into<String>,
 ) -> Result<TunnelProcess, String> {
     let label = label.into();
-    let mut command = Command::new("/bin/zsh");
-    command.arg("-lc");
-    command.arg(format!("exec {}", command_line));
+    let mut command = crate::shell::shell_command(command_line);
     command.stdin(Stdio::null());
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
