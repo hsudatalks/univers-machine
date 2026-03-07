@@ -1,0 +1,58 @@
+{
+  "selectedTargetId": "automation-dev",
+  "targets": [
+    {
+      "id": "local",
+      "label": "Local",
+      "host": "localhost",
+      "description": "Local shell with direct development and preview surfaces on ports 3432 and 4173.",
+      "terminalCommand": "exec /bin/zsh -l",
+      "notes": [],
+      "surfaces": [
+        {
+          "id": "development",
+          "label": "Development",
+          "tunnelCommand": "",
+          "localUrl": "http://127.0.0.1:3432/",
+          "remoteUrl": "http://127.0.0.1:3432/"
+        },
+        {
+          "id": "preview",
+          "label": "Preview",
+          "tunnelCommand": "",
+          "localUrl": "http://127.0.0.1:4173/",
+          "remoteUrl": "http://127.0.0.1:4173/"
+        }
+      ]
+    },
+    {
+      "id": "automation-dev",
+      "label": "Automation",
+      "host": "automation-dev",
+      "description": "Automation development container routed through univers-machine SSH aliases with separate development and preview surfaces.",
+      "terminalCommand": "ssh automation-dev",
+      "notes": [
+        "Development maps the container's 3432 port for the live app surface.",
+        "Preview maps the container's 4173 port for the production-like preview build.",
+        "The desktop app allocates a free local browser port in the 43000-43999 range for each surface and expands {localPort} before starting the tunnel."
+      ],
+      "surfaces": [
+        {
+          "id": "development",
+          "label": "Development",
+          "tunnelCommand": "ssh -NT -L {localPort}:127.0.0.1:3432 automation-dev",
+          "viteHmrTunnelCommand": "ssh -NT -L {localPort}:127.0.0.1:3433 automation-dev",
+          "localUrl": "http://127.0.0.1:{localPort}/",
+          "remoteUrl": "http://127.0.0.1:3432/"
+        },
+        {
+          "id": "preview",
+          "label": "Preview",
+          "tunnelCommand": "ssh -NT -L {localPort}:127.0.0.1:4173 automation-dev",
+          "localUrl": "http://127.0.0.1:{localPort}/",
+          "remoteUrl": "http://127.0.0.1:4173/"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+:root {
+  font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #111827;
+  background: linear-gradient(180deg, #f5f4f1 0%, #eceae4 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --font-mono: "Iosevka", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --text-1: #111827;
+  --text-2: #616d7d;
+  --border: #d8dde6;
+  --border-strong: #98a3b3;
+  --accent: #111827;
+  --panel: rgba(255, 255, 255, 0.84);
+  --panel-strong: rgba(255, 255, 255, 0.96);
+  --panel-muted: #f4f6f8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-width: 320px;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
