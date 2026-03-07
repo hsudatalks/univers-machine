@@ -852,6 +852,19 @@
   min-height: 0;
   overflow: hidden;
   background: #020817;
+  scrollbar-width: none;
+}
+
+.terminal-mount::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-mount .xterm-viewport {
+  scrollbar-width: none;
+}
+
+.terminal-mount .xterm-viewport::-webkit-scrollbar {
+  display: none;
 }
 
 .terminal-mount .xterm {

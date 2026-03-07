@@ -18,6 +18,8 @@ interface CachedTerminalSession {
   outputUnlisten?: () => void;
   exitUnlisten?: () => void;
   ownerId: symbol | null;
+  readyForInput: boolean;
+  pendingWrites: string[];
   status: string;
   statusListeners: Set<StatusListener>;
   targetId: string;
@@ -116,6 +118,19 @@ function refreshTerminalSnapshot(session: CachedTerminalSession) {
       session.hasAttachedSnapshot = true;
       setStatus(session, "Connected");
       fitTerminal(session);
+
+      setTimeout(() => {
+        session.readyForInput = true;
+        for (const data of session.pendingWrites) {
+          // Filter out Device Attributes responses (e.g. ESC[>0;10;1c)
+          // that xterm.js sends automatically — they are not user input.
+          if (/^\x1b\[\??[>]?[\d;]*[a-zA-Z]$/.test(data)) {
+            continue;
+          }
+          void writeTerminal(session.targetId, data).catch(() => undefined);
+        }
+        session.pendingWrites = [];
+      }, 500);
     })
     .catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -166,9 +181,16 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
     targetId,
     terminal,
     hasAttachedSnapshot: false,
+    readyForInput: false,
+    pendingWrites: [],
   };
 
   terminal.onData((data) => {
+    if (!session.readyForInput) {
+      session.pendingWrites.push(data);
+      return;
+    }
+
     void writeTerminal(targetId, data).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       terminal.writeln(`\r\n[write failed] ${message}`);
