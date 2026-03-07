@@ -1,5 +1,5 @@
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import hljs from "highlight.js";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
+import Editor from "@monaco-editor/react";
 import { listRemoteDirectory, readRemoteFilePreview } from "../lib/tauri";
 import type {
   DeveloperTarget,
@@ -28,10 +28,10 @@ function formatFileSize(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Map file extension to highlight.js language alias. */
-function languageFromPath(path: string): string | undefined {
+/** Map file extension to Monaco language id. */
+function languageFromPath(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase();
-  if (!ext) return undefined;
+  if (!ext) return "plaintext";
 
   const map: Record<string, string> = {
     ts: "typescript",
@@ -53,16 +53,16 @@ function languageFromPath(path: string): string | undefined {
     hpp: "cpp",
     cs: "csharp",
     swift: "swift",
-    sh: "bash",
-    bash: "bash",
-    zsh: "bash",
-    fish: "bash",
+    sh: "shell",
+    bash: "shell",
+    zsh: "shell",
+    fish: "shell",
     yml: "yaml",
     yaml: "yaml",
     json: "json",
-    toml: "toml",
+    toml: "plaintext",
     xml: "xml",
-    html: "xml",
+    html: "html",
     svg: "xml",
     css: "css",
     scss: "scss",
@@ -70,20 +70,18 @@ function languageFromPath(path: string): string | undefined {
     sql: "sql",
     md: "markdown",
     dockerfile: "dockerfile",
-    makefile: "makefile",
+    makefile: "plaintext",
     lua: "lua",
     php: "php",
     r: "r",
-    zig: "zig",
-    nix: "nix",
-    tf: "hcl",
     ini: "ini",
     conf: "ini",
-    diff: "diff",
-    vue: "xml",
+    diff: "plaintext",
+    vue: "html",
+    graphql: "graphql",
   };
 
-  return map[ext];
+  return map[ext] ?? "plaintext";
 }
 
 /* ─── Tree node for flattened rendering ───────────────── */
@@ -111,27 +109,6 @@ export function FilesPane({ active, target }: FilesPaneProps) {
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const codeRef = useRef<HTMLElement>(null);
-
-  /* ─── Highlight code after preview changes ──────────── */
-
-  useEffect(() => {
-    if (!codeRef.current || !preview || preview.isBinary) return;
-
-    const el = codeRef.current;
-    el.textContent = preview.content;
-    el.removeAttribute("data-highlighted");
-
-    const lang = languageFromPath(preview.path);
-    if (lang) {
-      el.className = `language-${lang}`;
-    } else {
-      el.className = "";
-    }
-
-    hljs.highlightElement(el);
-  }, [preview]);
-
   /* ─── Directory loading ─────────────────────────────── */
 
   const loadDirectory = (dirPath: string | null | undefined) => {
@@ -149,12 +126,9 @@ export function FilesPane({ active, target }: FilesPaneProps) {
           return next;
         });
 
-        // If this is the first load (root), set root path
         if (!rootPath || dirPath === null || dirPath === undefined) {
           setRootPath(listing.path);
           setRootParentPath(listing.parentPath ?? null);
-
-          // Auto-expand root
           setExpandedPaths((prev) => new Set(prev).add(listing.path));
         }
       })
@@ -196,8 +170,6 @@ export function FilesPane({ active, target }: FilesPaneProps) {
       });
     } else {
       setExpandedPaths((prev) => new Set(prev).add(path));
-
-      // Lazy-load children if we haven't yet
       if (!childrenByPath.has(path)) {
         loadDirectory(path);
       }
@@ -227,8 +199,6 @@ export function FilesPane({ active, target }: FilesPaneProps) {
 
   const navigateUp = () => {
     if (!rootParentPath) return;
-
-    // Reset tree and load parent directory as new root
     setChildrenByPath(new Map());
     setExpandedPaths(new Set());
     setRootPath(null);
@@ -278,11 +248,9 @@ export function FilesPane({ active, target }: FilesPaneProps) {
     [childrenByPath, selectedPath],
   );
 
-  /* ─── Line numbers for preview ──────────────────────── */
+  /* ─── Monaco language ───────────────────────────────── */
 
-  const lineCount = preview && !preview.isBinary
-    ? preview.content.split("\n").length
-    : 0;
+  const editorLanguage = preview ? languageFromPath(preview.path) : "plaintext";
 
   /* ─── Render ────────────────────────────────────────── */
 
@@ -400,15 +368,33 @@ export function FilesPane({ active, target }: FilesPaneProps) {
                   </p>
                 </div>
               ) : (
-                <div className="files-editor-code-area">
-                  <div className="files-editor-gutter" aria-hidden="true">
-                    {Array.from({ length: lineCount }, (_, i) => (
-                      <span key={i} className="files-editor-line-number">
-                        {i + 1}
-                      </span>
-                    ))}
-                  </div>
-                  <pre className="files-editor-code"><code ref={codeRef} /></pre>
+                <div className="files-editor-monaco">
+                  <Editor
+                    height="100%"
+                    language={editorLanguage}
+                    value={preview.content}
+                    theme="vs-dark"
+                    options={{
+                      readOnly: true,
+                      domReadOnly: true,
+                      minimap: { enabled: true },
+                      scrollBeyondLastLine: false,
+                      fontSize: 12,
+                      fontFamily: "Iosevka, SFMono-Regular, Consolas, monospace",
+                      lineHeight: 18,
+                      renderLineHighlight: "none",
+                      scrollbar: {
+                        verticalScrollbarSize: 8,
+                        horizontalScrollbarSize: 8,
+                      },
+                      overviewRulerBorder: false,
+                      overviewRulerLanes: 0,
+                      hideCursorInOverviewRuler: true,
+                      contextmenu: false,
+                      folding: true,
+                      wordWrap: "off",
+                    }}
+                  />
                 </div>
               )}
             </>

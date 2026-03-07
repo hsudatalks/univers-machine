@@ -1159,97 +1159,12 @@
   padding-bottom: 0.15rem;
 }
 
-.files-editor-code-area {
+/* ── Monaco Editor container ── */
+
+.files-editor-monaco {
   min-height: 0;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  overflow: auto;
-  scrollbar-width: thin;
+  overflow: hidden;
 }
-
-.files-editor-gutter {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  padding: 0.6rem 0.5rem 0.6rem 0.65rem;
-  background: rgba(1, 4, 9, 0.5);
-  border-right: 1px solid rgba(48, 54, 61, 0.5);
-  user-select: none;
-}
-
-.files-editor-line-number {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  line-height: 1.5;
-  color: rgba(139, 148, 158, 0.4);
-  min-width: 2ch;
-  text-align: right;
-}
-
-.files-editor-code {
-  margin: 0;
-  min-height: 0;
-  padding: 0.6rem 0.8rem;
-  background: transparent;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  line-height: 1.5;
-  white-space: pre;
-  overflow-x: auto;
-  color: #c9d1d9;
-}
-
-.files-editor-code code {
-  font-family: inherit;
-  font-size: inherit;
-  line-height: inherit;
-  background: transparent !important;
-  padding: 0 !important;
-}
-
-/* ── highlight.js dark overrides ── */
-
-.files-editor-code .hljs {
-  background: transparent !important;
-  color: #c9d1d9;
-  padding: 0;
-}
-
-.files-editor-code .hljs-keyword,
-.files-editor-code .hljs-built_in { color: #ff7b72; }
-
-.files-editor-code .hljs-type,
-.files-editor-code .hljs-title.class_ { color: #ffa657; }
-
-.files-editor-code .hljs-title.function_,
-.files-editor-code .hljs-title { color: #d2a8ff; }
-
-.files-editor-code .hljs-string,
-.files-editor-code .hljs-meta .hljs-string { color: #a5d6ff; }
-
-.files-editor-code .hljs-number,
-.files-editor-code .hljs-literal { color: #79c0ff; }
-
-.files-editor-code .hljs-comment,
-.files-editor-code .hljs-doctag { color: #8b949e; font-style: italic; }
-
-.files-editor-code .hljs-attr,
-.files-editor-code .hljs-attribute { color: #79c0ff; }
-
-.files-editor-code .hljs-variable,
-.files-editor-code .hljs-template-variable { color: #ffa657; }
-
-.files-editor-code .hljs-regexp { color: #7ee787; }
-
-.files-editor-code .hljs-selector-class,
-.files-editor-code .hljs-selector-id,
-.files-editor-code .hljs-selector-tag { color: #7ee787; }
-
-.files-editor-code .hljs-params { color: #c9d1d9; }
-
-.files-editor-code .hljs-meta { color: #79c0ff; }
-
-.files-editor-code .hljs-punctuation { color: #8b949e; }
 
 /* ── Empty states (shared) ── */
 
