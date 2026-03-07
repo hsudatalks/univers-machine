@@ -7,6 +7,7 @@ mod files;
 mod models;
 mod proxy;
 mod runtime;
+mod shell;
 mod terminal;
 mod tunnel;
 

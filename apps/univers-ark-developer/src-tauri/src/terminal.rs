@@ -58,9 +58,11 @@ pub(crate) fn spawn_terminal_session(
         })
         .map_err(|error| format!("Failed to allocate PTY for {}: {}", target.id, error))?;
 
-    let mut command = CommandBuilder::new("/bin/zsh");
-    command.arg("-lc");
-    command.arg(target.terminal_command.clone());
+    let (program, args) = crate::shell::pty_program_and_args(&target.terminal_command);
+    let mut command = CommandBuilder::new(program);
+    for arg in args {
+        command.arg(arg);
+    }
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
 
