@@ -24,6 +24,8 @@ const SURFACE_PORT_END = import.meta.env.DEV ? 43999 : 45999;
 const SURFACE_HOST = "127.0.0.1";
 const SIDEBAR_TOGGLE_REQUESTED_EVENT = "toggle-sidebar-requested";
 const DASHBOARD_UPDATED_EVENT = "container-dashboard-updated";
+const PREVIOUS_CONTAINER_REQUESTED_EVENT = "previous-container-requested";
+const NEXT_CONTAINER_REQUESTED_EVENT = "next-container-requested";
 
 const fallbackBootstrapSeed: AppBootstrap = {
   appName: "Univers Ark Developer",
@@ -495,6 +497,18 @@ export async function restartTunnel(
   return invoke<TunnelStatus>("restart_tunnel", { targetId, surfaceId });
 }
 
+export async function restartAllTunnels(
+  requests: Array<{ targetId: string; surfaceId: string }>,
+): Promise<TunnelStatus[]> {
+  if (!isTauri()) {
+    return requests.map(({ targetId, surfaceId }) =>
+      fallbackTunnelStatus(targetId, surfaceId),
+    );
+  }
+
+  return invoke<TunnelStatus[]>("restart_all_tunnels", { requests });
+}
+
 export async function listenTunnelStatus(
   handler: (payload: TunnelStatus) => void,
 ): Promise<UnlistenFn> {
@@ -515,6 +529,30 @@ export async function listenSidebarToggleRequested(
   }
 
   return listen(SIDEBAR_TOGGLE_REQUESTED_EVENT, () => {
+    handler();
+  });
+}
+
+export async function listenPreviousContainerRequested(
+  handler: () => void,
+): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => undefined;
+  }
+
+  return listen(PREVIOUS_CONTAINER_REQUESTED_EVENT, () => {
+    handler();
+  });
+}
+
+export async function listenNextContainerRequested(
+  handler: () => void,
+): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => undefined;
+  }
+
+  return listen(NEXT_CONTAINER_REQUESTED_EVENT, () => {
     handler();
   });
 }

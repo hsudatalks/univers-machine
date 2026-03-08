@@ -10,8 +10,11 @@ interface CachedBrowserFrame {
   cacheKey: string;
   frameVersion: number;
   iframe: HTMLIFrameElement;
+  lastError: string | null;
   lastAccessedAt: number;
+  lastLoadedAt: number;
   ownerId: symbol | null;
+  sessionState: "idle" | "loading" | "loaded" | "error";
   src: string;
 }
 
@@ -20,6 +23,9 @@ export interface BrowserFrameSnapshot {
   frameVersion: number;
   hasOwner: boolean;
   lastAccessedAt: number;
+  lastError: string | null;
+  lastLoadedAt: number;
+  sessionState: "idle" | "loading" | "loaded" | "error";
   src: string;
   title: string;
 }
@@ -37,9 +43,10 @@ function ensureParkingLotElement(): HTMLDivElement {
   parkingLotElement = document.createElement("div");
   parkingLotElement.setAttribute("aria-hidden", "true");
   parkingLotElement.style.position = "fixed";
-  parkingLotElement.style.inset = "auto auto -200vh -200vw";
-  parkingLotElement.style.width = "1px";
-  parkingLotElement.style.height = "1px";
+  parkingLotElement.style.left = "-200vw";
+  parkingLotElement.style.top = "0";
+  parkingLotElement.style.width = "1440px";
+  parkingLotElement.style.height = "900px";
   parkingLotElement.style.overflow = "hidden";
   parkingLotElement.style.pointerEvents = "none";
   parkingLotElement.style.opacity = "0";
@@ -52,15 +59,22 @@ function applyFrameDescriptor(
   frame: CachedBrowserFrame,
   descriptor: BrowserFrameDescriptor,
 ) {
-  frame.iframe.className = `browser-frame ${descriptor.isActive ? "is-active" : ""}`;
+  frame.iframe.className = `browser-frame ${descriptor.isActive ? "is-active" : ""}`.trim();
   frame.iframe.title = descriptor.title;
   frame.lastAccessedAt = Date.now();
 
   if (frame.src !== descriptor.src || frame.frameVersion !== descriptor.frameVersion) {
+    frame.sessionState = descriptor.src ? "loading" : "idle";
+    frame.lastError = null;
     frame.iframe.src = descriptor.src;
     frame.src = descriptor.src;
     frame.frameVersion = descriptor.frameVersion;
   }
+}
+
+function moveFrameToParkingLot(frame: CachedBrowserFrame) {
+  frame.iframe.className = "browser-frame is-parked";
+  ensureParkingLotElement().append(frame.iframe);
 }
 
 function cachedBrowserFrame(
@@ -81,16 +95,46 @@ function cachedBrowserFrame(
     cacheKey: descriptor.cacheKey,
     frameVersion: descriptor.frameVersion,
     iframe,
+    lastError: null,
     lastAccessedAt: Date.now(),
+    lastLoadedAt: 0,
     ownerId: null,
+    sessionState: "idle",
     src: "",
   };
 
+  iframe.addEventListener("load", () => {
+    nextFrame.sessionState = "loaded";
+    nextFrame.lastLoadedAt = Date.now();
+    nextFrame.lastError = null;
+  });
+
+  iframe.addEventListener("error", () => {
+    nextFrame.sessionState = "error";
+    nextFrame.lastError = "Failed to load iframe content.";
+  });
+
   browserFrames.set(descriptor.cacheKey, nextFrame);
   applyFrameDescriptor(nextFrame, descriptor);
-  ensureParkingLotElement().append(iframe);
+  moveFrameToParkingLot(nextFrame);
 
   return nextFrame;
+}
+
+export function preloadBrowserFrames(
+  descriptors: Array<Omit<BrowserFrameDescriptor, "isActive">>,
+) {
+  for (const descriptor of descriptors) {
+    const frame = cachedBrowserFrame({
+      ...descriptor,
+      isActive: false,
+    });
+
+    frame.ownerId = null;
+    moveFrameToParkingLot(frame);
+  }
+
+  pruneBrowserFramesToLimit(HOT_BROWSER_FRAME_LIMIT);
 }
 
 export function syncBrowserFrames(
@@ -103,7 +147,7 @@ export function syncBrowserFrames(
   for (const frame of browserFrames.values()) {
     if (frame.ownerId === ownerId && !nextKeys.has(frame.cacheKey)) {
       frame.ownerId = null;
-      ensureParkingLotElement().append(frame.iframe);
+      moveFrameToParkingLot(frame);
     }
   }
 
@@ -126,7 +170,7 @@ export function releaseBrowserFrames(ownerId: symbol) {
     }
 
     frame.ownerId = null;
-    ensureParkingLotElement().append(frame.iframe);
+    moveFrameToParkingLot(frame);
   }
 }
 
@@ -172,6 +216,9 @@ export function listBrowserFrameSnapshots(): BrowserFrameSnapshot[] {
       frameVersion: frame.frameVersion,
       hasOwner: frame.ownerId !== null,
       lastAccessedAt: frame.lastAccessedAt,
+      lastError: frame.lastError,
+      lastLoadedAt: frame.lastLoadedAt,
+      sessionState: frame.sessionState,
       src: frame.src,
       title: frame.iframe.title,
     }))

@@ -97,6 +97,10 @@
   pointer-events: none;
 }
 
+.browser-frame.is-parked {
+  opacity: 1;
+}
+
 .browser-frame.is-active {
   opacity: 1;
   pointer-events: auto;

@@ -5,7 +5,11 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { restartTunnel } from "../lib/tauri";
+import {
+  listenNextContainerRequested,
+  listenPreviousContainerRequested,
+  restartTunnel,
+} from "../lib/tauri";
 import { warmTargetTunnels } from "../lib/tunnel-manager";
 import {
   browserSurfaceIdFromPanel,
@@ -178,6 +182,47 @@ export function useContainerWorkspace({
     onSelectContainer(targetId);
   });
 
+  const navigateContainerFromShortcut = useEffectEvent((direction: "previous" | "next") => {
+    if (activeView.kind !== "container") {
+      return;
+    }
+
+    const currentIndex = orderedTargetIds.indexOf(activeView.targetId);
+
+    if (currentIndex === -1 || orderedTargetIds.length === 0) {
+      return;
+    }
+
+    const nextIndex =
+      direction === "previous"
+        ? (currentIndex - 1 + orderedTargetIds.length) % orderedTargetIds.length
+        : (currentIndex + 1) % orderedTargetIds.length;
+
+    selectContainerFromShortcut(orderedTargetIds[nextIndex]);
+  });
+
+  useEffect(() => {
+    let unlistenPrevious: (() => void) | undefined;
+    let unlistenNext: (() => void) | undefined;
+
+    void listenPreviousContainerRequested(() => {
+      navigateContainerFromShortcut("previous");
+    }).then((dispose) => {
+      unlistenPrevious = dispose;
+    });
+
+    void listenNextContainerRequested(() => {
+      navigateContainerFromShortcut("next");
+    }).then((dispose) => {
+      unlistenNext = dispose;
+    });
+
+    return () => {
+      unlistenPrevious?.();
+      unlistenNext?.();
+    };
+  }, []);
+
   useEffect(() => {
     if (activeView.kind !== "container") {
       return;
@@ -211,21 +256,11 @@ export function useContainerWorkspace({
       }
 
       if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        const currentIndex = orderedTargetIds.indexOf(targetId);
-
-        if (currentIndex === -1 || orderedTargetIds.length === 0) {
-          return;
-        }
-
-        const nextIndex =
-          event.key === "ArrowLeft"
-            ? (currentIndex - 1 + orderedTargetIds.length) % orderedTargetIds.length
-            : (currentIndex + 1) % orderedTargetIds.length;
-        const nextTargetId = orderedTargetIds[nextIndex];
-
         event.preventDefault();
         event.stopPropagation();
-        selectContainerFromShortcut(nextTargetId);
+        navigateContainerFromShortcut(
+          event.key === "ArrowLeft" ? "previous" : "next",
+        );
         return;
       }
 

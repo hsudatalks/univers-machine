@@ -34,8 +34,42 @@ use crate::{
     },
 };
 use portable_pty::PtySize;
+use serde::Deserialize;
 use std::io::Write;
 use tauri::{async_runtime, AppHandle, State};
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TunnelRestartSpec {
+    pub(crate) target_id: String,
+    pub(crate) surface_id: String,
+}
+
+fn restart_tunnel_inner(
+    app: &AppHandle,
+    tunnel_inner: &TunnelState,
+    target_id: &str,
+    surface_id: &str,
+) -> Result<TunnelStatus, String> {
+    let surface = resolve_runtime_surface(target_id, surface_id, tunnel_inner)?;
+
+    if surface.tunnel_command.trim().is_empty() {
+        return Ok(direct_tunnel_status(target_id, &surface));
+    }
+
+    let key = surface_key(target_id, surface_id);
+    let previous_session = tunnel_inner
+        .sessions
+        .lock()
+        .map_err(|_| String::from("Tunnel session state is unavailable"))?
+        .remove(&key);
+
+    if let Some(session) = previous_session {
+        stop_tunnel_session(&session);
+    }
+
+    start_tunnel(app, tunnel_inner, target_id, &surface)
+}
 
 #[tauri::command]
 pub(crate) async fn load_bootstrap(
@@ -215,27 +249,45 @@ pub(crate) async fn restart_tunnel(
     let app_clone = app.clone();
 
     async_runtime::spawn_blocking(move || {
-        let surface = resolve_runtime_surface(&target_id, &surface_id, &tunnel_inner)?;
-
-        if surface.tunnel_command.trim().is_empty() {
-            return Ok(direct_tunnel_status(&target_id, &surface));
-        }
-
-        let key = surface_key(&target_id, &surface_id);
-        let previous_session = tunnel_inner
-            .sessions
-            .lock()
-            .map_err(|_| String::from("Tunnel session state is unavailable"))?
-            .remove(&key);
-
-        if let Some(session) = previous_session {
-            stop_tunnel_session(&session);
-        }
-
-        start_tunnel(&app_clone, &tunnel_inner, &target_id, &surface)
+        restart_tunnel_inner(&app_clone, &tunnel_inner, &target_id, &surface_id)
     })
     .await
     .map_err(|error| format!("Failed to join restart tunnel task: {}", error))?
+}
+
+#[tauri::command]
+pub(crate) async fn restart_all_tunnels(
+    app: AppHandle,
+    tunnel_state: State<'_, TunnelState>,
+    requests: Vec<TunnelRestartSpec>,
+) -> Result<Vec<TunnelStatus>, String> {
+    let tunnel_inner = tunnel_state.inner().clone();
+    let handles = requests
+        .into_iter()
+        .map(|request| {
+            let app_clone = app.clone();
+            let tunnel_inner = tunnel_inner.clone();
+            async_runtime::spawn_blocking(move || {
+                restart_tunnel_inner(
+                    &app_clone,
+                    &tunnel_inner,
+                    &request.target_id,
+                    &request.surface_id,
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let mut statuses = Vec::with_capacity(handles.len());
+    for handle in handles {
+        statuses.push(
+            handle
+                .await
+                .map_err(|error| format!("Failed to join restart tunnel task: {}", error))??,
+        );
+    }
+
+    Ok(statuses)
 }
 
 #[tauri::command]

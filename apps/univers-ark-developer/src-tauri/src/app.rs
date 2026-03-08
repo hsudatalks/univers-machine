@@ -13,9 +13,16 @@ use tauri::{
     },
     AppHandle, Emitter, Manager, Runtime,
 };
+use tauri_plugin_global_shortcut::{
+    Builder as GlobalShortcutBuilder, Code, Modifiers, ShortcutState,
+};
 
 const TOGGLE_SIDEBAR_MENU_ID: &str = "toggle_sidebar";
 const TOGGLE_SIDEBAR_EVENT: &str = "toggle-sidebar-requested";
+const PREVIOUS_CONTAINER_MENU_ID: &str = "previous_container";
+const NEXT_CONTAINER_MENU_ID: &str = "next_container";
+const PREVIOUS_CONTAINER_EVENT: &str = "previous-container-requested";
+const NEXT_CONTAINER_EVENT: &str = "next-container-requested";
 
 #[cfg(target_os = "macos")]
 fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
@@ -35,6 +42,20 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
         "Toggle Sidebar Menu",
         true,
         Some("Cmd+H"),
+    )?;
+    let previous_container = MenuItem::with_id(
+        app_handle,
+        PREVIOUS_CONTAINER_MENU_ID,
+        "Previous Container",
+        true,
+        Some("Cmd+Alt+Left"),
+    )?;
+    let next_container = MenuItem::with_id(
+        app_handle,
+        NEXT_CONTAINER_MENU_ID,
+        "Next Container",
+        true,
+        Some("Cmd+Alt+Right"),
     )?;
 
     let app_menu = Submenu::with_items(
@@ -79,7 +100,12 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
         app_handle,
         "View",
         true,
-        &[&PredefinedMenuItem::fullscreen(app_handle, None)?],
+        &[
+            &previous_container,
+            &next_container,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &PredefinedMenuItem::fullscreen(app_handle, None)?,
+        ],
     )?;
 
     let window_menu = Submenu::with_id_and_items(
@@ -120,6 +146,20 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
         true,
         Some("Ctrl+H"),
     )?;
+    let previous_container = MenuItem::with_id(
+        app_handle,
+        PREVIOUS_CONTAINER_MENU_ID,
+        "Previous Container",
+        true,
+        Some("Ctrl+Alt+Left"),
+    )?;
+    let next_container = MenuItem::with_id(
+        app_handle,
+        NEXT_CONTAINER_MENU_ID,
+        "Next Container",
+        true,
+        Some("Ctrl+Alt+Right"),
+    )?;
 
     let file_menu = Submenu::with_items(
         app_handle,
@@ -136,7 +176,12 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
         app_handle,
         "View",
         true,
-        &[&PredefinedMenuItem::fullscreen(app_handle, None)?],
+        &[
+            &previous_container,
+            &next_container,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &PredefinedMenuItem::fullscreen(app_handle, None)?,
+        ],
     )?;
 
     Menu::with_items(app_handle, &[&file_menu, &view_menu])
@@ -147,10 +192,33 @@ pub(crate) fn run() {
         .manage(TerminalState::default())
         .manage(TunnelState::default())
         .manage(DashboardState::default())
+        .plugin(
+            GlobalShortcutBuilder::new()
+                .with_shortcuts(["Cmd+Alt+Left", "Cmd+Alt+Right"])
+                .expect("failed to configure global shortcuts")
+                .with_handler(|app_handle, shortcut, event| {
+                    if event.state != ShortcutState::Pressed {
+                        return;
+                    }
+
+                    if shortcut.matches(Modifiers::SUPER | Modifiers::ALT, Code::ArrowLeft) {
+                        let _ = app_handle.emit(PREVIOUS_CONTAINER_EVENT, ());
+                    } else if shortcut
+                        .matches(Modifiers::SUPER | Modifiers::ALT, Code::ArrowRight)
+                    {
+                        let _ = app_handle.emit(NEXT_CONTAINER_EVENT, ());
+                    }
+                })
+                .build(),
+        )
         .menu(build_app_menu)
         .on_menu_event(|app_handle, event| {
             if event.id().as_ref() == TOGGLE_SIDEBAR_MENU_ID {
                 let _ = app_handle.emit(TOGGLE_SIDEBAR_EVENT, ());
+            } else if event.id().as_ref() == PREVIOUS_CONTAINER_MENU_ID {
+                let _ = app_handle.emit(PREVIOUS_CONTAINER_EVENT, ());
+            } else if event.id().as_ref() == NEXT_CONTAINER_MENU_ID {
+                let _ = app_handle.emit(NEXT_CONTAINER_EVENT, ());
             }
         })
         .setup(|app| {
@@ -180,6 +248,7 @@ pub(crate) fn run() {
             commands::restart_terminal,
             commands::ensure_tunnel,
             commands::restart_tunnel,
+            commands::restart_all_tunnels,
             commands::list_remote_directory,
             commands::read_remote_file_preview,
             commands::load_container_dashboard,
