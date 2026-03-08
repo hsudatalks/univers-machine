@@ -172,6 +172,8 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
     fontFamily: "Iosevka, SFMono-Regular, Consolas, monospace",
     fontSize: 12,
     lineHeight: 1,
+    macOptionClickForcesSelection: true,
+    rightClickSelectsWord: true,
     scrollback: 1500,
     theme: {
       background: "#0d1117",
@@ -198,6 +200,27 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
     readyForInput: false,
     pendingWrites: [],
   };
+
+  // Auto-copy selected text to clipboard
+  terminal.onSelectionChange(() => {
+    const selection = terminal.getSelection();
+    if (selection) {
+      void navigator.clipboard.writeText(selection).catch(() => undefined);
+    }
+  });
+
+  // Right-click paste from clipboard
+  hostElement.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    void navigator.clipboard
+      .readText()
+      .then((text) => {
+        if (text && session.readyForInput) {
+          void writeTerminal(targetId, text).catch(() => undefined);
+        }
+      })
+      .catch(() => undefined);
+  });
 
   terminal.onData((data) => {
     if (!session.readyForInput) {
