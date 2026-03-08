@@ -8,6 +8,9 @@ import type {
   ThemeMode,
   TunnelStatus,
 } from "../types";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { ServerDialog } from "./ServerDialog";
 
 type SettingsTab = "appearance" | "configuration" | "servers" | "tunnels" | "iframes";
@@ -37,6 +40,22 @@ function formatTimestamp(timestamp: number): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function badgeVariantForState(state: string | undefined): "neutral" | "success" | "warning" | "destructive" {
+  switch (state) {
+    case "running":
+    case "ready":
+      return "success";
+    case "starting":
+    case "pending":
+      return "warning";
+    case "error":
+    case "stopped":
+      return "destructive";
+    default:
+      return "neutral";
+  }
 }
 
 export function SettingsPage({
@@ -109,32 +128,29 @@ export function SettingsPage({
         </div>
       </header>
 
-      <div className="settings-tab-bar" role="tablist" aria-label="Settings sections">
-        {(
-          [
-            ["appearance", "Appearance"],
-            ["configuration", "Configuration"],
-            ["servers", "Servers"],
-            ["tunnels", "Tunnels"],
-            ["iframes", "Iframes"],
-          ] as Array<[SettingsTab, string]>
-        ).map(([tab, label]) => (
-          <button
-            aria-selected={activeTab === tab}
-            className={`panel-button panel-button-toolbar settings-tab ${activeTab === tab ? "is-active" : ""}`}
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            role="tab"
-            type="button"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        onValueChange={(value) => setActiveTab(value as SettingsTab)}
+        value={activeTab}
+      >
+        <TabsList className="settings-tab-bar" aria-label="Settings sections">
+          {(
+            [
+              ["appearance", "Appearance"],
+              ["configuration", "Configuration"],
+              ["servers", "Servers"],
+              ["tunnels", "Tunnels"],
+              ["iframes", "Iframes"],
+            ] as Array<[SettingsTab, string]>
+          ).map(([tab, label]) => (
+            <TabsTrigger className="settings-tab" key={tab} value={tab}>
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-      <div className="settings-body">
-        {activeTab === "appearance" ? (
-          <section className="settings-section">
+        <div className="settings-body">
+          <TabsContent value="appearance">
+            <section className="settings-section">
             <h3 className="settings-section-title">Appearance</h3>
             <div className="settings-field">
               <label className="settings-label">Theme</label>
@@ -146,16 +162,17 @@ export function SettingsPage({
                     ["dark", "Dark"],
                   ] as Array<[ThemeMode, string]>
                 ).map(([themeMode, label]) => (
-                  <button
+                  <Button
                     aria-checked={appSettings.themeMode === themeMode}
-                    className={`panel-button panel-button-toolbar settings-option-button ${appSettings.themeMode === themeMode ? "is-active" : ""}`}
+                    className="settings-option-button"
                     key={themeMode}
                     onClick={() => onAppSettingsChange(themeMode)}
                     role="radio"
-                    type="button"
+                    size="sm"
+                    variant={appSettings.themeMode === themeMode ? "default" : "outline"}
                   >
                     {label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -163,11 +180,11 @@ export function SettingsPage({
               <label className="settings-label">Resolved theme</label>
               <span className="settings-value">{resolvedTheme}</span>
             </div>
-          </section>
-        ) : null}
+            </section>
+          </TabsContent>
 
-        {activeTab === "configuration" ? (
-          <section className="settings-section">
+          <TabsContent value="configuration">
+            <section className="settings-section">
             <h3 className="settings-section-title">Configuration</h3>
             <div className="settings-field">
               <label className="settings-label">Config file path</label>
@@ -177,11 +194,11 @@ export function SettingsPage({
               <label className="settings-label">Target count</label>
               <span className="settings-value">{targets.length} target(s)</span>
             </div>
-          </section>
-        ) : null}
+            </section>
+          </TabsContent>
 
-        {activeTab === "servers" ? (
-          <section className="settings-section">
+          <TabsContent value="servers">
+            <section className="settings-section">
             <h3 className="settings-section-title">
               Servers
               <span className="settings-count">{servers.length}</span>
@@ -199,11 +216,9 @@ export function SettingsPage({
                   >
                     <div className="settings-server-header">
                       <span className="settings-server-label">{server.label}</span>
-                      <span
-                        className={`settings-server-state settings-server-state-${server.state}`}
-                      >
+                      <Badge variant={badgeVariantForState(server.state)}>
                         {server.state}
-                      </span>
+                      </Badge>
                     </div>
                     <div className="settings-server-meta">
                       <span className="settings-server-host">{server.host}</span>
@@ -223,11 +238,11 @@ export function SettingsPage({
                 ))}
               </div>
             )}
-          </section>
-        ) : null}
+            </section>
+          </TabsContent>
 
-        {activeTab === "tunnels" ? (
-          <section className="settings-section">
+          <TabsContent value="tunnels">
+            <section className="settings-section">
             <h3 className="settings-section-title">
               Tunnel sessions
               <span className="settings-count">{tunnelEntries.length}</span>
@@ -246,19 +261,17 @@ export function SettingsPage({
                         <span className="settings-runtime-key">{cacheKey}</span>
                       </div>
                       <div className="settings-runtime-actions">
-                        <span
-                          className={`settings-server-state settings-server-state-${status?.state ?? "stopped"}`}
-                        >
+                        <Badge variant={badgeVariantForState(status?.state)}>
                           {status?.state ?? "stopped"}
-                        </span>
-                        <button
-                          className="panel-button panel-button-toolbar"
+                        </Badge>
+                        <Button
                           disabled={restartingTunnelKey === cacheKey}
                           onClick={() => void restartTunnelEntry(target.id, surface.id, cacheKey)}
-                          type="button"
+                          size="sm"
+                          variant="outline"
                         >
                           {restartingTunnelKey === cacheKey ? "Restarting…" : "Restart"}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                     <div className="settings-runtime-grid">
@@ -276,11 +289,11 @@ export function SettingsPage({
                 ))}
               </div>
             )}
-          </section>
-        ) : null}
+            </section>
+          </TabsContent>
 
-        {activeTab === "iframes" ? (
-          <section className="settings-section">
+          <TabsContent value="iframes">
+            <section className="settings-section">
             <h3 className="settings-section-title">
               Iframe cache
               <span className="settings-count">{iframeSnapshots.length}</span>
@@ -296,11 +309,9 @@ export function SettingsPage({
                         <span className="settings-runtime-label">{frame.title || "Untitled frame"}</span>
                         <span className="settings-runtime-key">{frame.cacheKey}</span>
                       </div>
-                      <span
-                        className={`settings-server-state settings-server-state-${frame.hasOwner ? "running" : "pending"}`}
-                      >
+                      <Badge variant={badgeVariantForState(frame.hasOwner ? "running" : "pending")}>
                         {frame.hasOwner ? "attached" : "parked"}
-                      </span>
+                      </Badge>
                     </div>
                     <div className="settings-runtime-grid">
                       <span className="settings-runtime-row">
@@ -317,9 +328,10 @@ export function SettingsPage({
                 ))}
               </div>
             )}
-          </section>
-        ) : null}
-      </div>
+            </section>
+          </TabsContent>
+        </div>
+      </Tabs>
 
       {selectedServer ? (
         <ServerDialog

@@ -1,4 +1,16 @@
 import type { AppBootstrap } from "../types";
+import { Badge } from "./ui/badge";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+} from "./ui/sidebar";
+import { ChevronRight, LayoutGrid, Server, SquareTerminal } from "lucide-react";
 
 interface SidebarNavProps {
   activeServerId?: string;
@@ -25,30 +37,22 @@ function titleCase(value: string): string {
 function inventoryStateTone(state: string): string {
   switch (state) {
     case "ready":
-      return "running";
+      return "success";
     case "degraded":
     case "empty":
-      return "starting";
+      return "warning";
     case "error":
-      return "error";
+      return "destructive";
     default:
-      return "direct";
+      return "neutral";
   }
 }
 
-function StatusDot({
-  state,
-  title,
-}: {
-  state: string;
-  title: string;
-}) {
+function StatusBadge({ state, title }: { state: string; title: string }) {
   return (
-    <span
-      aria-label={title}
-      className={`terminal-status terminal-status-dot status-${state}`}
-      title={title}
-    />
+    <Badge aria-label={title} title={title} variant={state as "neutral" | "success" | "warning" | "destructive"}>
+      {title}
+    </Badge>
   );
 }
 
@@ -76,22 +80,30 @@ export function SidebarNav({
   );
 
   return (
-    <aside className={`sidebar ${isOverviewLayout ? "sidebar-overview" : ""}`}>
-      <nav className="sidebar-nav" aria-label="Workspace navigation">
-        <button
-          className={`sidebar-node sidebar-node-root ${isOverviewActive ? "is-active" : ""}`}
-          onClick={onSelectOverview}
-          type="button"
-        >
-          <span className="sidebar-node-copy">
-            <span className="sidebar-node-label">Overview</span>
-          </span>
-        </button>
+    <Sidebar className={`sidebar ${isOverviewLayout ? "sidebar-overview" : ""}`}>
+      <SidebarContent className="sidebar-nav" aria-label="Workspace navigation">
+        <SidebarGroup>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                className="sidebar-node-root"
+                isActive={isOverviewActive}
+                onClick={onSelectOverview}
+                type="button"
+              >
+                <span className="sidebar-node-copy">
+                  <LayoutGrid size={14} />
+                  <span className="sidebar-node-label">Overview</span>
+                </span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroup>
 
-        <section className="sidebar-section">
-          <span className="sidebar-section-label">Servers</span>
+        <SidebarGroup className="sidebar-section">
+          <SidebarGroupLabel>Servers</SidebarGroupLabel>
 
-          <div className="sidebar-tree">
+          <SidebarMenu className="sidebar-tree">
             {bootstrap.servers.map((server) => {
               const isExpanded = expandedServerIds.includes(server.id);
               const isServerActive = activeServerId === server.id;
@@ -100,86 +112,95 @@ export function SidebarNav({
               );
 
               return (
-                <div className="sidebar-branch" key={server.id}>
+                <SidebarMenuItem className="sidebar-branch" key={server.id}>
                   <div className="sidebar-branch-header">
                     <button
                       className="sidebar-branch-toggle"
                       onClick={() => onToggleServer(server.id)}
                       type="button"
                     >
-                      {isExpanded ? "▾" : "▸"}
+                      <ChevronRight
+                        className={isExpanded ? "rotate-90 transition-transform" : "transition-transform"}
+                        size={14}
+                      />
                     </button>
 
-                    <button
-                      className={`sidebar-node sidebar-node-server ${isServerActive ? "is-active" : ""} ${branchHasActiveTarget ? "is-branch-active" : ""}`}
+                    <SidebarMenuButton
+                      className={branchHasActiveTarget ? "is-branch-active" : ""}
+                      isActive={isServerActive}
                       onClick={() => onSelectServer(server.id)}
                       type="button"
                     >
                       <span className="sidebar-node-copy">
+                        <Server size={14} />
                         <span className="sidebar-node-label">{server.label}</span>
                       </span>
 
-                      <StatusDot
+                      <StatusBadge
                         state={inventoryStateTone(server.state)}
                         title={titleCase(server.state)}
                       />
-                    </button>
+                    </SidebarMenuButton>
                   </div>
 
                   {isExpanded ? (
-                    <div className="sidebar-children">
+                    <SidebarMenuSub className="sidebar-children">
                       {server.containers.map((container) => {
                         const isActive = activeTargetId === container.targetId;
                         const isAvailable = availableTargetSet.has(container.targetId);
 
                         return (
-                          <button
-                            className={`sidebar-node sidebar-node-leaf ${isActive ? "is-active" : ""}`}
+                          <SidebarMenuButton
+                            className="sidebar-node-leaf"
                             disabled={!isAvailable}
+                            isActive={isActive}
                             key={container.targetId}
                             onClick={() => onSelectContainer(container.targetId)}
                             type="button"
                           >
                             <span className="sidebar-node-copy">
+                              <SquareTerminal size={14} />
                               <span className="sidebar-node-label">{container.label}</span>
                             </span>
 
-                            <StatusDot
-                              state={container.sshReachable ? "running" : "error"}
+                            <StatusBadge
+                              state={container.sshReachable ? "success" : "destructive"}
                               title={container.sshState}
                             />
-                          </button>
+                          </SidebarMenuButton>
                         );
                       })}
-                    </div>
+                    </SidebarMenuSub>
                   ) : null}
-                </div>
+                </SidebarMenuItem>
               );
             })}
-          </div>
-        </section>
+          </SidebarMenu>
+        </SidebarGroup>
 
         {standaloneTargets.length > 0 ? (
-          <section className="sidebar-section">
-            <span className="sidebar-section-label">Standalone</span>
+          <SidebarGroup className="sidebar-section">
+            <SidebarGroupLabel>Standalone</SidebarGroupLabel>
 
-            <div className="sidebar-tree">
+            <SidebarMenu className="sidebar-tree">
               {standaloneTargets.map((target) => (
-                <button
-                  className={`sidebar-node sidebar-node-leaf ${activeTargetId === target.id ? "is-active" : ""}`}
+                <SidebarMenuButton
+                  className="sidebar-node-leaf"
+                  isActive={activeTargetId === target.id}
                   key={target.id}
                   onClick={() => onSelectContainer(target.id)}
                   type="button"
                 >
                   <span className="sidebar-node-copy">
+                    <SquareTerminal size={14} />
                     <span className="sidebar-node-label">{target.label}</span>
                   </span>
-                </button>
+                </SidebarMenuButton>
               ))}
-            </div>
-          </section>
+            </SidebarMenu>
+          </SidebarGroup>
         ) : null}
-      </nav>
-    </aside>
+      </SidebarContent>
+    </Sidebar>
   );
 }

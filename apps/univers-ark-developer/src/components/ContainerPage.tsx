@@ -2,6 +2,7 @@ import { useState, type CSSProperties, type PointerEvent as ReactPointerEvent } 
 import { BrowserPane, type BrowserFrameInstance } from "./BrowserPane";
 import { FilesPane } from "./FilesPane";
 import { TerminalPane } from "./TerminalPane";
+import { Button } from "./ui/button";
 import type { ContainerToolPanel } from "../lib/view-types";
 import type { DeveloperSurface, DeveloperTarget } from "../types";
 
@@ -50,16 +51,17 @@ export function ContainerPage({
       <header className="content-header content-header-container">
         <div className="content-header-copy">
           <div className="content-title-row">
-            <button
+            <Button
               aria-label={
                 isTerminalCollapsed ? "Show terminal pane" : "Hide terminal pane"
               }
-              className="panel-button panel-button-icon panel-button-toolbar content-title-toggle"
+              className="content-title-toggle"
               onClick={onToggleTerminalCollapsed}
+              size="icon"
               title={
                 isTerminalCollapsed ? "Show terminal pane" : "Hide terminal pane"
               }
-              type="button"
+              variant="ghost"
             >
               <svg
                 aria-hidden="true"
@@ -101,49 +103,51 @@ export function ContainerPage({
                   </>
                 )}
               </svg>
-            </button>
+            </Button>
             <h1 className="content-title content-title-container">{target.label}</h1>
           </div>
         </div>
 
         <div className="content-header-tools content-header-tools-container">
-          <button
-            className={`panel-button panel-button-toolbar ${activeTool === "files" ? "is-active" : ""}`}
+          <Button
+            isActive={activeTool === "files"}
             onClick={() => {
               onSelectTool("files");
             }}
-            type="button"
+            size="sm"
+            variant={activeTool === "files" ? "default" : "outline"}
           >
             Files
-          </button>
-          <button
-            className={`panel-button panel-button-toolbar ${activeTool === developmentPanel ? "is-active" : ""}`}
+          </Button>
+          <Button
             disabled={!developmentSurface}
+            isActive={activeTool === developmentPanel}
             onClick={() => {
               if (developmentPanel) {
                 onSelectTool(developmentPanel);
               }
             }}
-            type="button"
+            size="sm"
+            variant={activeTool === developmentPanel ? "default" : "outline"}
           >
             Dev
-          </button>
-          <button
-            className={`panel-button panel-button-toolbar ${activeTool === previewPanel ? "is-active" : ""}`}
+          </Button>
+          <Button
             disabled={!previewSurface}
+            isActive={activeTool === previewPanel}
             onClick={() => {
               if (previewPanel) {
                 onSelectTool(previewPanel);
               }
             }}
-            type="button"
+            size="sm"
+            variant={activeTool === previewPanel ? "default" : "outline"}
           >
             Pre
-          </button>
+          </Button>
 
           {onRestartContainer ? (
-            <button
-              className="panel-button panel-button-toolbar panel-button-icon"
+            <Button
               disabled={isRestarting}
               onClick={() => {
                 setIsRestarting(true);
@@ -153,8 +157,9 @@ export function ContainerPage({
                     setIsRestarting(false);
                   });
               }}
+              size="icon"
               title={isRestarting ? "Restarting container…" : "Restart container"}
-              type="button"
+              variant="ghost"
             >
               <svg
                 aria-hidden="true"
@@ -177,7 +182,7 @@ export function ContainerPage({
                   strokeWidth="1.25"
                 />
               </svg>
-            </button>
+            </Button>
           ) : null}
         </div>
       </header>

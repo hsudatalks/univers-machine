@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { releaseBrowserFrames, syncBrowserFrames } from "../lib/browser-cache";
 import { openExternalLink } from "../lib/tauri";
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
 import type {
   DeveloperSurface,
   DeveloperTarget,
@@ -98,42 +100,41 @@ export function BrowserPane({
               title={tunnelStatusLabel}
             />
           ) : (
-            <span
-              className={`terminal-status status-${activeFrame?.status.state ?? "stopped"}`}
-            >
+            <Badge variant={activeFrame?.status.state === "error" || activeFrame?.status.state === "stopped" ? "destructive" : activeFrame?.status.state === "starting" ? "warning" : "success"}>
               {tunnelStatusLabel}
-            </span>
+            </Badge>
           )}
-          <button
-            className="panel-button"
+          <Button
             disabled={!activeFrame?.surface.tunnelCommand}
             onClick={onRestart}
-            type="button"
+            size="sm"
+            variant="outline"
           >
             Restart Tunnel
-          </button>
-          <button
-            className="panel-button"
+          </Button>
+          <Button
             disabled={!activeFrame}
             onClick={onReload}
-            type="button"
+            size="sm"
+            variant="outline"
           >
             Reload
-          </button>
+          </Button>
           {activeFrame ? (
-            <button
-              className="panel-button panel-link"
+            <Button
+              className="panel-link"
               onClick={() => {
                 void openExternalLink(activeFrame.surface.localUrl);
               }}
-              type="button"
+              size="sm"
+              variant="outline"
             >
               Open
-            </button>
+            </Button>
           ) : (
-            <button className="panel-button" disabled type="button">
+            <Button disabled size="sm" variant="outline">
               Open
-            </button>
+            </Button>
           )}
         </div>
       </header>

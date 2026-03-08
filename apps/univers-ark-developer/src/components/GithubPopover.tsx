@@ -5,6 +5,9 @@ import { openExternalLink } from "../lib/tauri";
 import { useGithubProjectState } from "../hooks/useGithubProjectState";
 import { useGithubPullRequestDetail } from "../hooks/useGithubPullRequestDetail";
 import type { GithubMergeMethod, GithubPullRequestSummary } from "../types";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 
 type PullRequestListFilter = "all" | "mine" | "open" | "closed" | "merged";
 
@@ -56,14 +59,29 @@ function statusTone(status: string): string {
 }
 
 function PullRequestStatusBadges({ pr }: { pr: GithubPullRequestSummary }) {
+  const stateVariant =
+    statusTone(pr.state) === "danger"
+      ? "destructive"
+      : statusTone(pr.state) === "warning"
+        ? "warning"
+        : statusTone(pr.state) === "success"
+          ? "success"
+          : "neutral";
+  const reviewVariant =
+    pr.reviewDecision && statusTone(pr.reviewDecision) === "danger"
+      ? "destructive"
+      : pr.reviewDecision && statusTone(pr.reviewDecision) === "warning"
+        ? "warning"
+        : pr.reviewDecision && statusTone(pr.reviewDecision) === "success"
+          ? "success"
+          : "neutral";
+
   return (
     <span className="github-badge-row">
-      <span className={`github-badge github-badge-${statusTone(pr.state)}`}>{pr.state}</span>
-      {pr.isDraft ? <span className="github-badge github-badge-neutral">DRAFT</span> : null}
+      <Badge variant={stateVariant}>{pr.state}</Badge>
+      {pr.isDraft ? <Badge variant="neutral">DRAFT</Badge> : null}
       {pr.reviewDecision ? (
-        <span className={`github-badge github-badge-${statusTone(pr.reviewDecision)}`}>
-          {pr.reviewDecision}
-        </span>
+        <Badge variant={reviewVariant}>{pr.reviewDecision}</Badge>
       ) : null}
     </span>
   );
@@ -424,13 +442,14 @@ export function GithubPopover() {
 
   return (
     <div className="github-popover-root" ref={rootRef}>
-      <button
+      <Button
         aria-expanded={isOpen}
         aria-haspopup="dialog"
-        className={`panel-button panel-button-toolbar panel-button-icon ${isOpen ? "is-active" : ""}`}
+        className={isOpen ? "is-active" : ""}
         onClick={() => setIsOpen((current) => !current)}
+        size="icon"
         title="Manage hvac-workbench pull requests"
-        type="button"
+        variant="ghost"
       >
         <svg
           aria-hidden="true"
@@ -440,7 +459,7 @@ export function GithubPopover() {
         >
           <path d="M8 0C3.58 0 0 3.73 0 8.33c0 3.68 2.29 6.79 5.47 7.89.4.08.55-.18.55-.4 0-.2-.01-.86-.01-1.56-2.01.45-2.53-.51-2.69-.98-.09-.24-.48-.98-.82-1.18-.28-.16-.68-.57-.01-.58.63-.01 1.08.59 1.23.83.72 1.26 1.87.9 2.33.69.07-.54.28-.9.51-1.11-1.78-.21-3.64-.92-3.64-4.08 0-.9.31-1.64.82-2.22-.08-.21-.36-1.05.08-2.19 0 0 .67-.22 2.2.85A7.36 7.36 0 0 1 8 4.9c.68 0 1.37.09 2.01.27 1.53-1.08 2.2-.85 2.2-.85.44 1.14.16 1.98.08 2.19.51.58.82 1.31.82 2.22 0 3.17-1.87 3.87-3.65 4.08.29.26.54.77.54 1.57 0 1.13-.01 2.03-.01 2.31 0 .22.14.49.55.4A8.33 8.33 0 0 0 16 8.33C16 3.73 12.42 0 8 0Z" />
         </svg>
-      </button>
+      </Button>
 
       {isOpen ? (
         <div
@@ -456,14 +475,14 @@ export function GithubPopover() {
               </p>
             </div>
             <div className="content-header-tools">
-              <button
-                className="panel-button panel-button-toolbar"
+              <Button
                 disabled={isRefreshing}
                 onClick={() => void handleRefresh()}
-                type="button"
+                size="sm"
+                variant="outline"
               >
                 {isRefreshing ? "Refreshing…" : "Refresh"}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -486,9 +505,9 @@ export function GithubPopover() {
                       >
                         {projectState.repository.nameWithOwner}
                       </button>
-                      <span className="content-chip">
+                      <Badge variant="neutral">
                         {projectState.repository.defaultBranch}
-                      </span>
+                      </Badge>
                     </div>
                     {projectState.repository.localBranch ? (
                       <p className="github-summary-line">
@@ -520,28 +539,26 @@ export function GithubPopover() {
                   </section>
 
                   <section className="github-section">
-                    <div className="github-filter-bar" role="tablist" aria-label="Pull request lists">
-                      {(
-                        [
-                          ["open", "Open"],
-                          ["mine", "Mine"],
-                          ["closed", "Closed"],
-                          ["merged", "Merged"],
-                          ["all", "All"],
-                        ] as Array<[PullRequestListFilter, string]>
-                      ).map(([value, label]) => (
-                        <button
-                          aria-selected={listFilter === value}
-                          className={`panel-button panel-button-toolbar github-filter-button ${listFilter === value ? "is-active" : ""}`}
-                          key={value}
-                          onClick={() => setListFilter(value)}
-                          role="tab"
-                          type="button"
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
+                    <Tabs
+                      onValueChange={(value) => setListFilter(value as PullRequestListFilter)}
+                      value={listFilter}
+                    >
+                      <TabsList className="github-filter-bar" aria-label="Pull request lists">
+                        {(
+                          [
+                            ["open", "Open"],
+                            ["mine", "Mine"],
+                            ["closed", "Closed"],
+                            ["merged", "Merged"],
+                            ["all", "All"],
+                          ] as Array<[PullRequestListFilter, string]>
+                        ).map(([value, label]) => (
+                          <TabsTrigger className="github-filter-button" key={value} value={value}>
+                            {label}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </Tabs>
                     <label className="github-search-field">
                       <span className="github-search-label">Search</span>
                       <input
@@ -632,57 +649,89 @@ export function GithubPopover() {
                         {formatRelativeTimestamp(detail.updatedAt)}
                       </p>
                       <div className="github-badge-row">
-                        <span className={`github-badge github-badge-${statusTone(detail.state)}`}>
+                        <Badge
+                          variant={
+                            statusTone(detail.state) === "danger"
+                              ? "destructive"
+                              : statusTone(detail.state) === "warning"
+                                ? "warning"
+                                : statusTone(detail.state) === "success"
+                                  ? "success"
+                                  : "neutral"
+                          }
+                        >
                           {detail.state}
-                        </span>
-                        {detail.isDraft ? (
-                          <span className="github-badge github-badge-neutral">DRAFT</span>
-                        ) : null}
-                        <span
-                          className={`github-badge github-badge-${statusTone(detail.mergeStateStatus)}`}
+                        </Badge>
+                        {detail.isDraft ? <Badge variant="neutral">DRAFT</Badge> : null}
+                        <Badge
+                          variant={
+                            statusTone(detail.mergeStateStatus) === "danger"
+                              ? "destructive"
+                              : statusTone(detail.mergeStateStatus) === "warning"
+                                ? "warning"
+                                : statusTone(detail.mergeStateStatus) === "success"
+                                  ? "success"
+                                  : "neutral"
+                          }
                         >
                           {detail.mergeStateStatus}
-                        </span>
-                        <span
-                          className={`github-badge github-badge-${statusTone(detail.mergeable)}`}
+                        </Badge>
+                        <Badge
+                          variant={
+                            statusTone(detail.mergeable) === "danger"
+                              ? "destructive"
+                              : statusTone(detail.mergeable) === "warning"
+                                ? "warning"
+                                : statusTone(detail.mergeable) === "success"
+                                  ? "success"
+                                  : "neutral"
+                          }
                         >
                           {detail.mergeable}
-                        </span>
+                        </Badge>
                         {detail.reviewDecision ? (
-                          <span
-                            className={`github-badge github-badge-${statusTone(detail.reviewDecision)}`}
+                          <Badge
+                            variant={
+                              statusTone(detail.reviewDecision) === "danger"
+                                ? "destructive"
+                                : statusTone(detail.reviewDecision) === "warning"
+                                  ? "warning"
+                                  : statusTone(detail.reviewDecision) === "success"
+                                    ? "success"
+                                    : "neutral"
+                            }
                           >
                             {detail.reviewDecision}
-                          </span>
+                          </Badge>
                         ) : null}
                       </div>
                     </div>
                     <div className="github-detail-actions">
-                      <div className="github-merge-methods" role="tablist" aria-label="Merge method">
-                        {(["merge", "squash", "rebase"] as GithubMergeMethod[]).map((method) => (
-                          <button
-                            key={method}
-                            className={`panel-button panel-button-toolbar ${mergeMethod === method ? "is-active" : ""}`}
-                            disabled={isMerging}
-                            onClick={() => setMergeMethod(method)}
-                            type="button"
-                          >
-                            {method}
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        className={`panel-button panel-button-toolbar ${mergeArmed ? "is-active" : ""}`}
+                      <Tabs
+                        onValueChange={(value) => setMergeMethod(value as GithubMergeMethod)}
+                        value={mergeMethod}
+                      >
+                        <TabsList className="github-merge-methods" aria-label="Merge method">
+                          {(["merge", "squash", "rebase"] as GithubMergeMethod[]).map((method) => (
+                            <TabsTrigger key={method} value={method}>
+                              {method}
+                            </TabsTrigger>
+                          ))}
+                        </TabsList>
+                      </Tabs>
+                      <Button
                         disabled={isMerging || detail.state !== "OPEN"}
+                        isActive={mergeArmed}
                         onClick={() => void handleMerge()}
-                        type="button"
+                        size="sm"
+                        variant={mergeArmed ? "default" : "outline"}
                       >
                         {isMerging
                           ? "Merging…"
                           : mergeArmed
                             ? `Confirm ${mergeMethod} #${detail.number}`
                             : "Merge"}
-                      </button>
+                      </Button>
                     </div>
                   </div>
 
@@ -698,14 +747,14 @@ export function GithubPopover() {
                   </p>
 
                   <div className="github-detail-metrics">
-                    <span className="content-chip">{detail.changedFiles} files</span>
-                    <span className="content-chip">+{detail.additions}</span>
-                    <span className="content-chip">-{detail.deletions}</span>
+                    <Badge variant="neutral">{detail.changedFiles} files</Badge>
+                    <Badge variant="neutral">+{detail.additions}</Badge>
+                    <Badge variant="neutral">-{detail.deletions}</Badge>
                     {checkSummary ? (
                       <>
-                        <span className="content-chip">{checkSummary.passing} pass</span>
-                        <span className="content-chip">{checkSummary.pending} pending</span>
-                        <span className="content-chip">{checkSummary.failing} fail</span>
+                        <Badge variant="success">{checkSummary.passing} pass</Badge>
+                        <Badge variant="warning">{checkSummary.pending} pending</Badge>
+                        <Badge variant="destructive">{checkSummary.failing} fail</Badge>
                       </>
                     ) : null}
                   </div>
@@ -788,11 +837,19 @@ export function GithubPopover() {
                           >
                             <div className="github-review-header">
                               <span className="github-review-author">{check.name}</span>
-                              <span
-                                className={`github-badge github-badge-${statusTone(check.conclusion || check.status)}`}
+                              <Badge
+                                variant={
+                                  statusTone(check.conclusion || check.status) === "danger"
+                                    ? "destructive"
+                                    : statusTone(check.conclusion || check.status) === "warning"
+                                      ? "warning"
+                                      : statusTone(check.conclusion || check.status) === "success"
+                                        ? "success"
+                                        : "neutral"
+                                }
                               >
                                 {check.conclusion || check.status}
-                              </span>
+                              </Badge>
                             </div>
                             {check.workflowName ? (
                               <p className="github-pr-meta">{check.workflowName}</p>
@@ -832,11 +889,19 @@ export function GithubPopover() {
                               <span className="github-review-author">
                                 {review.authorLogin}
                               </span>
-                              <span
-                                className={`github-badge github-badge-${statusTone(review.state)}`}
+                              <Badge
+                                variant={
+                                  statusTone(review.state) === "danger"
+                                    ? "destructive"
+                                    : statusTone(review.state) === "warning"
+                                      ? "warning"
+                                      : statusTone(review.state) === "success"
+                                        ? "success"
+                                        : "neutral"
+                                }
                               >
                                 {review.state}
-                              </span>
+                              </Badge>
                             </div>
                             {review.body ? (
                               <>

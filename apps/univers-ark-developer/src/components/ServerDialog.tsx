@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ManagedServer } from "../types";
 import { loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 type ServerDialogTab = "general" | "connection" | "containers";
 
@@ -114,11 +117,12 @@ export function ServerDialog({ onClose, onSaved, server }: ServerDialogProps) {
             <span className="dialog-title">{server.label}</span>
             <span className="dialog-subtitle">{server.host}</span>
           </div>
-          <button
+          <Button
             aria-label="Close"
-            className="panel-button panel-button-toolbar panel-button-icon dialog-close"
+            className="dialog-close"
             onClick={onClose}
-            type="button"
+            size="icon"
+            variant="ghost"
           >
             <svg
               aria-hidden="true"
@@ -133,63 +137,65 @@ export function ServerDialog({ onClose, onSaved, server }: ServerDialogProps) {
                 strokeWidth="1.4"
               />
             </svg>
-          </button>
+          </Button>
         </header>
 
-        <nav className="dialog-tabs" role="tablist">
-          {(
-            [
-              { id: "general", label: "General" },
-              { id: "connection", label: "Connection" },
-              { id: "containers", label: `Containers (${server.containers.length})` },
-            ] as const
-          ).map((tab) => (
-            <button
-              aria-selected={activeTab === tab.id}
-              className={`dialog-tab ${activeTab === tab.id ? "is-active" : ""}`}
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              role="tab"
-              type="button"
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <Tabs
+          onValueChange={(value) => setActiveTab(value as ServerDialogTab)}
+          value={activeTab}
+        >
+          <TabsList className="dialog-tabs" aria-label="Server settings sections">
+            {(
+              [
+                { id: "general", label: "General" },
+                { id: "connection", label: "Connection" },
+                { id: "containers", label: `Containers (${server.containers.length})` },
+              ] as const
+            ).map((tab) => (
+              <TabsTrigger className="dialog-tab" key={tab.id} value={tab.id}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-        <div className="dialog-body">
-          {isLoading ? (
-            <p className="dialog-empty">Loading configuration…</p>
-          ) : !form ? (
-            <p className="dialog-empty">Could not load server configuration.</p>
-          ) : activeTab === "general" ? (
-            <GeneralTab form={form} onUpdate={updateField} />
-          ) : activeTab === "connection" ? (
-            <ConnectionTab form={form} onUpdate={updateField} />
-          ) : (
-            <ContainersTab server={server} />
-          )}
+          <div className="dialog-body">
+            {isLoading ? (
+              <p className="dialog-empty">Loading configuration…</p>
+            ) : !form ? (
+              <p className="dialog-empty">Could not load server configuration.</p>
+            ) : (
+              <>
+                <TabsContent value="general">
+                  <GeneralTab form={form} onUpdate={updateField} />
+                </TabsContent>
+                <TabsContent value="connection">
+                  <ConnectionTab form={form} onUpdate={updateField} />
+                </TabsContent>
+                <TabsContent value="containers">
+                  <ContainersTab server={server} />
+                </TabsContent>
+              </>
+            )}
 
-          {error ? <p className="dialog-error">{error}</p> : null}
-          {saveMessage ? <p className="dialog-success">{saveMessage}</p> : null}
-        </div>
+            {error ? <p className="dialog-error">{error}</p> : null}
+            {saveMessage ? <p className="dialog-success">{saveMessage}</p> : null}
+          </div>
+        </Tabs>
 
         <footer className="dialog-footer">
-          <button
-            className="panel-button panel-button-toolbar"
+          <Button
             disabled={!hasChanges || isSaving || isLoading}
             onClick={() => void handleSave()}
-            type="button"
+            variant={hasChanges ? "default" : "outline"}
           >
             {isSaving ? "Saving…" : "Save"}
-          </button>
-          <button
-            className="panel-button panel-button-toolbar"
+          </Button>
+          <Button
             onClick={onClose}
-            type="button"
+            variant="outline"
           >
             {hasChanges ? "Cancel" : "Close"}
-          </button>
+          </Button>
         </footer>
       </div>
     </div>
@@ -287,19 +293,19 @@ function ContainersTab({ server }: { server: ManagedServer }) {
             <tr key={container.name}>
               <td className="dialog-table-mono">{container.label}</td>
               <td>
-                <span
-                  className={`dialog-badge dialog-badge-${container.status.toLowerCase()}`}
+                <Badge
+                  variant={container.status === "RUNNING" ? "success" : "warning"}
                 >
                   {container.status}
-                </span>
+                </Badge>
               </td>
               <td className="dialog-table-mono">{container.ipv4 || "—"}</td>
               <td>
-                <span
-                  className={`dialog-badge dialog-badge-${container.sshReachable ? "ready" : "unreachable"}`}
+                <Badge
+                  variant={container.sshReachable ? "success" : "destructive"}
                 >
                   {container.sshState}
-                </span>
+                </Badge>
               </td>
             </tr>
           ))}

@@ -2,6 +2,7 @@ import type { DeveloperTarget } from "../types";
 import { FilesEditor } from "./FilesEditor";
 import { FilesTree } from "./FilesTree";
 import { useFilesPaneState } from "../hooks/useFilesPaneState";
+import { Button } from "./ui/button";
 
 interface FilesPaneProps {
   active: boolean;
@@ -37,22 +38,22 @@ export function FilesPane({ active, target }: FilesPaneProps) {
         </div>
 
         <div className="tool-panel-actions">
-          <button
-            className="panel-button panel-button-toolbar"
+          <Button
             disabled={!rootParentPath || loadingPaths.size > 0}
             onClick={navigateUp}
-            type="button"
+            size="sm"
+            variant="outline"
           >
             Up
-          </button>
-          <button
-            className="panel-button panel-button-toolbar"
+          </Button>
+          <Button
             disabled={loadingPaths.size > 0}
             onClick={refresh}
-            type="button"
+            size="sm"
+            variant="outline"
           >
             Refresh
-          </button>
+          </Button>
         </div>
       </header>
 
