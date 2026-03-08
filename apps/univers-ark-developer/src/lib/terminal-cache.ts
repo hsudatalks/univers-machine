@@ -35,6 +35,40 @@ const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = new RegExp(
 );
 const terminalSessions = new Map<string, CachedTerminalSession>();
 
+function copyTextToClipboard(text: string) {
+  // Try the modern API first, then fall back to execCommand
+  if (navigator.clipboard?.writeText) {
+    void navigator.clipboard.writeText(text).catch(() => {
+      execCommandCopy(text);
+    });
+  } else {
+    execCommandCopy(text);
+  }
+}
+
+function execCommandCopy(text: string) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
+async function readTextFromClipboard(): Promise<string> {
+  try {
+    if (navigator.clipboard?.readText) {
+      return await navigator.clipboard.readText();
+    }
+  } catch {
+    // Fall through
+  }
+  return "";
+}
+
 let parkingLotElement: HTMLDivElement | null = null;
 
 function ensureParkingLotElement(): HTMLDivElement {
@@ -205,21 +239,18 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
   terminal.onSelectionChange(() => {
     const selection = terminal.getSelection();
     if (selection) {
-      void navigator.clipboard.writeText(selection).catch(() => undefined);
+      copyTextToClipboard(selection);
     }
   });
 
   // Right-click paste from clipboard
   hostElement.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-    void navigator.clipboard
-      .readText()
-      .then((text) => {
-        if (text && session.readyForInput) {
-          void writeTerminal(targetId, text).catch(() => undefined);
-        }
-      })
-      .catch(() => undefined);
+    void readTextFromClipboard().then((text) => {
+      if (text && session.readyForInput) {
+        void writeTerminal(targetId, text).catch(() => undefined);
+      }
+    });
   });
 
   terminal.onData((data) => {
