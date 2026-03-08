@@ -66,6 +66,29 @@
   font-size: calc(0.9rem * var(--terminal-card-scale));
 }
 
+.panel-button-retry {
+  margin-top: 0.75rem;
+  padding: 0.35rem 1rem;
+  border: 1px solid rgba(242, 107, 86, 0.32);
+  border-radius: 0.35rem;
+  background: rgba(242, 107, 86, 0.1);
+  color: #f1c1bb;
+  font-size: 0.76rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.panel-button-retry:hover:not(:disabled) {
+  background: rgba(242, 107, 86, 0.2);
+  border-color: rgba(242, 107, 86, 0.5);
+}
+
+.panel-button-retry:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .terminal-placeholder-body-quiet {
   background:
     linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(2, 8, 23, 0.98));

@@ -131,7 +131,7 @@ function App() {
   const [activeView, setActiveView] = useState<ActiveView>({ kind: "overview" });
   const [visitedContainerIds, setVisitedContainerIds] = useState<string[]>([]);
   const [visitedServerIds, setVisitedServerIds] = useState<string[]>([]);
-  const { bootstrap, error, expandedServerIds, setExpandedServerIds } =
+  const { bootstrap, error, expandedServerIds, isRefreshing, refreshInventory, setExpandedServerIds } =
     useWorkbenchBootstrap();
   const { isSidebarHidden, setIsSidebarHidden } = useSidebarState();
   const { overviewZoom, setOverviewZoom, clampOverviewZoom, roundOverviewZoom } =
@@ -268,6 +268,8 @@ function App() {
               activeFocusedTargetId={activeOverviewFocusedTargetId}
               onFocusTarget={setOverviewFocusedTargetId}
               onOpenWorkspace={setContainerView}
+              onRefreshInventory={refreshInventory}
+              isRefreshing={isRefreshing}
               onResetZoom={() => {
                 setOverviewZoom(OVERVIEW_ZOOM_DEFAULT);
               }}

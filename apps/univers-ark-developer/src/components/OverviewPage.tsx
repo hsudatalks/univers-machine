@@ -10,8 +10,10 @@ interface OverviewEntry {
 
 interface OverviewPageProps {
   activeFocusedTargetId: string;
+  isRefreshing: boolean;
   onFocusTarget: (targetId: string) => void;
   onOpenWorkspace: (targetId: string) => void;
+  onRefreshInventory: () => void;
   onResetZoom: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -27,7 +29,15 @@ interface OverviewPageProps {
   standaloneTargets: DeveloperTarget[];
 }
 
-function UnavailableTerminalCard({ container }: { container: ManagedContainer }) {
+function UnavailableTerminalCard({
+  container,
+  isRefreshing,
+  onRetry,
+}: {
+  container: ManagedContainer;
+  isRefreshing: boolean;
+  onRetry: () => void;
+}) {
   return (
     <article className="panel terminal-card terminal-card-unavailable">
       <header className="panel-header terminal-placeholder-header">
@@ -42,6 +52,14 @@ function UnavailableTerminalCard({ container }: { container: ManagedContainer })
 
       <div className="terminal-placeholder-body">
         <p className="terminal-placeholder-copy">{container.sshMessage}</p>
+        <button
+          className="panel-button panel-button-retry"
+          disabled={isRefreshing}
+          onClick={onRetry}
+          type="button"
+        >
+          {isRefreshing ? "Retrying…" : "Retry"}
+        </button>
       </div>
     </article>
   );
@@ -49,8 +67,10 @@ function UnavailableTerminalCard({ container }: { container: ManagedContainer })
 
 export function OverviewPage({
   activeFocusedTargetId,
+  isRefreshing,
   onFocusTarget,
   onOpenWorkspace,
+  onRefreshInventory,
   onResetZoom,
   onZoomIn,
   onZoomOut,
@@ -141,7 +161,12 @@ export function OverviewPage({
                 title={container.label}
               />
             ) : (
-              <UnavailableTerminalCard container={container} key={container.targetId} />
+              <UnavailableTerminalCard
+                container={container}
+                isRefreshing={isRefreshing}
+                key={container.targetId}
+                onRetry={onRefreshInventory}
+              />
             ),
           )}
 
