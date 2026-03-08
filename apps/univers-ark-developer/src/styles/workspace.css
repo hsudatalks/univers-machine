@@ -9,14 +9,21 @@
 
 .container-workspace {
   --container-terminal-width: 30rem;
+  --container-terminal-min-width: 30rem;
   min-height: 0;
   display: grid;
   grid-template-columns:
-    minmax(30rem, var(--container-terminal-width))
+    minmax(var(--container-terminal-min-width), var(--container-terminal-width))
     0.4rem
     minmax(0, 1fr);
   gap: 0;
   overflow: hidden;
+}
+
+.shell-sidebar-hidden .container-workspace {
+  --container-terminal-min-width: 18rem;
+  width: 100%;
+  max-width: 100%;
 }
 
 .container-workspace.is-terminal-collapsed {
@@ -103,10 +110,11 @@
 
 @media (max-width: 1360px) {
   .container-workspace {
-    grid-template-columns:
-      minmax(22rem, var(--container-terminal-width))
-      0.4rem
-      minmax(0, 1fr);
+    --container-terminal-min-width: 22rem;
+  }
+
+  .shell-sidebar-hidden .container-workspace {
+    --container-terminal-min-width: 16rem;
   }
 }
 

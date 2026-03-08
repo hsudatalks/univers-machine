@@ -4,6 +4,16 @@
   min-height: 30rem;
 }
 
+.shell-sidebar-hidden .terminal-panel {
+  min-width: 18rem;
+}
+
+@media (max-width: 1360px) {
+  .shell-sidebar-hidden .terminal-panel {
+    min-width: 16rem;
+  }
+}
+
 .terminal-card {
   --terminal-card-scale: 1;
   min-height: 30rem;
@@ -309,6 +319,10 @@
 }
 
 @media (max-width: 960px) {
+  .shell-sidebar-hidden .terminal-panel {
+    min-width: 0;
+  }
+
   .terminal-meta {
     width: 100%;
     justify-content: flex-start;

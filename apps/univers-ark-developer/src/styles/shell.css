@@ -9,6 +9,10 @@
   color: var(--text-1);
 }
 
+.shell-sidebar-hidden {
+  padding-inline: 0;
+}
+
 .shell-overview {
   overflow: hidden;
 }
@@ -28,8 +32,17 @@
 }
 
 .shell-layout-sidebar-hidden {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.shell-layout-sidebar-hidden > .content-shell {
+  display: grid;
+  width: 100%;
+  max-width: 100%;
+  min-height: 100%;
+  height: 100%;
 }
 
 .status-bar {
@@ -44,6 +57,10 @@
   border-radius: 0;
   background: color-mix(in srgb, var(--muted) 62%, var(--card));
   box-shadow: none;
+}
+
+.shell-sidebar-hidden .status-bar {
+  margin-inline: 0;
 }
 
 .status-bar-section {
@@ -183,6 +200,8 @@
 }
 
 .content-shell-overview {
+  width: 100%;
+  min-width: 0;
   align-self: stretch;
   overflow: hidden;
   margin-right: -1rem;
@@ -201,6 +220,39 @@
   border-radius: 0;
 }
 
+.shell-sidebar-hidden .content-shell {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  border-inline: 0;
+  border-radius: 0;
+}
+
+.shell-sidebar-hidden .content-shell-container,
+.shell-sidebar-hidden .content-shell-overview {
+  margin-inline: 0;
+}
+
+.shell-sidebar-hidden .content-page,
+.shell-sidebar-hidden .page-section {
+  min-width: 0;
+}
+
+.shell-sidebar-hidden .content-shell-overview {
+  display: block;
+  inline-size: 100%;
+  min-height: 100%;
+  height: 100%;
+}
+
+.shell-sidebar-hidden .content-page-overview,
+.shell-sidebar-hidden .content-page-overview .page-section {
+  display: block;
+  inline-size: 100%;
+  min-height: 100%;
+  height: 100%;
+}
+
 .content-page {
   min-height: 0;
   display: grid;
@@ -210,6 +262,8 @@
 }
 
 .content-page-overview {
+  width: 100%;
+  min-width: 0;
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
@@ -412,6 +466,8 @@
 }
 
 .page-section {
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
