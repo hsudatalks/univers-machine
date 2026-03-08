@@ -109,7 +109,7 @@ export function ContainerPage({
             <FilesPane active={pageVisible} target={target} />
           ) : null}
 
-          {isBrowserToolPanel(activeTool) && pageVisible ? (
+          {isBrowserToolPanel(activeTool) ? (
             <BrowserPane
               activeFrame={browserFrame}
               onReload={onReloadBrowser}

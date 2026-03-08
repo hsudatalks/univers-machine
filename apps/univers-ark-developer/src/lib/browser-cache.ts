@@ -10,11 +10,13 @@ interface CachedBrowserFrame {
   cacheKey: string;
   frameVersion: number;
   iframe: HTMLIFrameElement;
+  lastAccessedAt: number;
   ownerId: symbol | null;
   src: string;
 }
 
 const browserFrames = new Map<string, CachedBrowserFrame>();
+const HOT_BROWSER_FRAME_LIMIT = 20;
 
 let parkingLotElement: HTMLDivElement | null = null;
 
@@ -43,6 +45,7 @@ function applyFrameDescriptor(
 ) {
   frame.iframe.className = `browser-frame ${descriptor.isActive ? "is-active" : ""}`;
   frame.iframe.title = descriptor.title;
+  frame.lastAccessedAt = Date.now();
 
   if (frame.src !== descriptor.src || frame.frameVersion !== descriptor.frameVersion) {
     frame.iframe.src = descriptor.src;
@@ -69,6 +72,7 @@ function cachedBrowserFrame(
     cacheKey: descriptor.cacheKey,
     frameVersion: descriptor.frameVersion,
     iframe,
+    lastAccessedAt: Date.now(),
     ownerId: null,
     src: "",
   };
@@ -102,6 +106,8 @@ export function syncBrowserFrames(
       stageElement.append(frame.iframe);
     }
   }
+
+  pruneBrowserFramesToLimit(HOT_BROWSER_FRAME_LIMIT);
 }
 
 export function releaseBrowserFrames(ownerId: symbol) {
@@ -125,5 +131,27 @@ export function pruneBrowserFrames(retainedKeys: string[]) {
 
     frame.iframe.remove();
     browserFrames.delete(cacheKey);
+  }
+}
+
+function pruneBrowserFramesToLimit(limit: number) {
+  if (browserFrames.size <= limit) {
+    return;
+  }
+
+  const pruneCandidates = [...browserFrames.values()]
+    .filter((frame) => frame.ownerId === null)
+    .sort((left, right) => left.lastAccessedAt - right.lastAccessedAt);
+
+  let overflowCount = browserFrames.size - limit;
+
+  for (const frame of pruneCandidates) {
+    if (overflowCount <= 0) {
+      break;
+    }
+
+    frame.iframe.remove();
+    browserFrames.delete(frame.cacheKey);
+    overflowCount -= 1;
   }
 }
