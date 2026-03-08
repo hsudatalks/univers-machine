@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod constants;
 mod files;
+mod github;
 mod models;
 mod proxy;
 mod runtime;

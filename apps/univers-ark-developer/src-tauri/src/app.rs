@@ -180,6 +180,10 @@ pub(crate) fn run() {
             commands::restart_tunnel,
             commands::list_remote_directory,
             commands::read_remote_file_preview,
+            commands::load_github_project_state,
+            commands::load_github_pull_request_detail,
+            commands::merge_github_pull_request,
+            commands::open_external_link,
             commands::write_terminal,
             commands::resize_terminal
         ])

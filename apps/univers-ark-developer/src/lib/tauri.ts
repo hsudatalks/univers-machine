@@ -4,6 +4,9 @@ import type {
   AppBootstrap,
   DeveloperSurface,
   DeveloperTarget,
+  GithubMergeMethod,
+  GithubPullRequestDetail,
+  GithubProjectState,
   ManagedServer,
   RemoteDirectoryListing,
   RemoteFilePreview,
@@ -471,4 +474,42 @@ export async function readRemoteFilePreview(
   }
 
   return invoke<RemoteFilePreview>("read_remote_file_preview", { path, targetId });
+}
+
+export async function loadGithubProjectState(): Promise<GithubProjectState> {
+  if (!isTauri()) {
+    throw new Error("GitHub project state requires the Tauri backend.");
+  }
+
+  return invoke<GithubProjectState>("load_github_project_state");
+}
+
+export async function openExternalLink(url: string): Promise<void> {
+  if (!isTauri()) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  await invoke("open_external_link", { url });
+}
+
+export async function loadGithubPullRequestDetail(
+  number: number,
+): Promise<GithubPullRequestDetail> {
+  if (!isTauri()) {
+    throw new Error("GitHub pull request details require the Tauri backend.");
+  }
+
+  return invoke<GithubPullRequestDetail>("load_github_pull_request_detail", { number });
+}
+
+export async function mergeGithubPullRequest(
+  number: number,
+  method: GithubMergeMethod,
+): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("GitHub pull request merge requires the Tauri backend.");
+  }
+
+  await invoke("merge_github_pull_request", { method, number });
 }

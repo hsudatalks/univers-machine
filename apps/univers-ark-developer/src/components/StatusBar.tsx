@@ -1,3 +1,5 @@
+import { GithubPopover } from "./GithubPopover";
+
 type StatusBarProps = {
   activeStatusLabel: string;
   containerCount: number;
@@ -73,6 +75,7 @@ export function StatusBar({
             Overview zoom {Math.round(overviewZoom * 100)}%
           </span>
         ) : null}
+        <GithubPopover />
       </div>
     </footer>
   );
