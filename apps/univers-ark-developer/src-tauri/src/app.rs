@@ -151,7 +151,7 @@ pub(crate) fn run() {
             }
         })
         .setup(|_| {
-            match cleanup_stale_ssh_tunnels() {
+            std::thread::spawn(|| match cleanup_stale_ssh_tunnels() {
                 Ok(cleaned) if cleaned > 0 => {
                     eprintln!(
                         "Reaped {} stale managed SSH tunnel process(es) before startup.",
@@ -162,7 +162,7 @@ pub(crate) fn run() {
                 Err(error) => {
                     eprintln!("Failed to reap stale managed SSH tunnels: {}", error);
                 }
-            }
+            });
 
             Ok(())
         })
