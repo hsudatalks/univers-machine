@@ -265,6 +265,51 @@ pub(crate) fn run_target_shell_command(
     run_target_shell_command_internal(target_id, remote_command)
 }
 
+pub(crate) fn restart_container(server_id: &str, container_name: &str) -> Result<(), String> {
+    let raw_targets_file = read_raw_targets_file()?;
+    let server = raw_targets_file
+        .remote_servers
+        .iter()
+        .find(|server| server.id == server_id)
+        .ok_or_else(|| format!("Unknown remote server: {}", server_id))?;
+
+    let is_orbstack = server.discovery_command.contains("orb");
+
+    let restart_command = if is_orbstack {
+        format!("ssh {} 'orb restart {}'", server.host, container_name)
+    } else {
+        format!(
+            "ssh {} 'lxc restart {} --force'",
+            server.host, container_name
+        )
+    };
+
+    let output = crate::shell::shell_command(&restart_command)
+        .output()
+        .map_err(|error| {
+            format!(
+                "Failed to restart container {} on {}: {}",
+                container_name, server.host, error
+            )
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!(
+                "Failed to restart container {} on {}: exit code {}",
+                container_name,
+                server.host,
+                output.status
+            )
+        } else {
+            stderr
+        });
+    }
+
+    Ok(())
+}
+
 pub(crate) fn read_bootstrap_data(
     force_refresh: bool,
 ) -> Result<(TargetsFile, Vec<ManagedServer>), String> {

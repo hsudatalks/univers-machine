@@ -1,4 +1,4 @@
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import { useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { BrowserPane, type BrowserFrameInstance } from "./BrowserPane";
 import { FilesPane } from "./FilesPane";
 import { TerminalPane } from "./TerminalPane";
@@ -14,6 +14,7 @@ interface ContainerPageProps {
   isTerminalCollapsed: boolean;
   onReloadBrowser: () => void;
   onRestartBrowser: () => void;
+  onRestartContainer?: () => Promise<void>;
   onSelectTool: (panel: ContainerToolPanel) => void;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleTerminalCollapsed: () => void;
@@ -39,6 +40,7 @@ export function ContainerPage({
   isTerminalCollapsed,
   onReloadBrowser,
   onRestartBrowser,
+  onRestartContainer,
   onSelectTool,
   onStartResize,
   onToggleTerminalCollapsed,
@@ -48,6 +50,7 @@ export function ContainerPage({
   target,
   workspaceStyle,
 }: ContainerPageProps) {
+  const [isRestarting, setIsRestarting] = useState(false);
   return (
     <>
       <header className="content-header content-header-container">
@@ -143,6 +146,45 @@ export function ContainerPage({
           >
             Pre
           </button>
+
+          {onRestartContainer ? (
+            <button
+              className="panel-button panel-button-toolbar panel-button-icon"
+              disabled={isRestarting}
+              onClick={() => {
+                setIsRestarting(true);
+                onRestartContainer()
+                  .catch(() => {})
+                  .finally(() => {
+                    setIsRestarting(false);
+                  });
+              }}
+              title={isRestarting ? "Restarting container…" : "Restart container"}
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                className={`panel-button-icon-svg ${isRestarting ? "is-spinning" : ""}`}
+                fill="none"
+                viewBox="0 0 16 16"
+              >
+                <path
+                  d="M13.25 8A5.25 5.25 0 1 1 11.7 4.29"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.25"
+                />
+                <path
+                  d="M10.75 2.75h2.5v2.5"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.25"
+                />
+              </svg>
+            </button>
+          ) : null}
         </div>
       </header>
 

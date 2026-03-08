@@ -319,6 +319,20 @@ export async function refreshServerInventory(): Promise<ManagedServer[]> {
   return invoke<ManagedServer[]>("refresh_server_inventory");
 }
 
+export async function restartContainer(
+  serverId: string,
+  containerName: string,
+): Promise<void> {
+  if (!isTauri()) {
+    return;
+  }
+
+  return invoke<void>("restart_container", {
+    serverId,
+    containerName,
+  });
+}
+
 export async function attachTerminal(
   targetId: string,
 ): Promise<TerminalSnapshot> {

@@ -1,5 +1,8 @@
 use crate::{
-    config::{read_bootstrap_data, read_server_inventory, resolve_raw_target, targets_file_path},
+    config::{
+        read_bootstrap_data, read_server_inventory, resolve_raw_target,
+        restart_container as restart_remote_container, targets_file_path,
+    },
     files::{
         list_remote_directory as load_remote_directory,
         read_remote_file_preview as load_remote_file_preview,
@@ -268,6 +271,16 @@ pub(crate) async fn load_github_pull_request_detail(
 #[tauri::command]
 pub(crate) async fn merge_github_pull_request(number: u64, method: String) -> Result<(), String> {
     async_runtime::spawn_blocking(move || execute_github_pull_request_merge(number, &method))
+        .await
+        .map_err(|error| format!("Failed to join pull request merge task: {}", error))?
+}
+
+#[tauri::command]
+pub(crate) async fn restart_container(
+    server_id: String,
+    container_name: String,
+) -> Result<(), String> {
+    async_runtime::spawn_blocking(move || restart_remote_container(&server_id, &container_name))
         .await
         .map_err(|error| format!("Failed to join pull request merge task: {}", error))?
 }

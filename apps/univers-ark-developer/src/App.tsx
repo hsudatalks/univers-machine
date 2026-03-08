@@ -6,6 +6,7 @@ import { ShellState } from "./components/ShellState";
 import { ServerPage } from "./components/ServerPage";
 import { SidebarNav } from "./components/SidebarNav";
 import { StatusBar } from "./components/StatusBar";
+import { restartContainer } from "./lib/tauri";
 import "./App.css";
 import { useContainerWorkspace } from "./hooks/useContainerWorkspace";
 import { useOverviewNavigation } from "./hooks/useOverviewNavigation";
@@ -378,6 +379,14 @@ function App() {
                         restartBrowserTunnel(target.id, browserSurface.id);
                       }
                     }}
+                    onRestartContainer={
+                      target.id.includes("::")
+                        ? async () => {
+                            const [serverId, containerName] = target.id.split("::", 2);
+                            await restartContainer(serverId, containerName);
+                          }
+                        : undefined
+                    }
                     onSelectTool={(panel) => {
                       selectContainerTool(target, panel);
                     }}

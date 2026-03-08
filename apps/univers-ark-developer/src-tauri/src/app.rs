@@ -185,7 +185,8 @@ pub(crate) fn run() {
             commands::merge_github_pull_request,
             commands::open_external_link,
             commands::write_terminal,
-            commands::resize_terminal
+            commands::resize_terminal,
+            commands::restart_container
         ])
         .build(tauri::generate_context!())
         .expect("error while building univers-ark-developer")

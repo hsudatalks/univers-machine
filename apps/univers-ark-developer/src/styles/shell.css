@@ -398,6 +398,15 @@
   height: 0.82rem;
 }
 
+.panel-button-icon-svg.is-spinning {
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 @media (max-width: 1360px) {
   .shell-layout {
     grid-template-columns: minmax(14rem, 15.5rem) minmax(0, 1fr);
