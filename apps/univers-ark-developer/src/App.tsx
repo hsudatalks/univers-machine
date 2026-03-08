@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import type { BrowserFrameInstance } from "./components/BrowserPane";
 import { ContainerPage } from "./components/ContainerPage";
 import { OverviewPage } from "./components/OverviewPage";
+import { SettingsPage } from "./components/SettingsPage";
 import { ShellState } from "./components/ShellState";
 import { ServerPage } from "./components/ServerPage";
 import { SidebarNav } from "./components/SidebarNav";
@@ -218,13 +219,15 @@ function App() {
     return <ShellState label="Loading" message="Preparing target definitions." />;
   }
 
-  const isOverviewView = activeView.kind === "overview";
+  const isOverviewView = activeView.kind === "overview" || activeView.kind === "settings";
   const activeStatusLabel =
     activeView.kind === "overview"
       ? "Overview"
-      : activeView.kind === "server"
-        ? `Server ${visitedServers.find((server) => server.id === activeView.serverId)?.label ?? activeView.serverId}`
-        : `Container ${activeContainerTarget?.label ?? activeView.targetId}`;
+      : activeView.kind === "settings"
+        ? "Settings"
+        : activeView.kind === "server"
+          ? `Server ${visitedServers.find((server) => server.id === activeView.serverId)?.label ?? activeView.serverId}`
+          : `Container ${activeContainerTarget?.label ?? activeView.targetId}`;
 
   return (
     <main className={`shell ${isOverviewView ? "shell-overview" : ""}`}>
@@ -298,6 +301,15 @@ function App() {
               registerOverviewCardElement={registerOverviewCardElement}
               serverCount={bootstrap.servers.length}
               standaloneTargets={standaloneTargets}
+            />
+          </section>
+
+          <section
+            className={`content-page content-page-overview ${activeView.kind === "settings" ? "" : "is-hidden"}`}
+          >
+            <SettingsPage
+              configPath={bootstrap.configPath}
+              servers={bootstrap.servers}
             />
           </section>
 
@@ -423,6 +435,9 @@ function App() {
         containerCount={overviewContainers.length}
         isOverviewView={isOverviewView}
         isSidebarHidden={isSidebarHidden}
+        onOpenSettings={() => {
+          setActiveView({ kind: "settings" });
+        }}
         onToggleSidebar={() => {
           setIsSidebarHidden((current) => !current);
         }}

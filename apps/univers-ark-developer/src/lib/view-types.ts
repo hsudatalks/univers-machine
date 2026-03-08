@@ -1,5 +1,6 @@
 export type ActiveView =
   | { kind: "overview" }
+  | { kind: "settings" }
   | { kind: "server"; serverId: string }
   | { kind: "container"; targetId: string };
 

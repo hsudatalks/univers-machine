@@ -5,6 +5,7 @@ type StatusBarProps = {
   containerCount: number;
   isOverviewView: boolean;
   isSidebarHidden: boolean;
+  onOpenSettings: () => void;
   onToggleSidebar: () => void;
   overviewZoom: number;
   reachableContainerCount: number;
@@ -16,6 +17,7 @@ export function StatusBar({
   containerCount,
   isOverviewView,
   isSidebarHidden,
+  onOpenSettings,
   onToggleSidebar,
   overviewZoom,
   reachableContainerCount,
@@ -76,6 +78,35 @@ export function StatusBar({
           </span>
         ) : null}
         <GithubPopover />
+        <button
+          aria-label="Settings"
+          className="panel-button panel-button-toolbar panel-button-icon"
+          onClick={onOpenSettings}
+          title="Settings"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            className="panel-button-icon-svg"
+            fill="none"
+            viewBox="0 0 16 16"
+          >
+            <path
+              d="M6.8 1.5h2.4l.3 1.8.8.4 1.6-.9 1.7 1.7-.9 1.6.4.8 1.8.3v2.4l-1.8.3-.4.8.9 1.6-1.7 1.7-1.6-.9-.8.4-.3 1.8H6.8l-.3-1.8-.8-.4-1.6.9-1.7-1.7.9-1.6-.4-.8-1.8-.3V6.8l1.8-.3.4-.8-.9-1.6 1.7-1.7 1.6.9.8-.4z"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.1"
+            />
+            <circle
+              cx="8"
+              cy="8"
+              r="2"
+              stroke="currentColor"
+              strokeWidth="1.1"
+            />
+          </svg>
+        </button>
       </div>
     </footer>
   );
