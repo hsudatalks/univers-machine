@@ -43,6 +43,20 @@ pub(crate) struct TargetsFile {
     pub(crate) targets: Vec<DeveloperTarget>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AppSettings {
+    pub(crate) theme_mode: String,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            theme_mode: String::from("system"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AppBootstrap {

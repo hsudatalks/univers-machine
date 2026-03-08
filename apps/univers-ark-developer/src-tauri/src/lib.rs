@@ -8,6 +8,7 @@ mod github;
 mod models;
 mod proxy;
 mod runtime;
+mod settings;
 mod shell;
 mod terminal;
 mod tunnel;

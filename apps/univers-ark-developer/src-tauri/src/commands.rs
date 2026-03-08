@@ -15,11 +15,12 @@ use crate::{
         open_external_url,
     },
     models::{
-        AppBootstrap, GithubProjectState, GithubPullRequestDetail, ManagedServer,
+        AppBootstrap, AppSettings, GithubProjectState, GithubPullRequestDetail, ManagedServer,
         RemoteDirectoryListing, RemoteFilePreview, TerminalSnapshot, TerminalState, TunnelState,
         TunnelStatus,
     },
     runtime::{read_runtime_targets_file, resolve_runtime_surface, surface_key},
+    settings::{load_app_settings as read_app_settings, save_app_settings as write_app_settings},
     terminal::{snapshot_for, spawn_terminal_session},
     tunnel::{
         active_tunnel_status, direct_tunnel_status, remove_tunnel_session_if_current, start_tunnel,
@@ -376,4 +377,17 @@ pub(crate) fn load_targets_config() -> Result<String, String> {
 #[tauri::command]
 pub(crate) fn update_targets_config(content: String) -> Result<(), String> {
     save_targets_config(&content)
+}
+
+#[tauri::command]
+pub(crate) fn load_app_settings(app_handle: AppHandle) -> Result<AppSettings, String> {
+    read_app_settings(&app_handle)
+}
+
+#[tauri::command]
+pub(crate) fn save_app_settings(
+    app_handle: AppHandle,
+    settings: AppSettings,
+) -> Result<AppSettings, String> {
+    write_app_settings(&app_handle, settings)
 }
