@@ -15,6 +15,15 @@ interface CachedBrowserFrame {
   src: string;
 }
 
+export interface BrowserFrameSnapshot {
+  cacheKey: string;
+  frameVersion: number;
+  hasOwner: boolean;
+  lastAccessedAt: number;
+  src: string;
+  title: string;
+}
+
 const browserFrames = new Map<string, CachedBrowserFrame>();
 const HOT_BROWSER_FRAME_LIMIT = 20;
 
@@ -154,4 +163,17 @@ function pruneBrowserFramesToLimit(limit: number) {
     browserFrames.delete(frame.cacheKey);
     overflowCount -= 1;
   }
+}
+
+export function listBrowserFrameSnapshots(): BrowserFrameSnapshot[] {
+  return [...browserFrames.values()]
+    .map((frame) => ({
+      cacheKey: frame.cacheKey,
+      frameVersion: frame.frameVersion,
+      hasOwner: frame.ownerId !== null,
+      lastAccessedAt: frame.lastAccessedAt,
+      src: frame.src,
+      title: frame.iframe.title,
+    }))
+    .sort((left, right) => right.lastAccessedAt - left.lastAccessedAt);
 }

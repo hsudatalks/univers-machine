@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { BrowserFrameInstance } from "./components/BrowserPane";
 import { ContainerPage } from "./components/ContainerPage";
 import { OverviewPage } from "./components/OverviewPage";
@@ -133,6 +133,7 @@ function App() {
   const [activeView, setActiveView] = useState<ActiveView>({ kind: "overview" });
   const [visitedContainerIds, setVisitedContainerIds] = useState<string[]>([]);
   const [visitedServerIds, setVisitedServerIds] = useState<string[]>([]);
+  const previousNonSettingsViewRef = useRef<ActiveView>({ kind: "overview" });
   const { bootstrap, error, expandedServerIds, isRefreshing, refreshInventory, setExpandedServerIds } =
     useWorkbenchBootstrap();
   const { isSidebarHidden, setIsSidebarHidden } = useSidebarState();
@@ -167,6 +168,12 @@ function App() {
     const initialTarget = resolvePreferredTarget(bootstrap);
     setOverviewFocusedTargetId((current) => current || initialTarget?.id || "");
   }, [bootstrap, setOverviewFocusedTargetId]);
+
+  useEffect(() => {
+    if (activeView.kind !== "settings") {
+      previousNonSettingsViewRef.current = activeView;
+    }
+  }, [activeView]);
 
   const {
     browserFrameVersions,
@@ -311,6 +318,8 @@ function App() {
               configPath={bootstrap.configPath}
               onConfigSaved={refreshInventory}
               servers={bootstrap.servers}
+              targets={bootstrap.targets}
+              tunnelStatuses={tunnelStatuses}
             />
           </section>
 
@@ -437,7 +446,11 @@ function App() {
         isOverviewView={isOverviewView}
         isSidebarHidden={isSidebarHidden}
         onOpenSettings={() => {
-          setActiveView({ kind: "settings" });
+          setActiveView((current) =>
+            current.kind === "settings"
+              ? previousNonSettingsViewRef.current
+              : { kind: "settings" },
+          );
         }}
         onToggleSidebar={() => {
           setIsSidebarHidden((current) => !current);
