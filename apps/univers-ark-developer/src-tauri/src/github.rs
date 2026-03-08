@@ -107,6 +107,10 @@ struct GhStatusCheck {
 }
 
 fn resolve_gh_path() -> String {
+    if cfg!(target_os = "windows") {
+        return String::from("gh");
+    }
+
     for candidate in [
         "/opt/homebrew/bin/gh",
         "/usr/local/bin/gh",
@@ -196,13 +200,17 @@ fn summarize_pr(pr: GhPullRequest) -> GithubPullRequestSummary {
 }
 
 fn hvac_workbench_repo_path() -> Option<PathBuf> {
-    let home = env::var_os("HOME").map(PathBuf::from)?;
+    let home = if cfg!(target_os = "windows") {
+        env::var_os("USERPROFILE").map(PathBuf::from)
+    } else {
+        env::var_os("HOME").map(PathBuf::from)
+    }?;
     let candidate = home.join("repos").join(REPO_NAME);
     candidate.exists().then_some(candidate)
 }
 
 fn local_branch(repo_path: &Path) -> Result<Option<String>, String> {
-    let output = Command::new("/usr/bin/git")
+    let output = Command::new("git")
         .arg("-C")
         .arg(repo_path)
         .arg("branch")
@@ -224,7 +232,7 @@ fn local_branch(repo_path: &Path) -> Result<Option<String>, String> {
 }
 
 fn local_status_summary(repo_path: &Path) -> Result<Option<String>, String> {
-    let output = Command::new("/usr/bin/git")
+    let output = Command::new("git")
         .arg("-C")
         .arg(repo_path)
         .arg("status")
