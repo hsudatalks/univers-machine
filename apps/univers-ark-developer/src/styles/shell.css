@@ -485,6 +485,23 @@
   min-height: 1.85rem;
 }
 
+.settings-option-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.settings-option-button {
+  min-height: 2rem;
+}
+
+.settings-option-button.is-active,
+.settings-tab.is-active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: color-mix(in srgb, var(--primary) 70%, var(--border));
+}
+
 .settings-section {
   display: flex;
   flex-direction: column;

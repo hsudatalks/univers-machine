@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  AppSettings,
   AppBootstrap,
   DeveloperSurface,
   DeveloperTarget,
@@ -90,6 +91,10 @@ const fallbackBootstrapSeed: AppBootstrap = {
 const fallbackBootstrap: AppBootstrap = {
   ...fallbackBootstrapSeed,
   targets: fallbackBootstrapSeed.targets.map(resolveFallbackTarget),
+};
+
+const fallbackAppSettings: AppSettings = {
+  themeMode: "system",
 };
 
 function surfaceKey(targetId: string, surfaceId: string): string {
@@ -301,6 +306,22 @@ export async function refreshBootstrap(): Promise<AppBootstrap> {
   }
 
   return invoke<AppBootstrap>("refresh_bootstrap");
+}
+
+export async function loadAppSettings(): Promise<AppSettings> {
+  if (!isTauri()) {
+    return fallbackAppSettings;
+  }
+
+  return invoke<AppSettings>("load_app_settings");
+}
+
+export async function saveAppSettings(settings: AppSettings): Promise<AppSettings> {
+  if (!isTauri()) {
+    return settings;
+  }
+
+  return invoke<AppSettings>("save_app_settings", { settings });
 }
 
 export async function loadServerInventory(): Promise<ManagedServer[]> {

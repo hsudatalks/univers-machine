@@ -74,6 +74,12 @@ export interface AppBootstrap {
   servers: ManagedServer[];
 }
 
+export type ThemeMode = "system" | "light" | "dark";
+
+export interface AppSettings {
+  themeMode: ThemeMode;
+}
+
 export interface TerminalSnapshot {
   targetId: string;
   output: string;

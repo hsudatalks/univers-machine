@@ -9,6 +9,7 @@ import { SidebarNav } from "./components/SidebarNav";
 import { StatusBar } from "./components/StatusBar";
 import { restartContainer } from "./lib/tauri";
 import "./App.css";
+import { useAppearance } from "./hooks/useAppearance";
 import { useContainerWorkspace } from "./hooks/useContainerWorkspace";
 import { useOverviewNavigation } from "./hooks/useOverviewNavigation";
 import {
@@ -134,6 +135,7 @@ function App() {
   const [visitedContainerIds, setVisitedContainerIds] = useState<string[]>([]);
   const [visitedServerIds, setVisitedServerIds] = useState<string[]>([]);
   const previousNonSettingsViewRef = useRef<ActiveView>({ kind: "overview" });
+  const { appSettings, resolvedTheme, updateThemeMode } = useAppearance();
   const { bootstrap, error, expandedServerIds, isRefreshing, refreshInventory, setExpandedServerIds } =
     useWorkbenchBootstrap();
   const { isSidebarHidden, setIsSidebarHidden } = useSidebarState();
@@ -316,8 +318,11 @@ function App() {
             className={`content-page content-page-overview ${activeView.kind === "settings" ? "" : "is-hidden"}`}
           >
             <SettingsPage
+              appSettings={appSettings}
               configPath={bootstrap.configPath}
+              onAppSettingsChange={updateThemeMode}
               onConfigSaved={refreshInventory}
+              resolvedTheme={resolvedTheme}
               servers={bootstrap.servers}
               targets={bootstrap.targets}
               tunnelStatuses={tunnelStatuses}

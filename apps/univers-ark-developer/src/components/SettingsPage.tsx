@@ -1,14 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { listBrowserFrameSnapshots } from "../lib/browser-cache";
 import { restartTunnel } from "../lib/tauri";
-import type { DeveloperTarget, ManagedServer, TunnelStatus } from "../types";
+import type {
+  AppSettings,
+  DeveloperTarget,
+  ManagedServer,
+  ThemeMode,
+  TunnelStatus,
+} from "../types";
 import { ServerDialog } from "./ServerDialog";
 
-type SettingsTab = "configuration" | "servers" | "tunnels" | "iframes";
+type SettingsTab = "appearance" | "configuration" | "servers" | "tunnels" | "iframes";
 
 interface SettingsPageProps {
+  appSettings: AppSettings;
   configPath: string;
+  onAppSettingsChange: (themeMode: ThemeMode) => void;
   onConfigSaved: () => void;
+  resolvedTheme: "light" | "dark";
   servers: ManagedServer[];
   targets: DeveloperTarget[];
   tunnelStatuses: Record<string, TunnelStatus>;
@@ -31,13 +40,16 @@ function formatTimestamp(timestamp: number): string {
 }
 
 export function SettingsPage({
+  appSettings,
   configPath,
+  onAppSettingsChange,
   onConfigSaved,
+  resolvedTheme,
   servers,
   targets,
   tunnelStatuses,
 }: SettingsPageProps) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("configuration");
+  const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   const [selectedServer, setSelectedServer] = useState<ManagedServer | null>(null);
   const [restartingTunnelKey, setRestartingTunnelKey] = useState<string>("");
   const [iframeSnapshots, setIframeSnapshots] = useState(listBrowserFrameSnapshots());
@@ -100,6 +112,7 @@ export function SettingsPage({
       <div className="settings-tab-bar" role="tablist" aria-label="Settings sections">
         {(
           [
+            ["appearance", "Appearance"],
             ["configuration", "Configuration"],
             ["servers", "Servers"],
             ["tunnels", "Tunnels"],
@@ -120,6 +133,39 @@ export function SettingsPage({
       </div>
 
       <div className="settings-body">
+        {activeTab === "appearance" ? (
+          <section className="settings-section">
+            <h3 className="settings-section-title">Appearance</h3>
+            <div className="settings-field">
+              <label className="settings-label">Theme</label>
+              <div className="settings-option-group" role="radiogroup" aria-label="Theme mode">
+                {(
+                  [
+                    ["system", "System"],
+                    ["light", "Light"],
+                    ["dark", "Dark"],
+                  ] as Array<[ThemeMode, string]>
+                ).map(([themeMode, label]) => (
+                  <button
+                    aria-checked={appSettings.themeMode === themeMode}
+                    className={`panel-button panel-button-toolbar settings-option-button ${appSettings.themeMode === themeMode ? "is-active" : ""}`}
+                    key={themeMode}
+                    onClick={() => onAppSettingsChange(themeMode)}
+                    role="radio"
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="settings-field">
+              <label className="settings-label">Resolved theme</label>
+              <span className="settings-value">{resolvedTheme}</span>
+            </div>
+          </section>
+        ) : null}
+
         {activeTab === "configuration" ? (
           <section className="settings-section">
             <h3 className="settings-section-title">Configuration</h3>
