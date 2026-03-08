@@ -349,6 +349,22 @@ export async function clipboardRead(): Promise<string> {
   return invoke<string>("clipboard_read");
 }
 
+export async function loadTargetsConfig(): Promise<string> {
+  if (!isTauri()) {
+    return "{}";
+  }
+
+  return invoke<string>("load_targets_config");
+}
+
+export async function updateTargetsConfig(content: string): Promise<void> {
+  if (!isTauri()) {
+    return;
+  }
+
+  return invoke<void>("update_targets_config", { content });
+}
+
 export async function attachTerminal(
   targetId: string,
 ): Promise<TerminalSnapshot> {

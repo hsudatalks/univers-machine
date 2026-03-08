@@ -1,7 +1,8 @@
 use crate::{
     config::{
-        read_bootstrap_data, read_server_inventory, resolve_raw_target,
-        restart_container as restart_remote_container, targets_file_path,
+        read_bootstrap_data, read_server_inventory, read_targets_config,
+        resolve_raw_target, restart_container as restart_remote_container,
+        save_targets_config, targets_file_path,
     },
     files::{
         list_remote_directory as load_remote_directory,
@@ -365,4 +366,14 @@ pub(crate) fn clipboard_read() -> Result<String, String> {
     clipboard
         .get_text()
         .map_err(|error| format!("Failed to read clipboard: {}", error))
+}
+
+#[tauri::command]
+pub(crate) fn load_targets_config() -> Result<String, String> {
+    read_targets_config()
+}
+
+#[tauri::command]
+pub(crate) fn update_targets_config(content: String) -> Result<(), String> {
+    save_targets_config(&content)
 }

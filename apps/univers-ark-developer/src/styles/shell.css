@@ -615,3 +615,79 @@
   font-style: italic;
 }
 
+/* ---- Settings Editor ---- */
+
+.settings-section-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.settings-editor-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
+.settings-editor-path {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.settings-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.settings-editor-textarea {
+  flex: 1;
+  min-height: 300px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-1);
+  border-radius: 0.4rem;
+  color: var(--text-1);
+  font-family: "Iosevka", "SFMono-Regular", "Consolas", monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  padding: 0.75rem;
+  resize: vertical;
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+}
+
+.settings-editor-textarea:focus {
+  outline: none;
+  border-color: var(--accent-1, #58a6ff);
+}
+
+.settings-editor-textarea:disabled {
+  opacity: 0.5;
+}
+
+.settings-error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--tone-danger);
+  background: color-mix(in srgb, var(--tone-danger) 10%, transparent);
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.35rem;
+}
+
+.settings-success {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--tone-success);
+  background: color-mix(in srgb, var(--tone-success) 10%, transparent);
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.35rem;
+}
+
+.settings-count-modified {
+  color: var(--tone-warning);
+  background: color-mix(in srgb, var(--tone-warning) 15%, transparent);
+}
+
+

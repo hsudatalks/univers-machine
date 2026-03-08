@@ -188,7 +188,9 @@ pub(crate) fn run() {
             commands::resize_terminal,
             commands::restart_container,
             commands::clipboard_write,
-            commands::clipboard_read
+            commands::clipboard_read,
+            commands::load_targets_config,
+            commands::update_targets_config
         ])
         .build(tauri::generate_context!())
         .expect("error while building univers-ark-developer")

@@ -310,6 +310,29 @@ pub(crate) fn restart_container(server_id: &str, container_name: &str) -> Result
     Ok(())
 }
 
+pub(crate) fn read_targets_config() -> Result<String, String> {
+    let config_path = targets_file_path();
+    fs::read_to_string(&config_path)
+        .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))
+}
+
+pub(crate) fn save_targets_config(content: &str) -> Result<(), String> {
+    // Validate JSON parses correctly before writing
+    serde_json::from_str::<RawTargetsFile>(content)
+        .map_err(|error| format!("Invalid config JSON: {}", error))?;
+
+    let config_path = targets_file_path();
+    fs::write(&config_path, content)
+        .map_err(|error| format!("Failed to write {}: {}", config_path.display(), error))?;
+
+    // Invalidate inventory cache so next load picks up changes
+    if let Ok(mut cache) = targets_cache().lock() {
+        *cache = None;
+    }
+
+    Ok(())
+}
+
 pub(crate) fn read_bootstrap_data(
     force_refresh: bool,
 ) -> Result<(TargetsFile, Vec<ManagedServer>), String> {

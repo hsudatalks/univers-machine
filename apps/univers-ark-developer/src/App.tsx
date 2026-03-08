@@ -309,6 +309,7 @@ function App() {
           >
             <SettingsPage
               configPath={bootstrap.configPath}
+              onConfigSaved={refreshInventory}
               servers={bootstrap.servers}
             />
           </section>
