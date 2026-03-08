@@ -274,7 +274,9 @@ function App() {
           />
         ) : null}
 
-        <section className={`content-shell ${isOverviewView ? "content-shell-overview" : ""}`}>
+        <section
+          className={`content-shell ${isOverviewView ? "content-shell-overview" : ""} ${activeView.kind === "container" ? "content-shell-container" : ""}`}
+        >
         <section
           className={`content-page content-page-overview ${activeView.kind === "overview" ? "" : "is-hidden"}`}
         >
@@ -335,14 +337,8 @@ function App() {
             const developmentSurface = target?.surfaces.find(
               (surface) => surface.id === "development",
             );
-            const previewSurface = target?.surfaces.find(
-              (surface) => surface.id === "preview",
-            );
             const developmentPanel = developmentSurface
               ? (`browser:${developmentSurface.id}` as const)
-              : null;
-            const previewPanel = previewSurface
-              ? (`browser:${previewSurface.id}` as const)
               : null;
             const activeBrowserSurfaceId = browserSurfaceIdFromPanel(activeTool);
             const browserSurface =
@@ -353,11 +349,6 @@ function App() {
               developmentSurface && target
                 ? tunnelStatuses[surfaceKey(target.id, developmentSurface.id)] ??
                   fallbackTunnelStatus(target.id, developmentSurface)
-                : undefined;
-            const previewStatus =
-              previewSurface && target
-                ? tunnelStatuses[surfaceKey(target.id, previewSurface.id)] ??
-                  fallbackTunnelStatus(target.id, previewSurface)
                 : undefined;
             const developmentBrowserFrame: BrowserFrameInstance | undefined =
               developmentSurface && developmentStatus && target
@@ -371,22 +362,9 @@ function App() {
                     target,
                   }
                 : undefined;
-            const previewBrowserFrame: BrowserFrameInstance | undefined =
-              previewSurface && previewStatus && target
-                ? {
-                    cacheKey: surfaceKey(target.id, previewSurface.id),
-                    frameVersion:
-                      browserFrameVersions[surfaceKey(target.id, previewSurface.id)] ?? 0,
-                    isActive: isVisible && activeTool === previewPanel,
-                    status: previewStatus,
-                    surface: previewSurface,
-                    target,
-                  }
-                : undefined;
-
             return (
               <section
-                className={`content-page ${isVisible ? "" : "is-hidden"}`}
+                className={`content-page content-page-container ${isVisible ? "" : "is-hidden"}`}
                 key={targetId}
               >
                 {target ? (
@@ -424,9 +402,6 @@ function App() {
                       toggleTerminalCollapsed(target.id);
                     }}
                     pageVisible={isVisible}
-                    previewPanel={previewPanel}
-                    previewBrowserFrame={previewBrowserFrame}
-                    previewSurface={previewSurface}
                     target={target}
                     workspaceStyle={{
                       "--container-terminal-width": `${containerTerminalWidths[target.id] ?? defaultTerminalPanelWidthPx()}px`,

@@ -193,12 +193,8 @@ export function useContainerWorkspace({
     const developmentSurface = target.surfaces.find(
       (surface) => surface.id === "development",
     );
-    const previewSurface = target.surfaces.find((surface) => surface.id === "preview");
     const developmentPanel = developmentSurface
       ? (`browser:${developmentSurface.id}` as const)
-      : null;
-    const previewPanel = previewSurface
-      ? (`browser:${previewSurface.id}` as const)
       : null;
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -242,9 +238,6 @@ export function useContainerWorkspace({
         case "2":
           nextPanel = developmentPanel;
           break;
-        case "3":
-          nextPanel = previewPanel;
-          break;
         default:
           return;
       }
@@ -275,7 +268,8 @@ export function useContainerWorkspace({
   function prepareContainerView(target: DeveloperTarget) {
     setContainerTools((current) => ({
       ...current,
-      [target.id]: current[target.id] ?? "files",
+      [target.id]:
+        current[target.id] === "browser:preview" ? "files" : current[target.id] ?? "files",
     }));
     setContainerTerminalWidths((current) => ({
       ...current,

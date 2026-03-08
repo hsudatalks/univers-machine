@@ -5,6 +5,7 @@ import { TerminalPane } from "./TerminalPane";
 import { Button } from "./ui/button";
 import type { ContainerToolPanel } from "../lib/view-types";
 import type { DeveloperSurface, DeveloperTarget } from "../types";
+import { FolderOpen, Globe } from "lucide-react";
 
 interface ContainerPageProps {
   activeTool: ContainerToolPanel;
@@ -19,9 +20,6 @@ interface ContainerPageProps {
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleTerminalCollapsed: () => void;
   pageVisible: boolean;
-  previewPanel: ContainerToolPanel | null;
-  previewBrowserFrame?: BrowserFrameInstance;
-  previewSurface?: DeveloperSurface;
   target: DeveloperTarget;
   workspaceStyle: CSSProperties;
 }
@@ -39,9 +37,6 @@ export function ContainerPage({
   onStartResize,
   onToggleTerminalCollapsed,
   pageVisible,
-  previewPanel,
-  previewBrowserFrame,
-  previewSurface,
   target,
   workspaceStyle,
 }: ContainerPageProps) {
@@ -49,77 +44,76 @@ export function ContainerPage({
   return (
     <>
       <header className="content-header content-header-container">
+        <div className="content-header-leading">
+          <Button
+            aria-label={
+              isTerminalCollapsed ? "Show terminal pane" : "Hide terminal pane"
+            }
+            className="content-title-toggle"
+            onClick={onToggleTerminalCollapsed}
+            size="icon"
+            title={
+              isTerminalCollapsed ? "Show terminal pane" : "Hide terminal pane"
+            }
+            variant="ghost"
+          >
+            <svg
+              aria-hidden="true"
+              className="panel-button-icon-svg"
+              fill="none"
+              viewBox="0 0 16 16"
+            >
+              <path
+                d="M2.75 3.25h10.5v9.5H2.75z"
+                stroke="currentColor"
+                strokeWidth="1.25"
+              />
+              <path
+                d="M4.5 6.1 6.55 8 4.5 9.9"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.25"
+              />
+              <path
+                d="M7.85 10.1h3.2"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeWidth="1.25"
+              />
+              {isTerminalCollapsed ? (
+                <path
+                  d="M3.35 3.35 12.65 12.65"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeWidth="1.1"
+                />
+              ) : null}
+            </svg>
+          </Button>
+        </div>
+
         <div className="content-header-copy">
           <div className="content-title-row">
-            <Button
-              aria-label={
-                isTerminalCollapsed ? "Show terminal pane" : "Hide terminal pane"
-              }
-              className="content-title-toggle"
-              onClick={onToggleTerminalCollapsed}
-              size="icon"
-              title={
-                isTerminalCollapsed ? "Show terminal pane" : "Hide terminal pane"
-              }
-              variant="ghost"
-            >
-              <svg
-                aria-hidden="true"
-                className="panel-button-icon-svg"
-                fill="none"
-                viewBox="0 0 16 16"
-              >
-                {isTerminalCollapsed ? (
-                  <>
-                    <path
-                      d="M2.75 3.25h10.5v9.5H2.75z"
-                      stroke="currentColor"
-                      strokeWidth="1.25"
-                    />
-                    <path
-                      d="M5.75 4.25v7.5"
-                      stroke="currentColor"
-                      strokeWidth="1.25"
-                    />
-                  </>
-                ) : (
-                  <>
-                    <path
-                      d="M2.75 3.25h10.5v9.5H2.75z"
-                      stroke="currentColor"
-                      strokeWidth="1.25"
-                    />
-                    <path
-                      d="M5.75 4.25v7.5"
-                      stroke="currentColor"
-                      strokeWidth="1.25"
-                    />
-                    <path
-                      d="M4.5 8 3.25 8"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeWidth="1.25"
-                    />
-                  </>
-                )}
-              </svg>
-            </Button>
             <h1 className="content-title content-title-container">{target.label}</h1>
           </div>
         </div>
 
         <div className="content-header-tools content-header-tools-container">
           <Button
+            aria-label="Files"
             isActive={activeTool === "files"}
             onClick={() => {
               onSelectTool("files");
             }}
-            size="sm"
-            variant={activeTool === "files" ? "default" : "outline"}
+            size="icon"
+            title="Files"
+            variant={activeTool === "files" ? "default" : "ghost"}
           >
-            Files
+            <FolderOpen size={16} />
           </Button>
           <Button
+            aria-label="Development browser"
             disabled={!developmentSurface}
             isActive={activeTool === developmentPanel}
             onClick={() => {
@@ -127,23 +121,11 @@ export function ContainerPage({
                 onSelectTool(developmentPanel);
               }
             }}
-            size="sm"
-            variant={activeTool === developmentPanel ? "default" : "outline"}
+            size="icon"
+            title="Development browser"
+            variant={activeTool === developmentPanel ? "default" : "ghost"}
           >
-            Dev
-          </Button>
-          <Button
-            disabled={!previewSurface}
-            isActive={activeTool === previewPanel}
-            onClick={() => {
-              if (previewPanel) {
-                onSelectTool(previewPanel);
-              }
-            }}
-            size="sm"
-            variant={activeTool === previewPanel ? "default" : "outline"}
-          >
-            Pre
+            <Globe size={16} />
           </Button>
 
           {onRestartContainer ? (
@@ -204,7 +186,7 @@ export function ContainerPage({
             role="separator"
           />
 
-          <div className={activeTool === "files" ? "" : "is-hidden"}>
+          <div className={`files-pane-slot ${activeTool === "files" ? "" : "is-hidden"}`}>
             <FilesPane active={pageVisible} target={target} />
           </div>
 
@@ -216,17 +198,6 @@ export function ContainerPage({
               onRestart={onRestartBrowser}
               retainedFrames={developmentBrowserFrame ? [developmentBrowserFrame] : []}
               slotLabel={developmentSurface.label}
-            />
-          ) : null}
-
-          {previewSurface ? (
-            <BrowserPane
-              activeFrame={previewBrowserFrame}
-              isVisible={activeTool === previewPanel}
-              onReload={onReloadBrowser}
-              onRestart={onRestartBrowser}
-              retainedFrames={previewBrowserFrame ? [previewBrowserFrame] : []}
-              slotLabel={previewSurface.label}
             />
           ) : null}
         </div>

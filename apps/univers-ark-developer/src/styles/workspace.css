@@ -13,7 +13,7 @@
   display: grid;
   grid-template-columns:
     minmax(30rem, var(--container-terminal-width))
-    0.45rem
+    0.4rem
     minmax(0, 1fr);
   gap: 0;
   overflow: hidden;
@@ -28,19 +28,53 @@
   min-height: 0;
   cursor: col-resize;
   background: transparent;
+  user-select: none;
 }
 
 .container-resizer::before {
   content: "";
   position: absolute;
-  inset: 0.35rem 0.08rem;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--border) 80%, transparent);
-  transition: background 160ms ease;
+  background: color-mix(in srgb, var(--border) 88%, transparent);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.container-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  left: 50%;
+  width: 0.28rem;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ring) 20%, transparent);
+  opacity: 0;
+  transition: opacity 160ms ease;
 }
 
 .container-resizer:hover::before {
-  background: color-mix(in srgb, var(--ring) 56%, var(--border));
+  background: color-mix(in srgb, var(--ring) 42%, var(--border));
+}
+
+.container-resizer:hover::after {
+  opacity: 1;
+}
+
+.container-resizer:active::before {
+  background: var(--ring);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ring) 24%, transparent);
+}
+
+.container-resizer:active::after {
+  opacity: 1;
 }
 
 .container-workspace.is-terminal-collapsed .terminal-panel,
@@ -50,6 +84,12 @@
 
 .container-workspace.is-terminal-collapsed .tool-panel {
   grid-column: 3;
+}
+
+.container-workspace > .files-pane-slot,
+.container-workspace > .browser-panel {
+  grid-column: 3;
+  min-height: 0;
 }
 
 .workspace-placeholder {
@@ -65,7 +105,7 @@
   .container-workspace {
     grid-template-columns:
       minmax(22rem, var(--container-terminal-width))
-      0.45rem
+      0.4rem
       minmax(0, 1fr);
   }
 }
