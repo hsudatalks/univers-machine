@@ -323,13 +323,96 @@
   gap: 0.55rem;
 }
 
-.github-markdown p,
+.github-markdown :where(h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  color: var(--foreground);
+  line-height: 1.35;
+}
+
+.github-markdown h1 {
+  font-size: 1rem;
+}
+
+.github-markdown h2 {
+  font-size: 0.94rem;
+}
+
+.github-markdown h3,
+.github-markdown h4,
+.github-markdown h5,
+.github-markdown h6 {
+  font-size: 0.84rem;
+}
+
+.github-markdown :where(p, ul, ol, blockquote, pre, table),
 .github-review-body {
   margin: 0;
   font-size: 0.78rem;
   line-height: 1.55;
   color: var(--text-1);
   white-space: pre-wrap;
+}
+
+.github-markdown ul,
+.github-markdown ol {
+  padding-left: 1.15rem;
+}
+
+.github-markdown li + li {
+  margin-top: 0.18rem;
+}
+
+.github-markdown blockquote {
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--border);
+  color: var(--text-2);
+}
+
+.github-markdown code {
+  padding: 0.08rem 0.3rem;
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--secondary) 88%, white);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+}
+
+.github-markdown pre {
+  overflow: auto;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--panel) 96%, black);
+  white-space: pre;
+}
+
+.github-markdown pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.github-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.github-markdown th,
+.github-markdown td {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  font-size: 0.76rem;
+  text-align: left;
+}
+
+.github-markdown th {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--panel) 96%, white);
+}
+
+.github-markdown-link {
+  display: inline;
+  min-height: 0;
+  padding: 0;
 }
 
 .github-review-body.is-collapsed {

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { openExternalLink } from "../lib/tauri";
 import { useGithubProjectState } from "../hooks/useGithubProjectState";
 import { useGithubPullRequestDetail } from "../hooks/useGithubPullRequestDetail";
@@ -180,13 +182,6 @@ function PullRequestList({
       )}
     </section>
   );
-}
-
-function markdownToPlainParagraphs(body: string): string[] {
-  return body
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
 }
 
 function matchesSearchQuery(pr: GithubPullRequestSummary, query: string): boolean {
@@ -734,11 +729,24 @@ export function GithubPopover() {
                     <div className="github-section-header">
                       <span className="github-section-title">Body</span>
                     </div>
-                    {markdownToPlainParagraphs(detail.body).length ? (
+                    {detail.body.trim() ? (
                       <div className="github-markdown">
-                        {markdownToPlainParagraphs(detail.body).map((paragraph) => (
-                          <p key={paragraph}>{paragraph}</p>
-                        ))}
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            a: ({ children, href }) => (
+                              <button
+                                className="github-inline-link github-markdown-link"
+                                onClick={() => (href ? void handleOpenLink(href) : undefined)}
+                                type="button"
+                              >
+                                {children}
+                              </button>
+                            ),
+                          }}
+                        >
+                          {detail.body}
+                        </ReactMarkdown>
                       </div>
                     ) : (
                       <p className="github-empty">No body content.</p>
