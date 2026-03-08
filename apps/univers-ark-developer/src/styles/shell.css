@@ -456,7 +456,7 @@
 
 .settings-description {
   margin-top: 0.25rem;
-  color: var(--text-2);
+  color: var(--muted-foreground);
   font-size: 0.8rem;
 }
 
@@ -478,7 +478,7 @@
 .settings-section-title {
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--text-1);
+  color: var(--foreground);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -488,8 +488,8 @@
 .settings-count {
   font-size: 0.7rem;
   font-weight: 500;
-  color: var(--text-3);
-  background: var(--surface-2);
+  color: var(--border-strong);
+  background: var(--panel-muted);
   padding: 0.1rem 0.4rem;
   border-radius: 0.25rem;
 }
@@ -503,28 +503,28 @@
 .settings-label {
   font-size: 0.75rem;
   font-weight: 500;
-  color: var(--text-2);
+  color: var(--muted-foreground);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .settings-value {
   font-size: 0.85rem;
-  color: var(--text-1);
+  color: var(--foreground);
 }
 
 .settings-value-mono {
   font-family: "Iosevka", "SFMono-Regular", "Consolas", monospace;
   font-size: 0.8rem;
-  color: var(--text-2);
-  background: var(--surface-2);
+  color: var(--muted-foreground);
+  background: var(--panel-muted);
   padding: 0.35rem 0.5rem;
   border-radius: 0.35rem;
   word-break: break-all;
 }
 
 .settings-empty {
-  color: var(--text-3);
+  color: var(--border-strong);
   font-size: 0.8rem;
   margin: 0;
 }
@@ -536,8 +536,8 @@
 }
 
 .settings-server-card {
-  background: var(--surface-2);
-  border: 1px solid var(--border-1);
+  background: var(--panel-muted);
+  border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.75rem 1rem;
   display: flex;
@@ -552,12 +552,12 @@
 }
 
 .settings-server-card:hover {
-  border-color: var(--accent-1, #58a6ff);
-  background: color-mix(in srgb, var(--surface-2) 80%, var(--accent-1, #58a6ff) 20%);
+  border-color: var(--ring);
+  background: color-mix(in srgb, var(--panel-muted) 80%, var(--ring) 20%);
 }
 
 .settings-server-card:active {
-  background: color-mix(in srgb, var(--surface-2) 70%, var(--accent-1, #58a6ff) 30%);
+  background: color-mix(in srgb, var(--panel-muted) 70%, var(--ring) 30%);
 }
 
 .settings-server-header {
@@ -570,7 +570,7 @@
 .settings-server-label {
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--text-1);
+  color: var(--foreground);
 }
 
 .settings-server-state {
@@ -584,20 +584,20 @@
 
 .settings-server-state-running,
 .settings-server-state-ready {
-  color: var(--tone-success);
-  background: color-mix(in srgb, var(--tone-success) 15%, transparent);
+  color: hsl(142, 71%, 35%);
+  background: hsla(142, 71%, 45%, 0.12);
 }
 
 .settings-server-state-stopped,
 .settings-server-state-error {
-  color: var(--tone-danger);
-  background: color-mix(in srgb, var(--tone-danger) 15%, transparent);
+  color: hsl(0, 84%, 50%);
+  background: hsla(0, 84%, 50%, 0.1);
 }
 
 .settings-server-state-starting,
 .settings-server-state-pending {
-  color: var(--tone-warning);
-  background: color-mix(in srgb, var(--tone-warning) 15%, transparent);
+  color: hsl(38, 92%, 42%);
+  background: hsla(38, 92%, 50%, 0.12);
 }
 
 .settings-server-meta {
@@ -605,7 +605,7 @@
   align-items: center;
   gap: 0.75rem;
   font-size: 0.8rem;
-  color: var(--text-2);
+  color: var(--muted-foreground);
 }
 
 .settings-server-host {
@@ -615,7 +615,7 @@
 
 .settings-server-desc {
   font-size: 0.75rem;
-  color: var(--text-3);
+  color: var(--border-strong);
 }
 
 .settings-server-footer {
@@ -623,7 +623,7 @@
   align-items: center;
   gap: 0.75rem;
   font-size: 0.75rem;
-  color: var(--text-3);
+  color: var(--border-strong);
 }
 
 .settings-server-message {
@@ -642,7 +642,7 @@
 .settings-editor-hint {
   margin: 0;
   font-size: 0.75rem;
-  color: var(--text-3);
+  color: var(--border-strong);
 }
 
 .settings-editor-path {
@@ -659,10 +659,10 @@
 .settings-editor-textarea {
   flex: 1;
   min-height: 300px;
-  background: var(--surface-2);
-  border: 1px solid var(--border-1);
+  background: var(--panel-muted);
+  border: 1px solid var(--border);
   border-radius: 0.4rem;
-  color: var(--text-1);
+  color: var(--foreground);
   font-family: "Iosevka", "SFMono-Regular", "Consolas", monospace;
   font-size: 0.78rem;
   line-height: 1.5;
@@ -675,7 +675,7 @@
 
 .settings-editor-textarea:focus {
   outline: none;
-  border-color: var(--accent-1, #58a6ff);
+  border-color: var(--ring);
 }
 
 .settings-editor-textarea:disabled {
@@ -685,8 +685,8 @@
 .settings-error {
   margin: 0;
   font-size: 0.8rem;
-  color: var(--tone-danger);
-  background: color-mix(in srgb, var(--tone-danger) 10%, transparent);
+  color: hsl(0, 84%, 50%);
+  background: hsla(0, 84%, 50%, 0.08);
   padding: 0.4rem 0.6rem;
   border-radius: 0.35rem;
 }
@@ -694,15 +694,15 @@
 .settings-success {
   margin: 0;
   font-size: 0.8rem;
-  color: var(--tone-success);
-  background: color-mix(in srgb, var(--tone-success) 10%, transparent);
+  color: hsl(142, 71%, 35%);
+  background: hsla(142, 71%, 45%, 0.08);
   padding: 0.4rem 0.6rem;
   border-radius: 0.35rem;
 }
 
 .settings-count-modified {
-  color: var(--tone-warning);
-  background: color-mix(in srgb, var(--tone-warning) 15%, transparent);
+  color: hsl(38, 92%, 42%);
+  background: hsla(38, 92%, 50%, 0.12);
 }
 
 /* ---- Dialog / Modal ---- */
@@ -725,8 +725,8 @@
 }
 
 .dialog-panel {
-  background: var(--surface-1);
-  border: 1px solid var(--border-1);
+  background: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 0.75rem;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
   width: 100%;
@@ -748,7 +748,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--border-1);
+  border-bottom: 1px solid var(--border);
 }
 
 .dialog-header-copy {
@@ -760,12 +760,12 @@
 .dialog-title {
   font-size: 1rem;
   font-weight: 600;
-  color: var(--text-1);
+  color: var(--foreground);
 }
 
 .dialog-subtitle {
   font-size: 0.8rem;
-  color: var(--text-3);
+  color: var(--border-strong);
   font-family: "Iosevka", "SFMono-Regular", "Consolas", monospace;
 }
 
@@ -776,7 +776,7 @@
 .dialog-tabs {
   display: flex;
   gap: 0;
-  border-bottom: 1px solid var(--border-1);
+  border-bottom: 1px solid var(--border);
   padding: 0 1.25rem;
 }
 
@@ -784,7 +784,7 @@
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  color: var(--text-2);
+  color: var(--muted-foreground);
   cursor: pointer;
   font: inherit;
   font-size: 0.8rem;
@@ -794,12 +794,12 @@
 }
 
 .dialog-tab:hover {
-  color: var(--text-1);
+  color: var(--foreground);
 }
 
 .dialog-tab.is-active {
-  color: var(--text-1);
-  border-bottom-color: var(--accent-1, #58a6ff);
+  color: var(--foreground);
+  border-bottom-color: var(--ring);
 }
 
 .dialog-body {
@@ -829,7 +829,7 @@
 .dialog-field-label {
   font-size: 0.75rem;
   font-weight: 500;
-  color: var(--text-3);
+  color: var(--border-strong);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   min-width: 6rem;
@@ -838,13 +838,13 @@
 
 .dialog-field-value {
   font-size: 0.85rem;
-  color: var(--text-1);
+  color: var(--foreground);
 }
 
 .dialog-field-mono {
   font-family: "Iosevka", "SFMono-Regular", "Consolas", monospace;
   font-size: 0.8rem;
-  color: var(--text-2);
+  color: var(--muted-foreground);
 }
 
 .dialog-table {
@@ -857,17 +857,17 @@
   text-align: left;
   font-size: 0.7rem;
   font-weight: 600;
-  color: var(--text-3);
+  color: var(--border-strong);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid var(--border-1);
+  border-bottom: 1px solid var(--border);
 }
 
 .dialog-table td {
   padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--border-1);
-  color: var(--text-1);
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
 }
 
 .dialog-table tbody tr:last-child td {
@@ -875,7 +875,7 @@
 }
 
 .dialog-table tbody tr:hover {
-  background: var(--surface-2);
+  background: var(--panel-muted);
 }
 
 .dialog-table-mono {
@@ -894,25 +894,25 @@
 
 .dialog-badge-running,
 .dialog-badge-ready {
-  color: var(--tone-success);
-  background: color-mix(in srgb, var(--tone-success) 15%, transparent);
+  color: hsl(142, 71%, 35%);
+  background: hsla(142, 71%, 45%, 0.12);
 }
 
 .dialog-badge-stopped,
 .dialog-badge-error,
 .dialog-badge-unreachable {
-  color: var(--tone-danger);
-  background: color-mix(in srgb, var(--tone-danger) 15%, transparent);
+  color: hsl(0, 84%, 50%);
+  background: hsla(0, 84%, 50%, 0.1);
 }
 
 .dialog-badge-starting,
 .dialog-badge-pending {
-  color: var(--tone-warning);
-  background: color-mix(in srgb, var(--tone-warning) 15%, transparent);
+  color: hsl(38, 92%, 42%);
+  background: hsla(38, 92%, 50%, 0.12);
 }
 
 .dialog-empty {
-  color: var(--text-3);
+  color: var(--border-strong);
   font-size: 0.8rem;
   margin: 0;
 }
