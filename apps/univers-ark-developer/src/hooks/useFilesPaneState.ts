@@ -14,6 +14,13 @@ export interface FilesTreeNode {
   isLoading: boolean;
 }
 
+export interface FilesRootOption {
+  label: string;
+  path: string;
+}
+
+export type FilesBrowserView = "list" | "details";
+
 export function formatFileSize(size: number): string {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
@@ -75,6 +82,10 @@ export function languageFromPath(path: string): string {
   return map[ext] ?? "plaintext";
 }
 
+function isPreviewableEntry(entry: RemoteFileEntry): boolean {
+  return entry.kind === "file" || entry.kind === "symlink";
+}
+
 function buildFlatTree(
   rootPath: string | null,
   childrenByPath: Map<string, RemoteFileEntry[]>,
@@ -122,6 +133,9 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rootOptions, setRootOptions] = useState<FilesRootOption[]>([]);
+  const [isLoadingRoots, setIsLoadingRoots] = useState(false);
+  const [browserView, setBrowserView] = useState<FilesBrowserView>("list");
 
   const resetBrowser = () => {
     setChildrenByPath(new Map());
@@ -130,6 +144,7 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
     setRootParentPath(null);
     setPreview(null);
     setSelectedPath(null);
+    setError(null);
   };
 
   const loadDirectory = (dirPath: string | null | undefined) => {
@@ -173,10 +188,66 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
     loadDirectory(nextPath);
   });
 
+  const initializeRootsFromEffect = useEffectEvent(() => {
+    setIsLoadingRoots(true);
+    setError(null);
+
+    void Promise.all([
+      listRemoteDirectory(target.id, "~"),
+      listRemoteDirectory(target.id, "~/repos"),
+    ])
+      .then(([homeListing, reposListing]) => {
+        const repoDirectories = reposListing.entries.filter(
+          (entry) => entry.kind === "directory",
+        );
+        const preferredRepo =
+          repoDirectories.find((entry) => entry.name === "hvac-workbench") ??
+          repoDirectories[0];
+        const nextRootOptions: FilesRootOption[] = [];
+
+        if (preferredRepo) {
+          nextRootOptions.push({
+            label:
+              preferredRepo.name === "hvac-workbench"
+                ? "~/repos/hvac-workbench"
+                : `~/repos/${preferredRepo.name}`,
+            path: preferredRepo.path,
+          });
+        }
+
+        for (const entry of repoDirectories) {
+          if (entry.path === preferredRepo?.path) {
+            continue;
+          }
+
+          nextRootOptions.push({
+            label: `~/repos/${entry.name}`,
+            path: entry.path,
+          });
+        }
+
+        nextRootOptions.push({ label: "~", path: homeListing.path });
+        setRootOptions(nextRootOptions);
+        loadDirectory(preferredRepo?.path ?? homeListing.path);
+      })
+      .catch((loadError) => {
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Failed to load remote files.",
+        );
+        loadDirectoryFromEffect("~");
+      })
+      .finally(() => {
+        setIsLoadingRoots(false);
+      });
+  });
+
   useEffect(() => {
     if (!active || rootPath) return;
-    loadDirectoryFromEffect();
-  }, [active, rootPath, target.id]);
+
+    initializeRootsFromEffect();
+  }, [active, rootPath]);
 
   const toggleDirectory = (entry: RemoteFileEntry) => {
     const path = entry.path;
@@ -197,6 +268,13 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
   };
 
   const openFile = (entry: RemoteFileEntry) => {
+    if (!isPreviewableEntry(entry)) {
+      setSelectedPath(entry.path);
+      setPreview(null);
+      setIsLoadingPreview(false);
+      return;
+    }
+
     setSelectedPath(entry.path);
     setIsLoadingPreview(true);
     setError(null);
@@ -221,6 +299,11 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
     if (!rootParentPath) return;
     resetBrowser();
     loadDirectory(rootParentPath);
+  };
+
+  const selectRoot = (path: string) => {
+    resetBrowser();
+    loadDirectory(path);
   };
 
   const refresh = () => {
@@ -250,16 +333,21 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
     editorLanguage,
     error,
     flatTree,
+    browserView,
     isLoadingPreview,
+    isLoadingRoots,
     loadingPaths,
     navigateUp,
     openFile,
     preview,
     refresh,
+    rootOptions,
     rootParentPath,
     rootPath,
     selectedEntry,
     selectedPath,
+    selectRoot,
+    setBrowserView,
     toggleDirectory,
   };
 }

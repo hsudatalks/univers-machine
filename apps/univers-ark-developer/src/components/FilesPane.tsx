@@ -3,6 +3,7 @@ import { FilesEditor } from "./FilesEditor";
 import { FilesTree } from "./FilesTree";
 import { useFilesPaneState } from "../hooks/useFilesPaneState";
 import { Button } from "./ui/button";
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 
 interface FilesPaneProps {
   active: boolean;
@@ -11,69 +12,103 @@ interface FilesPaneProps {
 
 export function FilesPane({ active, target }: FilesPaneProps) {
   const {
+    browserView,
     editorLanguage,
     error,
     flatTree,
     isLoadingPreview,
+    isLoadingRoots,
     loadingPaths,
-    navigateUp,
     openFile,
     preview,
     refresh,
-    rootParentPath,
+    rootOptions,
     rootPath,
     selectedEntry,
     selectedPath,
+    selectRoot,
+    setBrowserView,
     toggleDirectory,
   } = useFilesPaneState(active, target);
+  const isPreviewVisible = Boolean(isLoadingPreview || preview);
 
   return (
     <article className="panel tool-panel files-panel">
       <header className="panel-header tool-panel-header">
-        <div className="tool-panel-heading">
-          <span className="panel-title">Explorer</span>
-          <code className="tool-panel-path">
-            {rootPath ?? "Loading remote workspace"}
-          </code>
+        <div className="files-toolbar">
+          <label className="files-root-picker">
+            <span className="sr-only">Choose root folder</span>
+            <select
+              className="files-root-select"
+              disabled={isLoadingRoots || loadingPaths.size > 0}
+              onChange={(event) => {
+                selectRoot(event.target.value);
+              }}
+              value={rootPath ?? ""}
+            >
+              {!rootPath ? (
+                <option value="">
+                  {isLoadingRoots ? "Loading folders…" : "Choose folder"}
+                </option>
+              ) : null}
+              {rootOptions.map((option) => (
+                <option key={option.path} value={option.path}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="tool-panel-actions">
-          <Button
-            disabled={!rootParentPath || loadingPaths.size > 0}
-            onClick={navigateUp}
-            size="sm"
-            variant="outline"
+          <Tabs
+            onValueChange={(value) => {
+              setBrowserView(value as "list" | "details");
+            }}
+            value={browserView}
           >
-            Up
-          </Button>
+            <TabsList className="files-view-tabs">
+              <TabsTrigger className="files-view-trigger" value="list">
+                List
+              </TabsTrigger>
+              <TabsTrigger className="files-view-trigger" value="details">
+                Details
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
           <Button
             disabled={loadingPaths.size > 0}
             onClick={refresh}
             size="sm"
-            variant="outline"
+            variant="ghost"
           >
             Refresh
           </Button>
         </div>
       </header>
 
-      <div className="files-panel-body">
+      <div
+        className={`files-panel-body ${isPreviewVisible ? "is-preview-visible" : ""}`}
+      >
         <FilesTree
+          browserView={browserView}
           error={error && !preview ? error : null}
           flatTree={flatTree}
-          isLoading={!rootPath && loadingPaths.size > 0}
+          isLoading={(!rootPath && loadingPaths.size > 0) || isLoadingRoots}
           onOpenFile={openFile}
           onToggleDirectory={toggleDirectory}
           rootPath={rootPath}
           selectedPath={selectedPath}
         />
 
-        <FilesEditor
-          editorLanguage={editorLanguage}
-          isLoadingPreview={isLoadingPreview}
-          preview={preview}
-          selectedEntry={selectedEntry}
-        />
+        {isPreviewVisible ? (
+          <FilesEditor
+            editorLanguage={editorLanguage}
+            isLoadingPreview={isLoadingPreview}
+            preview={preview}
+            selectedEntry={selectedEntry}
+          />
+        ) : null}
       </div>
     </article>
   );

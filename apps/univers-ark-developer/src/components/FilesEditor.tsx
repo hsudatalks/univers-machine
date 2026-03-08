@@ -105,9 +105,9 @@ export function FilesEditor({
         </>
       ) : (
         <div className="files-empty-state">
-          <p className="files-empty-title">Select a file</p>
+          <p className="files-empty-title">Unsupported file</p>
           <p className="files-empty-copy">
-            Choose a file to inspect its contents.
+            This entry cannot be previewed in the editor.
           </p>
         </div>
       )}

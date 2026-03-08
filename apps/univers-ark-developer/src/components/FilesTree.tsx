@@ -1,10 +1,12 @@
 import type { RemoteFileEntry } from "../types";
 import {
   formatFileSize,
+  type FilesBrowserView,
   type FilesTreeNode,
 } from "../hooks/useFilesPaneState";
 
 type FilesTreeProps = {
+  browserView: FilesBrowserView;
   error: string | null;
   flatTree: FilesTreeNode[];
   isLoading: boolean;
@@ -16,12 +18,16 @@ type FilesTreeProps = {
 
 function entryIcon(entry: RemoteFileEntry, isExpanded: boolean): string {
   if (entry.kind === "directory") {
-    return isExpanded ? "▾" : "▸";
+    return isExpanded ? "⌄" : "›";
   }
-  return " ";
+  if (entry.kind === "symlink") {
+    return "↗";
+  }
+  return "•";
 }
 
 export function FilesTree({
+  browserView,
   error,
   flatTree,
   isLoading,
@@ -44,9 +50,16 @@ export function FilesTree({
         </div>
       ) : flatTree.length > 0 ? (
         <div className="files-tree-entries">
+          {browserView === "details" ? (
+            <div className="files-tree-header" role="presentation">
+              <span className="files-tree-header-name">Name</span>
+              <span className="files-tree-header-meta">Kind</span>
+              <span className="files-tree-header-meta">Size</span>
+            </div>
+          ) : null}
           {flatTree.map((node) => (
             <button
-              className={`files-tree-entry ${node.entry.kind === "directory" ? "is-directory" : node.entry.kind === "symlink" ? "is-symlink" : "is-file"} ${selectedPath === node.entry.path ? "is-selected" : ""}`}
+              className={`files-tree-entry ${browserView === "details" ? "is-details" : "is-list"} ${node.entry.kind === "directory" ? "is-directory" : node.entry.kind === "symlink" ? "is-symlink" : "is-file"} ${selectedPath === node.entry.path ? "is-selected" : ""}`}
               key={node.entry.path}
               onClick={() => {
                 if (node.entry.kind === "directory") {
@@ -65,10 +78,21 @@ export function FilesTree({
                 {node.entry.name}
                 {node.entry.kind === "directory" ? "/" : ""}
               </span>
+              {browserView === "details" ? (
+                <span className="files-tree-kind">
+                  {node.entry.kind === "directory"
+                    ? "Folder"
+                    : node.entry.kind === "symlink"
+                      ? "Alias"
+                      : "File"}
+                </span>
+              ) : null}
               {node.entry.kind === "file" ? (
                 <span className="files-tree-size">
                   {formatFileSize(node.entry.size)}
                 </span>
+              ) : browserView === "details" ? (
+                <span className="files-tree-size">—</span>
               ) : null}
             </button>
           ))}

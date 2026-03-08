@@ -1,3 +1,9 @@
+.files-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .tool-panel {
   min-height: 0;
   min-width: 0;
@@ -8,32 +14,43 @@
 }
 
 .tool-panel-header {
-  align-items: flex-start;
+  align-items: center;
 }
 
 .browser-header-compact.tool-panel-header {
   align-items: center;
 }
 
-.tool-panel-heading {
+.files-toolbar {
   min-width: 0;
-  display: grid;
-  gap: 0.35rem;
+  flex: 1 1 auto;
 }
 
-.tool-panel-path {
+.files-root-picker {
+  display: block;
   min-width: 0;
+}
+
+.files-root-select {
+  width: min(24rem, 100%);
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 0.3rem 0.52rem;
+  min-height: 1.8rem;
+  padding: 0 1.9rem 0 0.65rem;
   border: 1px solid var(--input);
   border-radius: 0.55rem;
   background: var(--secondary);
-  font-family: var(--font-mono);
-  font-size: 0.67rem;
-  color: var(--text-2);
+  color: var(--foreground);
+  font-size: 0.76rem;
+  font-weight: 500;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 0.9rem) calc(50% - 0.12rem),
+    calc(100% - 0.62rem) calc(50% - 0.12rem);
+  background-size: 0.28rem 0.28rem, 0.28rem 0.28rem;
+  background-repeat: no-repeat;
 }
 
 .tool-panel-actions {
@@ -44,47 +61,103 @@
   flex-wrap: wrap;
 }
 
+.files-view-tabs {
+  height: 1.8rem;
+  padding: 0.12rem;
+  border-radius: 0.55rem;
+}
+
+.files-view-trigger {
+  min-height: 1.45rem;
+  padding: 0 0.55rem;
+  font-size: 0.69rem;
+}
+
 .files-panel-body {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.files-panel-body.is-preview-visible {
+  grid-template-columns: minmax(15rem, 22rem) minmax(0, 1fr);
 }
 
 .files-tree {
   min-height: 0;
+  height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  border-right: 1px solid var(--border);
   scrollbar-width: thin;
+  background: color-mix(in srgb, var(--secondary) 42%, transparent);
+}
+
+.files-panel-body.is-preview-visible .files-tree {
+  border-right: 1px solid var(--border);
+}
+
+.files-pane-slot {
+  min-height: 0;
+  display: grid;
+}
+
+.files-pane-slot.is-hidden {
+  display: none;
 }
 
 .files-tree-entries {
   display: flex;
   flex-direction: column;
+  padding: 0.35rem;
+}
+
+.files-tree-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.5rem 4.5rem;
+  gap: 0.45rem;
+  padding: 0 0.55rem 0.3rem 1.55rem;
+  color: var(--muted-foreground);
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.files-tree-header-meta:last-child {
+  text-align: right;
 }
 
 .files-tree-entry {
   display: flex;
   align-items: center;
-  gap: 0.15rem;
-  padding: 0.22rem 0.5rem;
+  gap: 0.32rem;
+  padding: 0.28rem 0.55rem;
   padding-right: 0.6rem;
   border: 0;
+  border-radius: 0.5rem;
   background: transparent;
   color: var(--text-2);
   cursor: pointer;
   text-align: left;
   white-space: nowrap;
-  min-height: 1.55rem;
-  transition: background 80ms ease;
+  min-height: 1.7rem;
+  transition:
+    background 80ms ease,
+    color 80ms ease;
+}
+
+.files-tree-entry.is-details {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) 4.5rem 4.5rem;
+  gap: 0.45rem;
 }
 
 .files-tree-entry:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--accent) 72%, transparent);
+  color: var(--foreground);
 }
 
 .files-tree-entry.is-selected {
-  background: rgba(30, 102, 210, 0.28);
+  background: color-mix(in srgb, var(--accent) 88%, transparent);
   color: var(--foreground);
 }
 
@@ -101,17 +174,25 @@
   flex-shrink: 0;
   width: 1rem;
   text-align: center;
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   color: var(--text-2);
-  opacity: 0.7;
+  opacity: 0.9;
 }
 
 .files-tree-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 0.78rem;
-  font-weight: 400;
+  font-size: 0.79rem;
+  font-weight: 500;
+}
+
+.files-tree-kind {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
 }
 
 .files-tree-size {
@@ -121,6 +202,7 @@
   font-size: 0.62rem;
   color: var(--text-2);
   opacity: 0.6;
+  text-align: right;
 }
 
 .files-editor {

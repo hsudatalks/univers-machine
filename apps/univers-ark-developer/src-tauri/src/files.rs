@@ -6,7 +6,7 @@ use serde::{de::DeserializeOwned, Deserialize};
 
 const MAX_DIRECTORY_ENTRIES: usize = 512;
 const MAX_PREVIEW_BYTES: usize = 131_072;
-const DEFAULT_REMOTE_ROOT: &str = "~/repos";
+const DEFAULT_REMOTE_ROOT: &str = "~/repos/hvac-workbench";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
