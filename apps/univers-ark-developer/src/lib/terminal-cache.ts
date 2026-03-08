@@ -32,8 +32,6 @@ interface CachedTerminalSession {
 
 const DEFAULT_TERMINAL_STATUS = "Connecting";
 const DEFAULT_TERMINAL_FONT_SIZE = 12;
-// eslint-disable-next-line no-control-regex
-const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = /^\x1b\[[\?>][\d;]*c$/;
 const terminalSessions = new Map<string, CachedTerminalSession>();
 
 let parkingLotElement: HTMLDivElement | null = null;
@@ -120,11 +118,31 @@ function suppressDeviceAttributeResponses(terminal: Terminal) {
   terminal.parser.registerCsiHandler({ final: "c", prefix: "?" }, () => true);
 }
 
+function isDeviceAttributesResponse(data: string): boolean {
+  if (!data.startsWith("\u001b[")) {
+    return false;
+  }
+
+  if (!data.endsWith("c")) {
+    return false;
+  }
+
+  const payload = data.slice(2, -1);
+
+  if (!payload) {
+    return false;
+  }
+
+  const prefix = payload[0];
+  const body = prefix === ">" || prefix === "?" ? payload.slice(1) : payload;
+
+  return /^[\d;]+$/.test(body);
+}
+
 // Strip residual DA response text that leaked into the PTY buffer
 // from previous sessions. The full response was ESC[>0;10;1c but the
 // ESC was consumed by the remote terminal, leaving "[>N;N;Nc" or
 // "N;N;Nc" as literal text.
-// eslint-disable-next-line no-control-regex
 const DA_RESIDUE_PATTERN = /\[?>?\d+;\d+;\d+c/g;
 
 function loadTerminalSnapshot(
@@ -156,7 +174,7 @@ function loadTerminalSnapshot(
         for (const data of session.pendingWrites) {
           // Filter out Device Attributes responses (e.g. ESC[>0;10;1c)
           // that xterm.js sends automatically — they are not user input.
-          if (DEVICE_ATTRIBUTES_RESPONSE_PATTERN.test(data)) {
+          if (isDeviceAttributesResponse(data)) {
             continue;
           }
           void writeTerminal(session.targetId, data).catch(() => undefined);
@@ -312,7 +330,7 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
   terminal.onData((data) => {
     // Filter out Device Attributes responses (e.g. ESC[>0;10;1c)
     // that xterm.js sends automatically — they are not user input.
-    if (DEVICE_ATTRIBUTES_RESPONSE_PATTERN.test(data)) {
+    if (isDeviceAttributesResponse(data)) {
       return;
     }
 

@@ -1,6 +1,7 @@
 import {
   useEffect,
   useEffectEvent,
+  useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -36,7 +37,16 @@ interface UseContainerWorkspaceOptions {
   onSetOverviewFocus: (targetId: string) => void;
   onTunnelStatus: (status: TunnelStatus) => void;
   orderedTargetIds: string[];
+  tunnelStatuses: Record<string, TunnelStatus>;
   targetById: Map<string, DeveloperTarget>;
+}
+
+function surfaceKey(targetId: string, surfaceId: string): string {
+  return `${targetId}::${surfaceId}`;
+}
+
+function isReadyTunnelState(state: string | undefined): boolean {
+  return state === "direct" || state === "running";
 }
 
 export function useContainerWorkspace({
@@ -48,6 +58,7 @@ export function useContainerWorkspace({
   onSetOverviewFocus,
   onTunnelStatus,
   orderedTargetIds,
+  tunnelStatuses,
   targetById,
 }: UseContainerWorkspaceOptions) {
   const [containerTools, setContainerTools] = useState<
@@ -63,6 +74,39 @@ export function useContainerWorkspace({
     Record<string, number>
   >({});
   const [activeResize, setActiveResize] = useState<ResizeSession | null>(null);
+  const previousTunnelStatesRef = useRef<Record<string, string | undefined>>({});
+
+  useEffect(() => {
+    const previousStates = previousTunnelStatesRef.current;
+    const surfacesToReload = new Set<string>();
+
+    for (const [key, status] of Object.entries(tunnelStatuses)) {
+      const previousState = previousStates[key];
+      const nextState = status.state;
+
+      if (!isReadyTunnelState(previousState) && isReadyTunnelState(nextState)) {
+        surfacesToReload.add(key);
+      }
+
+      previousStates[key] = nextState;
+    }
+
+    if (surfacesToReload.size > 0) {
+      const keysToReload = [...surfacesToReload];
+
+      queueMicrotask(() => {
+        setBrowserFrameVersions((current) => {
+          const next = { ...current };
+
+          for (const key of keysToReload) {
+            next[key] = (next[key] ?? 0) + 1;
+          }
+
+          return next;
+        });
+      });
+    }
+  }, [tunnelStatuses]);
 
   useEffect(() => {
     if (!activeResize) {
@@ -278,7 +322,7 @@ export function useContainerWorkspace({
   }
 
   function reloadBrowserFrame(targetId: string, surfaceId: string) {
-    const key = `${targetId}::${surfaceId}`;
+    const key = surfaceKey(targetId, surfaceId);
 
     setBrowserFrameVersions((current) => ({
       ...current,

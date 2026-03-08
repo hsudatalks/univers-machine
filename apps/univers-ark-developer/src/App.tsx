@@ -195,6 +195,7 @@ function App() {
     onSetOverviewFocus: setOverviewFocusedTargetId,
     onTunnelStatus: setTunnelStatus,
     orderedTargetIds: overviewTerminalTargets.map((target) => target.id),
+    tunnelStatuses,
     targetById,
   });
 
@@ -360,20 +361,37 @@ function App() {
               activeBrowserSurfaceId && target
                 ? target.surfaces.find((surface) => surface.id === activeBrowserSurfaceId)
                 : undefined;
-            const browserStatus =
-              browserSurface && target
-                ? tunnelStatuses[surfaceKey(target.id, browserSurface.id)] ??
-                  fallbackTunnelStatus(target.id, browserSurface)
+            const developmentStatus =
+              developmentSurface && target
+                ? tunnelStatuses[surfaceKey(target.id, developmentSurface.id)] ??
+                  fallbackTunnelStatus(target.id, developmentSurface)
                 : undefined;
-            const browserFrame: BrowserFrameInstance | undefined =
-              browserSurface && browserStatus && target
+            const previewStatus =
+              previewSurface && target
+                ? tunnelStatuses[surfaceKey(target.id, previewSurface.id)] ??
+                  fallbackTunnelStatus(target.id, previewSurface)
+                : undefined;
+            const developmentBrowserFrame: BrowserFrameInstance | undefined =
+              developmentSurface && developmentStatus && target
                 ? {
-                    cacheKey: surfaceKey(target.id, browserSurface.id),
+                    cacheKey: surfaceKey(target.id, developmentSurface.id),
                     frameVersion:
-                      browserFrameVersions[surfaceKey(target.id, browserSurface.id)] ?? 0,
-                    isActive: isVisible,
-                    status: browserStatus,
-                    surface: browserSurface,
+                      browserFrameVersions[surfaceKey(target.id, developmentSurface.id)] ?? 0,
+                    isActive: isVisible && activeTool === developmentPanel,
+                    status: developmentStatus,
+                    surface: developmentSurface,
+                    target,
+                  }
+                : undefined;
+            const previewBrowserFrame: BrowserFrameInstance | undefined =
+              previewSurface && previewStatus && target
+                ? {
+                    cacheKey: surfaceKey(target.id, previewSurface.id),
+                    frameVersion:
+                      browserFrameVersions[surfaceKey(target.id, previewSurface.id)] ?? 0,
+                    isActive: isVisible && activeTool === previewPanel,
+                    status: previewStatus,
+                    surface: previewSurface,
                     target,
                   }
                 : undefined;
@@ -386,9 +404,8 @@ function App() {
                 {target ? (
                   <ContainerPage
                     activeTool={activeTool}
-                    browserFrame={browserFrame}
-                    browserSurface={browserSurface}
                     developmentPanel={developmentPanel}
+                    developmentBrowserFrame={developmentBrowserFrame}
                     developmentSurface={developmentSurface}
                     isTerminalCollapsed={Boolean(containerTerminalCollapsed[target.id])}
                     onReloadBrowser={() => {
@@ -420,6 +437,7 @@ function App() {
                     }}
                     pageVisible={isVisible}
                     previewPanel={previewPanel}
+                    previewBrowserFrame={previewBrowserFrame}
                     previewSurface={previewSurface}
                     target={target}
                     workspaceStyle={{

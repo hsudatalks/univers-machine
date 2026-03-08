@@ -7,9 +7,8 @@ import type { DeveloperSurface, DeveloperTarget } from "../types";
 
 interface ContainerPageProps {
   activeTool: ContainerToolPanel;
-  browserFrame?: BrowserFrameInstance;
-  browserSurface?: DeveloperSurface;
   developmentPanel: ContainerToolPanel | null;
+  developmentBrowserFrame?: BrowserFrameInstance;
   developmentSurface?: DeveloperSurface;
   isTerminalCollapsed: boolean;
   onReloadBrowser: () => void;
@@ -20,22 +19,16 @@ interface ContainerPageProps {
   onToggleTerminalCollapsed: () => void;
   pageVisible: boolean;
   previewPanel: ContainerToolPanel | null;
+  previewBrowserFrame?: BrowserFrameInstance;
   previewSurface?: DeveloperSurface;
   target: DeveloperTarget;
   workspaceStyle: CSSProperties;
 }
 
-function isBrowserToolPanel(
-  panel: ContainerToolPanel | null | undefined,
-): panel is `browser:${string}` {
-  return Boolean(panel?.startsWith("browser:"));
-}
-
 export function ContainerPage({
   activeTool,
-  browserFrame,
-  browserSurface,
   developmentPanel,
+  developmentBrowserFrame,
   developmentSurface,
   isTerminalCollapsed,
   onReloadBrowser,
@@ -46,6 +39,7 @@ export function ContainerPage({
   onToggleTerminalCollapsed,
   pageVisible,
   previewPanel,
+  previewBrowserFrame,
   previewSurface,
   target,
   workspaceStyle,
@@ -190,7 +184,7 @@ export function ContainerPage({
 
       <section className="page-section">
         <div
-          className={`container-workspace ${isBrowserToolPanel(activeTool) ? "tool-browser" : "tool-files"} ${isTerminalCollapsed ? "is-terminal-collapsed" : ""}`}
+          className={`container-workspace ${activeTool === "files" ? "tool-files" : "tool-browser"} ${isTerminalCollapsed ? "is-terminal-collapsed" : ""}`}
           style={workspaceStyle}
         >
           <article className={`panel terminal-panel ${isTerminalCollapsed ? "is-collapsed" : ""}`}>
@@ -205,17 +199,29 @@ export function ContainerPage({
             role="separator"
           />
 
-          {activeTool === "files" ? (
+          <div className={activeTool === "files" ? "" : "is-hidden"}>
             <FilesPane active={pageVisible} target={target} />
-          ) : null}
+          </div>
 
-          {isBrowserToolPanel(activeTool) ? (
+          {developmentSurface ? (
             <BrowserPane
-              activeFrame={browserFrame}
+              activeFrame={developmentBrowserFrame}
+              isVisible={activeTool === developmentPanel}
               onReload={onReloadBrowser}
               onRestart={onRestartBrowser}
-              retainedFrames={browserFrame ? [browserFrame] : []}
-              slotLabel={browserSurface?.label ?? "Browser"}
+              retainedFrames={developmentBrowserFrame ? [developmentBrowserFrame] : []}
+              slotLabel={developmentSurface.label}
+            />
+          ) : null}
+
+          {previewSurface ? (
+            <BrowserPane
+              activeFrame={previewBrowserFrame}
+              isVisible={activeTool === previewPanel}
+              onReload={onReloadBrowser}
+              onRestart={onRestartBrowser}
+              retainedFrames={previewBrowserFrame ? [previewBrowserFrame] : []}
+              slotLabel={previewSurface.label}
             />
           ) : null}
         </div>

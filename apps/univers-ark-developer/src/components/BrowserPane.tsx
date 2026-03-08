@@ -17,6 +17,7 @@ export interface BrowserFrameInstance {
 
 interface BrowserPaneProps {
   activeFrame?: BrowserFrameInstance;
+  isVisible: boolean;
   onReload: () => void;
   onRestart: () => void;
   retainedFrames: BrowserFrameInstance[];
@@ -33,6 +34,7 @@ const TUNNEL_STATUS_LABELS: Record<string, string> = {
 
 export function BrowserPane({
   activeFrame,
+  isVisible,
   onReload,
   onRestart,
   retainedFrames,
@@ -81,7 +83,7 @@ export function BrowserPane({
   }, [ownerId]);
 
   return (
-    <article className="panel browser-panel tool-panel">
+    <article className={`panel browser-panel tool-panel ${isVisible ? "" : "is-hidden"}`}>
       <header className="panel-header browser-header browser-header-compact tool-panel-header">
         <code className="browser-url browser-url-compact">
           {activeFrame?.surface.localUrl ?? "No local browser URL"}

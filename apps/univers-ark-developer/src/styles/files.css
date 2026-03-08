@@ -3,6 +3,10 @@
   min-width: 0;
 }
 
+.tool-panel.is-hidden {
+  display: none;
+}
+
 .tool-panel-header {
   align-items: flex-start;
 }
