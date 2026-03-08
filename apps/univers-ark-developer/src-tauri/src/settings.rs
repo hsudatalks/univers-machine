@@ -12,9 +12,19 @@ fn sanitize_theme_mode(theme_mode: &str) -> String {
     }
 }
 
+fn sanitize_dashboard_refresh_seconds(refresh_seconds: u64) -> u64 {
+    match refresh_seconds {
+        0 | 15 | 30 | 60 | 300 => refresh_seconds,
+        _ => 30,
+    }
+}
+
 fn sanitize_settings(settings: AppSettings) -> AppSettings {
     AppSettings {
         theme_mode: sanitize_theme_mode(&settings.theme_mode),
+        dashboard_refresh_seconds: sanitize_dashboard_refresh_seconds(
+            settings.dashboard_refresh_seconds,
+        ),
     }
 }
 

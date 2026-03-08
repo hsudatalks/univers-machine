@@ -2,7 +2,8 @@ use crate::{
     cleanup::cleanup_stale_ssh_tunnels,
     commands,
     config::initialize_targets_file_path,
-    models::{TerminalState, TunnelState},
+    dashboard::stop_all_dashboard_monitors,
+    models::{DashboardState, TerminalState, TunnelState},
     tunnel::stop_all_tunnels,
 };
 use tauri::{
@@ -145,6 +146,7 @@ pub(crate) fn run() {
     tauri::Builder::default()
         .manage(TerminalState::default())
         .manage(TunnelState::default())
+        .manage(DashboardState::default())
         .menu(build_app_menu)
         .on_menu_event(|app_handle, event| {
             if event.id().as_ref() == TOGGLE_SIDEBAR_MENU_ID {
@@ -180,6 +182,10 @@ pub(crate) fn run() {
             commands::restart_tunnel,
             commands::list_remote_directory,
             commands::read_remote_file_preview,
+            commands::load_container_dashboard,
+            commands::start_dashboard_monitor,
+            commands::stop_dashboard_monitor,
+            commands::refresh_container_dashboard,
             commands::load_github_project_state,
             commands::load_github_pull_request_detail,
             commands::merge_github_pull_request,
@@ -187,6 +193,7 @@ pub(crate) fn run() {
             commands::write_terminal,
             commands::resize_terminal,
             commands::restart_container,
+            commands::restart_tmux,
             commands::clipboard_write,
             commands::clipboard_read,
             commands::load_targets_config,
@@ -202,7 +209,9 @@ pub(crate) fn run() {
                 tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
             ) {
                 let tunnel_state = app_handle.state::<TunnelState>();
+                let dashboard_state = app_handle.state::<DashboardState>();
                 stop_all_tunnels(tunnel_state.inner());
+                stop_all_dashboard_monitors(dashboard_state.inner());
             }
         });
 }

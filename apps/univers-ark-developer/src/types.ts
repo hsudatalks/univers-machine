@@ -66,6 +66,79 @@ export interface RemoteFilePreview {
   truncated: boolean;
 }
 
+export interface ContainerProjectInfo {
+  projectPath: string;
+  repoFound: boolean;
+  branch: string | null;
+  isDirty: boolean;
+  changedFiles: number;
+  headSummary: string | null;
+}
+
+export interface ContainerRuntimeInfo {
+  hostname: string;
+  uptimeSeconds: number;
+  processCount: number;
+  loadAverage1m: number;
+  loadAverage5m: number;
+  loadAverage15m: number;
+  memoryTotalBytes: number;
+  memoryUsedBytes: number;
+  diskTotalBytes: number;
+  diskUsedBytes: number;
+}
+
+export interface ContainerServiceInfo {
+  id: string;
+  label: string;
+  status: string;
+  detail: string;
+  url: string | null;
+}
+
+export interface ContainerAgentInfo {
+  activeAgent: string;
+  source: string;
+  lastActivity: string | null;
+  latestReport: string | null;
+  latestReportUpdatedAt: string | null;
+}
+
+export interface ContainerTmuxSessionInfo {
+  server: string;
+  name: string;
+  windows: number;
+  attached: boolean;
+  activeCommand: string | null;
+}
+
+export interface ContainerTmuxInfo {
+  installed: boolean;
+  serverRunning: boolean;
+  sessionCount: number;
+  attachedCount: number;
+  activeSession: string | null;
+  activeCommand: string | null;
+  sessions: ContainerTmuxSessionInfo[];
+}
+
+export interface ContainerDashboard {
+  targetId: string;
+  project: ContainerProjectInfo;
+  runtime: ContainerRuntimeInfo;
+  services: ContainerServiceInfo[];
+  agent: ContainerAgentInfo;
+  tmux: ContainerTmuxInfo;
+}
+
+export interface ContainerDashboardUpdate {
+  targetId: string;
+  dashboard: ContainerDashboard | null;
+  error: string | null;
+  refreshedAtMs: number;
+  refreshSeconds: number;
+}
+
 export interface AppBootstrap {
   appName: string;
   configPath: string;
@@ -78,6 +151,7 @@ export type ThemeMode = "system" | "light" | "dark";
 
 export interface AppSettings {
   themeMode: ThemeMode;
+  dashboardRefreshSeconds: number;
 }
 
 export interface TerminalSnapshot {

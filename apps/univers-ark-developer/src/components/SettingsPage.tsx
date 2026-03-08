@@ -18,8 +18,9 @@ type SettingsTab = "appearance" | "configuration" | "servers" | "tunnels" | "ifr
 interface SettingsPageProps {
   appSettings: AppSettings;
   configPath: string;
-  onAppSettingsChange: (themeMode: ThemeMode) => void;
+  onDashboardRefreshChange: (seconds: number) => void;
   onConfigSaved: () => void;
+  onThemeModeChange: (themeMode: ThemeMode) => void;
   resolvedTheme: "light" | "dark";
   servers: ManagedServer[];
   targets: DeveloperTarget[];
@@ -61,8 +62,9 @@ function badgeVariantForState(state: string | undefined): "neutral" | "success" 
 export function SettingsPage({
   appSettings,
   configPath,
-  onAppSettingsChange,
+  onDashboardRefreshChange,
   onConfigSaved,
+  onThemeModeChange,
   resolvedTheme,
   servers,
   targets,
@@ -166,7 +168,7 @@ export function SettingsPage({
                     aria-checked={appSettings.themeMode === themeMode}
                     className="settings-option-button"
                     key={themeMode}
-                    onClick={() => onAppSettingsChange(themeMode)}
+                    onClick={() => onThemeModeChange(themeMode)}
                     role="radio"
                     size="sm"
                     variant={appSettings.themeMode === themeMode ? "default" : "outline"}
@@ -179,6 +181,32 @@ export function SettingsPage({
             <div className="settings-field">
               <label className="settings-label">Resolved theme</label>
               <span className="settings-value">{resolvedTheme}</span>
+            </div>
+            <div className="settings-field">
+              <label className="settings-label">Dashboard refresh</label>
+              <div className="settings-option-group" role="radiogroup" aria-label="Dashboard refresh interval">
+                {(
+                  [
+                    [0, "Off"],
+                    [15, "15s"],
+                    [30, "30s"],
+                    [60, "60s"],
+                    [300, "5m"],
+                  ] as Array<[number, string]>
+                ).map(([seconds, label]) => (
+                  <Button
+                    aria-checked={appSettings.dashboardRefreshSeconds === seconds}
+                    className="settings-option-button"
+                    key={seconds}
+                    onClick={() => onDashboardRefreshChange(seconds)}
+                    role="radio"
+                    size="sm"
+                    variant={appSettings.dashboardRefreshSeconds === seconds ? "default" : "outline"}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
             </div>
             </section>
           </TabsContent>

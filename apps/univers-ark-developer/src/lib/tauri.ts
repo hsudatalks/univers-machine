@@ -3,6 +3,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AppSettings,
   AppBootstrap,
+  ContainerDashboard,
+  ContainerDashboardUpdate,
   DeveloperSurface,
   DeveloperTarget,
   GithubMergeMethod,
@@ -17,10 +19,11 @@ import type {
   TunnelStatus,
 } from "../types";
 
-const SURFACE_PORT_START = 43000;
-const SURFACE_PORT_END = 43999;
+const SURFACE_PORT_START = import.meta.env.DEV ? 43000 : 45000;
+const SURFACE_PORT_END = import.meta.env.DEV ? 43999 : 45999;
 const SURFACE_HOST = "127.0.0.1";
 const SIDEBAR_TOGGLE_REQUESTED_EVENT = "toggle-sidebar-requested";
+const DASHBOARD_UPDATED_EVENT = "container-dashboard-updated";
 
 const fallbackBootstrapSeed: AppBootstrap = {
   appName: "Univers Ark Developer",
@@ -95,6 +98,7 @@ const fallbackBootstrap: AppBootstrap = {
 
 const fallbackAppSettings: AppSettings = {
   themeMode: "system",
+  dashboardRefreshSeconds: 30,
 };
 
 function surfaceKey(targetId: string, surfaceId: string): string {
@@ -354,6 +358,14 @@ export async function restartContainer(
   });
 }
 
+export async function restartTmux(targetId: string): Promise<void> {
+  if (!isTauri()) {
+    return;
+  }
+
+  return invoke<void>("restart_tmux", { targetId });
+}
+
 export async function clipboardWrite(text: string): Promise<void> {
   if (!isTauri()) {
     return;
@@ -541,6 +553,94 @@ export async function readRemoteFilePreview(
   }
 
   return invoke<RemoteFilePreview>("read_remote_file_preview", { path, targetId });
+}
+
+export async function loadContainerDashboard(
+  targetId: string,
+): Promise<ContainerDashboard> {
+  if (!isTauri()) {
+    return {
+      targetId,
+      project: {
+        projectPath: "~/repos/hvac-workbench",
+        repoFound: false,
+        branch: null,
+        isDirty: false,
+        changedFiles: 0,
+        headSummary: null,
+      },
+      runtime: {
+        hostname: "localhost",
+        uptimeSeconds: 0,
+        processCount: 0,
+        loadAverage1m: 0,
+        loadAverage5m: 0,
+        loadAverage15m: 0,
+        memoryTotalBytes: 0,
+        memoryUsedBytes: 0,
+        diskTotalBytes: 0,
+        diskUsedBytes: 0,
+      },
+      services: [],
+      agent: {
+        activeAgent: "unknown",
+        source: "none",
+        lastActivity: null,
+        latestReport: null,
+        latestReportUpdatedAt: null,
+      },
+      tmux: {
+        installed: false,
+        serverRunning: false,
+        sessionCount: 0,
+        attachedCount: 0,
+        activeSession: null,
+        activeCommand: null,
+        sessions: [],
+      },
+    };
+  }
+
+  return invoke<ContainerDashboard>("load_container_dashboard", { targetId });
+}
+
+export async function startDashboardMonitor(
+  targetId: string,
+  refreshSeconds: number,
+): Promise<void> {
+  if (!isTauri()) {
+    return;
+  }
+
+  await invoke("start_dashboard_monitor", { refreshSeconds, targetId });
+}
+
+export async function stopDashboardMonitor(targetId: string): Promise<void> {
+  if (!isTauri()) {
+    return;
+  }
+
+  await invoke("stop_dashboard_monitor", { targetId });
+}
+
+export async function refreshContainerDashboard(targetId: string): Promise<void> {
+  if (!isTauri()) {
+    return;
+  }
+
+  await invoke("refresh_container_dashboard", { targetId });
+}
+
+export async function listenContainerDashboardUpdates(
+  handler: (payload: ContainerDashboardUpdate) => void,
+): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => undefined;
+  }
+
+  return listen<ContainerDashboardUpdate>(DASHBOARD_UPDATED_EVENT, (event) => {
+    handler(event.payload);
+  });
 }
 
 export async function loadGithubProjectState(): Promise<GithubProjectState> {

@@ -1,17 +1,20 @@
 import { useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { BrowserPane, type BrowserFrameInstance } from "./BrowserPane";
+import { DashboardPane } from "./DashboardPane";
 import { FilesPane } from "./FilesPane";
 import { TerminalPane } from "./TerminalPane";
 import { Button } from "./ui/button";
 import type { ContainerToolPanel } from "../lib/view-types";
-import type { DeveloperSurface, DeveloperTarget } from "../types";
-import { FolderOpen, Globe } from "lucide-react";
+import type { DeveloperSurface, DeveloperTarget, TunnelStatus } from "../types";
+import { FolderOpen, Globe, LayoutDashboard } from "lucide-react";
 
 interface ContainerPageProps {
   activeTool: ContainerToolPanel;
+  dashboardRefreshSeconds: number;
   developmentPanel: ContainerToolPanel | null;
   developmentBrowserFrame?: BrowserFrameInstance;
   developmentSurface?: DeveloperSurface;
+  developmentStatus?: TunnelStatus;
   isTerminalCollapsed: boolean;
   onReloadBrowser: () => void;
   onRestartBrowser: () => void;
@@ -26,9 +29,11 @@ interface ContainerPageProps {
 
 export function ContainerPage({
   activeTool,
+  dashboardRefreshSeconds,
   developmentPanel,
   developmentBrowserFrame,
   developmentSurface,
+  developmentStatus,
   isTerminalCollapsed,
   onReloadBrowser,
   onRestartBrowser,
@@ -101,6 +106,18 @@ export function ContainerPage({
 
         <div className="content-header-tools content-header-tools-container">
           <Button
+            aria-label="Dashboard"
+            isActive={activeTool === "dashboard"}
+            onClick={() => {
+              onSelectTool("dashboard");
+            }}
+            size="icon"
+            title="Dashboard"
+            variant={activeTool === "dashboard" ? "default" : "ghost"}
+          >
+            <LayoutDashboard size={16} />
+          </Button>
+          <Button
             aria-label="Files"
             isActive={activeTool === "files"}
             onClick={() => {
@@ -171,7 +188,7 @@ export function ContainerPage({
 
       <section className="page-section">
         <div
-          className={`container-workspace ${activeTool === "files" ? "tool-files" : "tool-browser"} ${isTerminalCollapsed ? "is-terminal-collapsed" : ""}`}
+          className={`container-workspace ${activeTool === "dashboard" ? "tool-dashboard" : activeTool === "files" ? "tool-files" : "tool-browser"} ${isTerminalCollapsed ? "is-terminal-collapsed" : ""}`}
           style={workspaceStyle}
         >
           <article className={`panel terminal-panel ${isTerminalCollapsed ? "is-collapsed" : ""}`}>
@@ -185,6 +202,24 @@ export function ContainerPage({
             onPointerDown={onStartResize}
             role="separator"
           />
+
+          <div className={`dashboard-pane-slot ${activeTool === "dashboard" ? "" : "is-hidden"}`}>
+            <DashboardPane
+              key={`${target.id}:${dashboardRefreshSeconds}`}
+              dashboardRefreshSeconds={dashboardRefreshSeconds}
+              developmentStatus={developmentStatus}
+              developmentSurfaceLocalUrl={developmentSurface?.localUrl}
+              onOpenDev={() => {
+                if (developmentPanel) {
+                  onSelectTool(developmentPanel);
+                }
+              }}
+              onOpenFiles={() => {
+                onSelectTool("files");
+              }}
+              target={target}
+            />
+          </div>
 
           <div className={`files-pane-slot ${activeTool === "files" ? "" : "is-hidden"}`}>
             <FilesPane active={pageVisible} target={target} />

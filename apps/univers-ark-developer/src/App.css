@@ -4,5 +4,6 @@
 @import "./styles/workspace.css";
 @import "./styles/terminal.css";
 @import "./styles/browser.css";
+@import "./styles/dashboard.css";
 @import "./styles/files.css";
 @import "./styles/github.css";

@@ -135,7 +135,12 @@ function App() {
   const [visitedContainerIds, setVisitedContainerIds] = useState<string[]>([]);
   const [visitedServerIds, setVisitedServerIds] = useState<string[]>([]);
   const previousNonSettingsViewRef = useRef<ActiveView>({ kind: "overview" });
-  const { appSettings, resolvedTheme, updateThemeMode } = useAppearance();
+  const {
+    appSettings,
+    resolvedTheme,
+    updateDashboardRefreshSeconds,
+    updateThemeMode,
+  } = useAppearance();
   const { bootstrap, error, expandedServerIds, isRefreshing, refreshInventory, setExpandedServerIds } =
     useWorkbenchBootstrap();
   const { isSidebarHidden, setIsSidebarHidden } = useSidebarState();
@@ -240,7 +245,7 @@ function App() {
           : `Container ${activeContainerTarget?.label ?? activeView.targetId}`;
 
   return (
-    <main className={`shell ${isOverviewView ? "shell-overview" : ""}`}>
+    <main className={`shell ${isOverviewView ? "shell-overview" : ""} ${isSidebarHidden ? "shell-sidebar-hidden" : ""}`}>
       <section
         className={`shell-layout ${isOverviewView ? "shell-layout-overview" : ""} ${isSidebarHidden ? "shell-layout-sidebar-hidden" : ""}`}
       >
@@ -305,8 +310,9 @@ function App() {
             <SettingsPage
               appSettings={appSettings}
               configPath={bootstrap.configPath}
-              onAppSettingsChange={updateThemeMode}
+              onDashboardRefreshChange={updateDashboardRefreshSeconds}
               onConfigSaved={refreshInventory}
+              onThemeModeChange={updateThemeMode}
               resolvedTheme={resolvedTheme}
               servers={bootstrap.servers}
               targets={bootstrap.targets}
@@ -333,7 +339,9 @@ function App() {
           {visitedContainerIds.map((targetId) => {
             const target = targetById.get(targetId);
             const isVisible = activeView.kind === "container" && activeView.targetId === targetId;
-            const activeTool = target ? (containerTools[target.id] ?? "files") : "files";
+            const activeTool = target
+              ? (containerTools[target.id] ?? "dashboard")
+              : "dashboard";
             const developmentSurface = target?.surfaces.find(
               (surface) => surface.id === "development",
             );
@@ -370,9 +378,11 @@ function App() {
                 {target ? (
                   <ContainerPage
                     activeTool={activeTool}
+                    dashboardRefreshSeconds={appSettings.dashboardRefreshSeconds}
                     developmentPanel={developmentPanel}
                     developmentBrowserFrame={developmentBrowserFrame}
                     developmentSurface={developmentSurface}
+                    developmentStatus={developmentStatus}
                     isTerminalCollapsed={Boolean(containerTerminalCollapsed[target.id])}
                     onReloadBrowser={() => {
                       if (browserSurface) {

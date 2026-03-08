@@ -6,6 +6,7 @@ type ResolvedTheme = "light" | "dark";
 
 const DEFAULT_SETTINGS: AppSettings = {
   themeMode: "system",
+  dashboardRefreshSeconds: 30,
 };
 
 function resolveSystemTheme(): ResolvedTheme {
@@ -72,9 +73,9 @@ export function useAppearance() {
     };
   }, [appSettings.themeMode]);
 
-  const updateThemeMode = (themeMode: ThemeMode) => {
+  const updateSettings = (updater: (current: AppSettings) => AppSettings) => {
     setAppSettings((current) => {
-      const next = { ...current, themeMode };
+      const next = updater(current);
 
       if (didLoadSettingsRef.current) {
         void saveAppSettings(next);
@@ -84,9 +85,18 @@ export function useAppearance() {
     });
   };
 
+  const updateThemeMode = (themeMode: ThemeMode) => {
+    updateSettings((current) => ({ ...current, themeMode }));
+  };
+
+  const updateDashboardRefreshSeconds = (dashboardRefreshSeconds: number) => {
+    updateSettings((current) => ({ ...current, dashboardRefreshSeconds }));
+  };
+
   return {
     appSettings,
     resolvedTheme,
+    updateDashboardRefreshSeconds,
     updateThemeMode,
   };
 }

@@ -1,0 +1,198 @@
+.dashboard-pane-slot {
+  min-height: 0;
+  display: grid;
+  grid-column: 3;
+}
+
+.dashboard-pane-slot.is-hidden {
+  display: none;
+}
+
+.dashboard-panel {
+  min-height: 0;
+  overflow: auto;
+  background: color-mix(in srgb, var(--secondary) 32%, transparent);
+}
+
+.dashboard-grid {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-card-hero {
+  grid-column: 1 / -1;
+}
+
+.dashboard-card-wide {
+  grid-column: 1 / -1;
+}
+
+.dashboard-summary-bar {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+}
+
+.dashboard-summary-copy {
+  display: grid;
+  flex: 1;
+  gap: 0.9rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-summary-item {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.dashboard-summary-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dashboard-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.dashboard-card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.dashboard-copy {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.dashboard-error-copy {
+  color: var(--destructive);
+}
+
+.dashboard-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.dashboard-stats div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.dashboard-stats .is-wide {
+  grid-column: 1 / -1;
+}
+
+.dashboard-stats dt {
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.dashboard-stats dd {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 0.78rem;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.dashboard-inline-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.dashboard-meta-label {
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.dashboard-meta-value {
+  color: var(--foreground);
+  font-size: 0.8rem;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.dashboard-signal {
+  display: grid;
+  gap: 0.45rem;
+  border-radius: 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  background: color-mix(in srgb, var(--secondary) 30%, transparent);
+  padding: 0.8rem;
+}
+
+.dashboard-signal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.dashboard-actions-list {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-action-item {
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.8rem;
+  border-radius: 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  background: color-mix(in srgb, var(--secondary) 22%, transparent);
+}
+
+.dashboard-action-title {
+  color: var(--foreground);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.dashboard-tmux {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.dashboard-tmux-group {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.dashboard-group-label {
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-tmux-sessions {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}

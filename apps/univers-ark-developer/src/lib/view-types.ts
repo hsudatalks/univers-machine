@@ -4,7 +4,7 @@ export type ActiveView =
   | { kind: "server"; serverId: string }
   | { kind: "container"; targetId: string };
 
-export type ContainerToolPanel = "files" | `browser:${string}`;
+export type ContainerToolPanel = "dashboard" | "files" | `browser:${string}`;
 
 export function isBrowserToolPanel(
   panel: ContainerToolPanel | null | undefined,

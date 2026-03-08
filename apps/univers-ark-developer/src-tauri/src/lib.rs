@@ -3,6 +3,7 @@ mod cleanup;
 mod commands;
 mod config;
 mod constants;
+mod dashboard;
 mod files;
 mod github;
 mod models;

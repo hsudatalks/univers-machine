@@ -233,9 +233,12 @@ export function useContainerWorkspace({
 
       switch (event.key) {
         case "1":
-          nextPanel = "files";
+          nextPanel = "dashboard";
           break;
         case "2":
+          nextPanel = "files";
+          break;
+        case "3":
           nextPanel = developmentPanel;
           break;
         default:
@@ -269,7 +272,9 @@ export function useContainerWorkspace({
     setContainerTools((current) => ({
       ...current,
       [target.id]:
-        current[target.id] === "browser:preview" ? "files" : current[target.id] ?? "files",
+        current[target.id] === "browser:preview"
+          ? "dashboard"
+          : current[target.id] ?? "dashboard",
     }));
     setContainerTerminalWidths((current) => ({
       ...current,

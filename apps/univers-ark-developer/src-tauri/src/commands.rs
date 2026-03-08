@@ -2,7 +2,13 @@ use crate::{
     config::{
         read_bootstrap_data, read_server_inventory, read_targets_config,
         resolve_raw_target, restart_container as restart_remote_container,
+        run_target_shell_command,
         save_targets_config, targets_file_path,
+    },
+    dashboard::{
+        load_container_dashboard as read_container_dashboard,
+        refresh_dashboard_once, start_dashboard_monitor as spawn_dashboard_monitor,
+        stop_dashboard_monitor as halt_dashboard_monitor,
     },
     files::{
         list_remote_directory as load_remote_directory,
@@ -15,9 +21,9 @@ use crate::{
         open_external_url,
     },
     models::{
-        AppBootstrap, AppSettings, GithubProjectState, GithubPullRequestDetail, ManagedServer,
-        RemoteDirectoryListing, RemoteFilePreview, TerminalSnapshot, TerminalState, TunnelState,
-        TunnelStatus,
+        AppBootstrap, AppSettings, ContainerDashboard, DashboardState, GithubProjectState,
+        GithubPullRequestDetail, ManagedServer, RemoteDirectoryListing, RemoteFilePreview,
+        TerminalSnapshot, TerminalState, TunnelState, TunnelStatus,
     },
     runtime::{read_runtime_targets_file, resolve_runtime_surface, surface_key},
     settings::{load_app_settings as read_app_settings, save_app_settings as write_app_settings},
@@ -312,6 +318,42 @@ pub(crate) async fn read_remote_file_preview(
 }
 
 #[tauri::command]
+pub(crate) async fn load_container_dashboard(
+    target_id: String,
+) -> Result<ContainerDashboard, String> {
+    async_runtime::spawn_blocking(move || read_container_dashboard(&target_id))
+        .await
+        .map_err(|error| format!("Failed to join container dashboard task: {}", error))?
+}
+
+#[tauri::command]
+pub(crate) fn start_dashboard_monitor(
+    app: AppHandle,
+    dashboard_state: State<'_, DashboardState>,
+    target_id: String,
+    refresh_seconds: u64,
+) -> Result<(), String> {
+    spawn_dashboard_monitor(app, dashboard_state, target_id, refresh_seconds)
+}
+
+#[tauri::command]
+pub(crate) fn stop_dashboard_monitor(
+    dashboard_state: State<'_, DashboardState>,
+    target_id: String,
+) -> Result<(), String> {
+    halt_dashboard_monitor(dashboard_state, target_id)
+}
+
+#[tauri::command]
+pub(crate) fn refresh_container_dashboard(
+    app: AppHandle,
+    target_id: String,
+) -> Result<(), String> {
+    refresh_dashboard_once(app, target_id);
+    Ok(())
+}
+
+#[tauri::command]
 pub(crate) async fn load_github_project_state() -> Result<GithubProjectState, String> {
     async_runtime::spawn_blocking(read_github_project_state)
         .await
@@ -349,6 +391,32 @@ pub(crate) async fn restart_container(
     async_runtime::spawn_blocking(move || restart_remote_container(&server_id, &container_name))
         .await
         .map_err(|error| format!("Failed to join restart container task: {}", error))?
+}
+
+#[tauri::command]
+pub(crate) async fn restart_tmux(target_id: String) -> Result<(), String> {
+    async_runtime::spawn_blocking(move || {
+        let output = run_target_shell_command(
+            &target_id,
+            "cd ~/repos/univers-container && ./.claude/skills/container-manage/bin/cm dev restart developer",
+        )?;
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+        Err(if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            String::from("Failed to restart tmux")
+        })
+    })
+    .await
+    .map_err(|error| format!("Failed to join restart tmux task: {}", error))?
 }
 
 #[tauri::command]
