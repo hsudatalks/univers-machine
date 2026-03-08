@@ -1,0 +1,36 @@
+.overview-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.overview-zoom-button {
+  min-width: 1.7rem;
+  min-height: 1.7rem;
+  padding: 0;
+}
+
+.terminal-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(var(--overview-terminal-grid-min-width, 30rem), 1fr)
+  );
+  gap: 0.5rem;
+  overflow: auto;
+  align-content: start;
+  padding-right: 0.25rem;
+}
+
+.content-page-overview .terminal-grid {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.content-page-overview .terminal-card {
+  height: var(--overview-terminal-card-height, 32rem);
+  min-width: var(--overview-terminal-grid-min-width, 30rem);
+  min-height: var(--overview-terminal-min-height, 30rem);
+}
