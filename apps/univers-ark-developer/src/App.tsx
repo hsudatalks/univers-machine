@@ -1,60 +1,35 @@
-import {
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
-import { isTauri } from "@tauri-apps/api/core";
+import { useEffect, useState, type CSSProperties } from "react";
 import type { BrowserFrameInstance } from "./components/BrowserPane";
 import { ContainerPage } from "./components/ContainerPage";
 import { OverviewPage } from "./components/OverviewPage";
+import { ShellState } from "./components/ShellState";
 import { ServerPage } from "./components/ServerPage";
 import { SidebarNav } from "./components/SidebarNav";
+import { StatusBar } from "./components/StatusBar";
 import "./App.css";
+import { useContainerWorkspace } from "./hooks/useContainerWorkspace";
+import { useOverviewNavigation } from "./hooks/useOverviewNavigation";
 import {
-  listenTunnelStatus,
-  listenSidebarToggleRequested,
-  loadBootstrap,
-  restartTunnel,
-} from "./lib/tauri";
-import { warmTargetTunnels } from "./lib/tunnel-manager";
+  OVERVIEW_ZOOM_DEFAULT,
+  OVERVIEW_ZOOM_MAX,
+  OVERVIEW_ZOOM_MIN,
+  OVERVIEW_ZOOM_STEP,
+  useOverviewZoom,
+} from "./hooks/useOverviewZoom";
+import { useSidebarState } from "./hooks/useSidebarState";
+import { useTunnelStatuses } from "./hooks/useTunnelStatuses";
+import { useWorkbenchBootstrap } from "./hooks/useWorkbenchBootstrap";
+import { useWorkbenchInventory } from "./hooks/useWorkbenchInventory";
 import type {
   AppBootstrap,
   DeveloperSurface,
   DeveloperTarget,
-  ManagedServer,
   TunnelStatus,
 } from "./types";
-import type { ContainerToolPanel } from "./lib/view-types";
-
-type ActiveView =
-  | { kind: "overview" }
-  | { kind: "server"; serverId: string }
-  | { kind: "container"; targetId: string };
-
-const IS_MAC = navigator.platform.toUpperCase().includes("MAC");
-
-function isPlatformModifier(event: KeyboardEvent): boolean {
-  return IS_MAC ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-}
-
-interface ResizeSession {
-  targetId: string;
-  startTerminalWidth: number;
-  startPointerX: number;
-  workspaceWidth: number;
-}
-
-const OVERVIEW_ZOOM_STORAGE_KEY = "univers-ark-developer:overview-zoom";
-const SIDEBAR_VISIBILITY_STORAGE_KEY =
-  "univers-ark-developer:sidebar-hidden";
-const OVERVIEW_ZOOM_MIN = 0.8;
-const OVERVIEW_ZOOM_MAX = 1.3;
-const OVERVIEW_ZOOM_STEP = 0.1;
-const OVERVIEW_ZOOM_DEFAULT = 1;
+import {
+  browserSurfaceIdFromPanel,
+  type ActiveView,
+} from "./lib/view-types";
 const DEFAULT_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TOOL_PANEL_WIDTH_REM = 22;
@@ -91,23 +66,6 @@ function uniqueStrings(values: string[]): string[] {
     seen.add(value);
     return true;
   });
-}
-
-function clampOverviewZoom(value: number): number {
-  return Math.min(OVERVIEW_ZOOM_MAX, Math.max(OVERVIEW_ZOOM_MIN, value));
-}
-
-function roundOverviewZoom(value: number): number {
-  return Math.round(value * 10) / 10;
-}
-
-function serverForTargetId(
-  servers: ManagedServer[],
-  targetId: string,
-): ManagedServer | undefined {
-  return servers.find((server) =>
-    server.containers.some((container) => container.targetId === targetId),
-  );
 }
 
 function surfaceKey(targetId: string, surfaceId: string): string {
@@ -169,429 +127,65 @@ function clampTerminalPanelWidth(value: number, workspaceWidth: number): number 
   return Math.min(maxTerminalWidth, Math.max(minTerminalWidth, value));
 }
 
-function isBrowserToolPanel(
-  panel: ContainerToolPanel | null | undefined,
-): panel is `browser:${string}` {
-  return Boolean(panel?.startsWith("browser:"));
-}
-
-function browserSurfaceIdFromPanel(
-  panel: ContainerToolPanel | null | undefined,
-): string | null {
-  if (!isBrowserToolPanel(panel)) {
-    return null;
-  }
-
-  return panel.slice("browser:".length) || null;
-}
-
-type OverviewMoveDirection = "left" | "right" | "up" | "down";
-
-function adjacentOverviewTargetId(
-  direction: OverviewMoveDirection,
-  currentTargetId: string,
-  targetIds: string[],
-  elements: Map<string, HTMLElement>,
-): string {
-  const cards = targetIds
-    .map((targetId) => {
-      const element = elements.get(targetId);
-
-      if (!element) {
-        return null;
-      }
-
-      const rect = element.getBoundingClientRect();
-
-      return {
-        centerX: rect.left + rect.width / 2,
-        centerY: rect.top + rect.height / 2,
-        id: targetId,
-      };
-    })
-    .filter(
-      (
-        card,
-      ): card is {
-        centerX: number;
-        centerY: number;
-        id: string;
-      } => Boolean(card),
-    );
-
-  if (cards.length === 0) {
-    return currentTargetId;
-  }
-
-  const currentCard = cards.find((card) => card.id === currentTargetId) ?? cards[0];
-  const candidates = cards.filter((card) => {
-    switch (direction) {
-      case "left":
-        return card.centerX < currentCard.centerX - 4;
-      case "right":
-        return card.centerX > currentCard.centerX + 4;
-      case "up":
-        return card.centerY < currentCard.centerY - 4;
-      case "down":
-        return card.centerY > currentCard.centerY + 4;
-    }
-  });
-
-  if (candidates.length === 0) {
-    return currentCard.id;
-  }
-
-  const perpendicularWeight = 4;
-
-  const bestCandidate = candidates.reduce((best, candidate) => {
-    const axisDistance =
-      direction === "left" || direction === "right"
-        ? Math.abs(candidate.centerX - currentCard.centerX)
-        : Math.abs(candidate.centerY - currentCard.centerY);
-    const perpendicularDistance =
-      direction === "left" || direction === "right"
-        ? Math.abs(candidate.centerY - currentCard.centerY)
-        : Math.abs(candidate.centerX - currentCard.centerX);
-    const score = axisDistance + perpendicularDistance * perpendicularWeight;
-
-    if (!best || score < best.score) {
-      return {
-        id: candidate.id,
-        score,
-      };
-    }
-
-    return best;
-  }, null as { id: string; score: number } | null);
-
-  return bestCandidate?.id ?? currentCard.id;
-}
-
 function App() {
-  const [bootstrap, setBootstrap] = useState<AppBootstrap | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>({ kind: "overview" });
   const [visitedContainerIds, setVisitedContainerIds] = useState<string[]>([]);
   const [visitedServerIds, setVisitedServerIds] = useState<string[]>([]);
-  const [overviewFocusedTargetId, setOverviewFocusedTargetId] = useState<string>("");
-  const [isSidebarHidden, setIsSidebarHidden] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-
-    return (
-      window.localStorage.getItem(SIDEBAR_VISIBILITY_STORAGE_KEY) === "true"
-    );
+  const { bootstrap, error, expandedServerIds, setExpandedServerIds } =
+    useWorkbenchBootstrap();
+  const { isSidebarHidden, setIsSidebarHidden } = useSidebarState();
+  const { overviewZoom, setOverviewZoom, clampOverviewZoom, roundOverviewZoom } =
+    useOverviewZoom();
+  const { tunnelStatuses, setTunnelStatus } = useTunnelStatuses();
+  const {
+    activeContainerServer,
+    activeContainerTarget,
+    overviewContainers,
+    overviewTerminalTargets,
+    reachableContainerCount,
+    standaloneTargets,
+    targetById,
+    visitedServers,
+  } = useWorkbenchInventory(bootstrap, activeView, visitedServerIds);
+  const {
+    activeOverviewFocusedTargetId,
+    registerOverviewCardElement,
+    setOverviewFocusedTargetId,
+  } = useOverviewNavigation({
+    activeViewKind: activeView.kind,
+    onOpenWorkspace: setContainerView,
+    targetIds: overviewTerminalTargets.map((target) => target.id),
   });
-  const [expandedServerIds, setExpandedServerIds] = useState<string[]>([]);
-  const [containerTools, setContainerTools] = useState<
-    Record<string, ContainerToolPanel | undefined>
-  >({});
-  const [containerTerminalWidths, setContainerTerminalWidths] = useState<Record<string, number>>(
-    {},
-  );
-  const [activeResize, setActiveResize] = useState<ResizeSession | null>(null);
-  const [browserFrameVersions, setBrowserFrameVersions] = useState<Record<string, number>>({});
-  const [tunnelStatuses, setTunnelStatuses] = useState<Record<string, TunnelStatus>>({});
-  const [error, setError] = useState<string | null>(null);
-  const overviewCardElementsRef = useRef(new Map<string, HTMLElement>());
-  const [overviewZoom, setOverviewZoom] = useState(() => {
-    if (typeof window === "undefined") {
-      return OVERVIEW_ZOOM_DEFAULT;
+
+  useEffect(() => {
+    if (!bootstrap) {
+      return;
     }
 
-    const stored = window.localStorage.getItem(OVERVIEW_ZOOM_STORAGE_KEY);
-    const parsed = stored ? Number(stored) : Number.NaN;
+    const initialTarget = resolvePreferredTarget(bootstrap);
+    setOverviewFocusedTargetId((current) => current || initialTarget?.id || "");
+  }, [bootstrap, setOverviewFocusedTargetId]);
 
-    if (!Number.isFinite(parsed)) {
-      return OVERVIEW_ZOOM_DEFAULT;
-    }
-
-    return clampOverviewZoom(parsed);
+  const {
+    browserFrameVersions,
+    containerTerminalWidths,
+    containerTools,
+    prepareContainerView,
+    reloadBrowserFrame,
+    restartBrowserTunnel,
+    selectContainerTool,
+    startContainerResize,
+  } = useContainerWorkspace({
+    activeView,
+    clampTerminalPanelWidth,
+    defaultTerminalPanelWidthPx,
+    onSetActiveView: setActiveView,
+    onSetOverviewFocus: setOverviewFocusedTargetId,
+    onTunnelStatus: setTunnelStatus,
+    targetById,
   });
-  useEffect(() => {
-    let cancelled = false;
 
-    loadBootstrap()
-      .then((nextBootstrap) => {
-        if (cancelled) {
-          return;
-        }
-
-        const initialTarget = resolvePreferredTarget(nextBootstrap);
-
-        setBootstrap(nextBootstrap);
-        setActiveView({ kind: "overview" });
-        setVisitedContainerIds([]);
-        setVisitedServerIds([]);
-        setOverviewFocusedTargetId(initialTarget?.id ?? "");
-        setExpandedServerIds(nextBootstrap.servers.map((server) => server.id));
-        setContainerTools({});
-        setContainerTerminalWidths({});
-        setBrowserFrameVersions({});
-        setTunnelStatuses({});
-        setError(null);
-      })
-      .catch((loadError) => {
-        if (cancelled) {
-          return;
-        }
-
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "Failed to load target definitions.",
-        );
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.localStorage.setItem(
-      OVERVIEW_ZOOM_STORAGE_KEY,
-      String(roundOverviewZoom(overviewZoom)),
-    );
-  }, [overviewZoom]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.localStorage.setItem(
-      SIDEBAR_VISIBILITY_STORAGE_KEY,
-      String(isSidebarHidden),
-    );
-  }, [isSidebarHidden]);
-
-  useEffect(() => {
-    if (!isTauri()) {
-      return;
-    }
-
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-
-    void listenSidebarToggleRequested(() => {
-      if (cancelled) {
-        return;
-      }
-
-      setIsSidebarHidden((current) => !current);
-    }).then((nextUnlisten) => {
-      if (cancelled) {
-        nextUnlisten();
-        return;
-      }
-
-      unlisten = nextUnlisten;
-    });
-
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  useEffect(() => {
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        !isPlatformModifier(event) ||
-        event.altKey ||
-        event.shiftKey ||
-        event.code !== "KeyH"
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      setIsSidebarHidden((current) => !current);
-    };
-
-    window.addEventListener("keydown", handleKeyDown, true);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown, true);
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-
-    void listenTunnelStatus((status) => {
-      if (cancelled) {
-        return;
-      }
-
-      setTunnelStatuses((current) => ({
-        ...current,
-        [surfaceKey(status.targetId, status.surfaceId)]: status,
-      }));
-    }).then((nextUnlisten) => {
-      if (cancelled) {
-        nextUnlisten();
-        return;
-      }
-
-      unlisten = nextUnlisten;
-    });
-
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!activeResize) {
-      return;
-    }
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const deltaX = event.clientX - activeResize.startPointerX;
-      const nextWidth = clampTerminalPanelWidth(
-        activeResize.startTerminalWidth + deltaX,
-        activeResize.workspaceWidth,
-      );
-
-      setContainerTerminalWidths((current) => ({
-        ...current,
-        [activeResize.targetId]: nextWidth,
-      }));
-    };
-
-    const handlePointerUp = () => {
-      setActiveResize(null);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp, { once: true });
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [activeResize]);
-
-  const targetById = useMemo(
-    () => new Map(bootstrap?.targets.map((target) => [target.id, target]) ?? []),
-    [bootstrap],
-  );
-
-  const managedTargetIds = useMemo(
-    () =>
-      new Set(
-        bootstrap?.servers.flatMap((server) =>
-          server.containers.map((container) => container.targetId),
-        ) ?? [],
-      ),
-    [bootstrap],
-  );
-
-  const standaloneTargets = useMemo(
-    () =>
-      bootstrap?.targets.filter((target) => !managedTargetIds.has(target.id)) ?? [],
-    [bootstrap, managedTargetIds],
-  );
-
-  const overviewContainers = useMemo(
-    () =>
-      bootstrap?.servers.flatMap((server) =>
-        server.containers.map((container) => ({
-          container,
-          server,
-          target: targetById.get(container.targetId),
-        })),
-      ) ?? [],
-    [bootstrap, targetById],
-  );
-
-  const overviewTerminalTargets = useMemo(
-    () => [
-      ...overviewContainers
-        .map((entry) => entry.target)
-        .filter((target): target is DeveloperTarget => Boolean(target)),
-      ...standaloneTargets,
-    ],
-    [overviewContainers, standaloneTargets],
-  );
-
-  const visitedServers = useMemo(
-    () =>
-      visitedServerIds
-        .map((serverId) => bootstrap?.servers.find((server) => server.id === serverId))
-        .filter((server): server is ManagedServer => Boolean(server)),
-    [bootstrap, visitedServerIds],
-  );
-
-  const activeContainerTarget = useMemo(() => {
-    if (!bootstrap || activeView.kind !== "container") {
-      return undefined;
-    }
-
-    return bootstrap.targets.find((target) => target.id === activeView.targetId);
-  }, [activeView, bootstrap]);
-
-  const activeContainerServer = useMemo(
-    () =>
-      activeContainerTarget
-        ? serverForTargetId(bootstrap?.servers ?? [], activeContainerTarget.id)
-        : undefined,
-    [activeContainerTarget, bootstrap],
-  );
-  const reachableContainerCount = useMemo(
-    () =>
-      overviewContainers.filter((entry) => entry.container.sshReachable).length,
-    [overviewContainers],
-  );
-  const activeOverviewFocusedTargetId = useMemo(() => {
-    if (overviewTerminalTargets.length === 0) {
-      return "";
-    }
-
-    if (
-      overviewFocusedTargetId &&
-      overviewTerminalTargets.some((target) => target.id === overviewFocusedTargetId)
-    ) {
-      return overviewFocusedTargetId;
-    }
-
-    return overviewTerminalTargets[0]?.id ?? "";
-  }, [overviewFocusedTargetId, overviewTerminalTargets]);
-
-  useEffect(() => {
-    if (activeView.kind !== "overview" || !activeOverviewFocusedTargetId) {
-      return;
-    }
-
-    const element = overviewCardElementsRef.current.get(activeOverviewFocusedTargetId);
-
-
-    if (!element) {
-      return;
-    }
-
-    element.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest",
-      inline: "nearest",
-    });
-  }, [activeOverviewFocusedTargetId, activeView.kind]);
-
-  const setContainerView = (targetId: string) => {
+  function setContainerView(targetId: string) {
     const nextTarget = targetById.get(targetId);
 
     if (!nextTarget) {
@@ -600,262 +194,8 @@ function App() {
 
     setActiveView({ kind: "container", targetId });
     setVisitedContainerIds((current) => uniqueStrings([...current, targetId]));
-    setContainerTools((current) => ({
-      ...current,
-      [targetId]: current[targetId] ?? "files",
-    }));
-    setContainerTerminalWidths((current) => ({
-      ...current,
-      [targetId]: current[targetId] ?? defaultTerminalPanelWidthPx(),
-    }));
-    warmTargetTunnels(nextTarget, undefined, (status) => {
-      setTunnelStatuses((current) => ({
-        ...current,
-        [surfaceKey(status.targetId, status.surfaceId)]: status,
-      }));
-    });
-  };
-
-  const openContainerViewFromShortcut = useEffectEvent((targetId: string) => {
-    setContainerView(targetId);
-  });
-
-  useEffect(() => {
-    if (activeView.kind !== "overview") {
-      return;
-    }
-
-    const fallbackTargetId = overviewTerminalTargets[0]?.id;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isPlatformModifier(event) || event.altKey || event.shiftKey) {
-        return;
-      }
-
-      const currentTargetId = activeOverviewFocusedTargetId || fallbackTargetId;
-
-      if (event.key === "Enter") {
-        if (!currentTargetId) {
-          return;
-        }
-
-        event.preventDefault();
-        event.stopPropagation();
-        openContainerViewFromShortcut(currentTargetId);
-        return;
-      }
-
-      let direction: OverviewMoveDirection | null = null;
-
-      switch (event.key) {
-        case "ArrowLeft":
-          direction = "left";
-          break;
-        case "ArrowRight":
-          direction = "right";
-          break;
-        case "ArrowUp":
-          direction = "up";
-          break;
-        case "ArrowDown":
-          direction = "down";
-          break;
-        default:
-          return;
-      }
-
-      if (!direction || !currentTargetId) {
-        return;
-      }
-
-      const nextTargetId = adjacentOverviewTargetId(
-        direction,
-        currentTargetId,
-        overviewTerminalTargets.map((target) => target.id),
-        overviewCardElementsRef.current,
-      );
-
-      if (!nextTargetId || nextTargetId === currentTargetId) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      setOverviewFocusedTargetId(nextTargetId);
-    };
-
-    window.addEventListener("keydown", handleKeyDown, true);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown, true);
-    };
-  }, [
-    activeOverviewFocusedTargetId,
-    activeView.kind,
-    overviewTerminalTargets,
-  ]);
-
-  const selectContainerTool = (
-    target: DeveloperTarget,
-    panel: ContainerToolPanel,
-  ) => {
-    setContainerTools((current) => ({
-      ...current,
-      [target.id]: panel,
-    }));
-
-    if (!(target.id in containerTerminalWidths)) {
-      setContainerTerminalWidths((current) => ({
-        ...current,
-        [target.id]: defaultTerminalPanelWidthPx(),
-      }));
-    }
-
-    if (isBrowserToolPanel(panel)) {
-      const surfaceId = browserSurfaceIdFromPanel(panel);
-      const surface = target.surfaces.find((entry) => entry.id === surfaceId);
-
-      if (surface) {
-        warmTargetTunnels(target, [surface.id], (status) => {
-          setTunnelStatuses((current) => ({
-            ...current,
-            [surfaceKey(status.targetId, status.surfaceId)]: status,
-          }));
-        });
-      }
-    }
-  };
-
-  const selectContainerToolFromShortcut = useEffectEvent(
-    (target: DeveloperTarget, panel: ContainerToolPanel) => {
-      selectContainerTool(target, panel);
-    },
-  );
-
-  useEffect(() => {
-    if (activeView.kind !== "container") {
-      return;
-    }
-
-    const { targetId } = activeView;
-    const target = targetById.get(targetId);
-
-    if (!target) {
-      return;
-    }
-
-    const developmentSurface = target.surfaces.find(
-      (surface) => surface.id === "development",
-    );
-    const previewSurface = target.surfaces.find((surface) => surface.id === "preview");
-    const developmentPanel = developmentSurface
-      ? (`browser:${developmentSurface.id}` as const)
-      : null;
-    const previewPanel = previewSurface
-      ? (`browser:${previewSurface.id}` as const)
-      : null;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isPlatformModifier(event) || event.altKey || event.shiftKey) {
-        return;
-      }
-
-      if (event.key === "Backspace" || event.key === "Delete") {
-        event.preventDefault();
-        event.stopPropagation();
-        setOverviewFocusedTargetId(targetId);
-        setActiveView({ kind: "overview" });
-        return;
-      }
-
-      let nextPanel: ContainerToolPanel | null = null;
-
-      switch (event.key) {
-        case "1":
-          nextPanel = "files";
-          break;
-        case "2":
-          nextPanel = developmentPanel;
-          break;
-        case "3":
-          nextPanel = previewPanel;
-          break;
-        default:
-          return;
-      }
-
-      if (!nextPanel) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      selectContainerToolFromShortcut(target, nextPanel);
-    };
-
-    window.addEventListener("keydown", handleKeyDown, true);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown, true);
-    };
-  }, [activeView, targetById]);
-
-  const startContainerResize = (
-    event: ReactPointerEvent<HTMLDivElement>,
-    targetId: string,
-  ) => {
-    const workspace = event.currentTarget.parentElement;
-
-    if (!workspace) {
-      return;
-    }
-
-    const workspaceWidth = workspace.getBoundingClientRect().width;
-    const startTerminalWidth =
-      containerTerminalWidths[targetId] ?? defaultTerminalPanelWidthPx();
-
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setActiveResize({
-      targetId,
-      startTerminalWidth,
-      startPointerX: event.clientX,
-      workspaceWidth,
-    });
-  };
-
-  const reloadBrowserFrame = (targetId: string, surfaceId: string) => {
-    const key = surfaceKey(targetId, surfaceId);
-
-    setBrowserFrameVersions((current) => ({
-      ...current,
-      [key]: (current[key] ?? 0) + 1,
-    }));
-  };
-
-  const restartBrowserTunnel = (targetId: string, surfaceId: string) => {
-    void restartTunnel(targetId, surfaceId)
-      .then((status) => {
-        setTunnelStatuses((current) => ({
-          ...current,
-          [surfaceKey(status.targetId, status.surfaceId)]: status,
-        }));
-      })
-      .catch((restartError) => {
-        setTunnelStatuses((current) => ({
-          ...current,
-          [surfaceKey(targetId, surfaceId)]: {
-            targetId,
-            surfaceId,
-            state: "error",
-            message:
-              restartError instanceof Error
-                ? restartError.message
-                : "Failed to restart browser tunnel.",
-          },
-        }));
-      });
-  };
+    prepareContainerView(nextTarget);
+  }
 
   const toggleServerExpansion = (serverId: string) => {
     setExpandedServerIds((current) =>
@@ -866,25 +206,11 @@ function App() {
   };
 
   if (error) {
-    return (
-      <main className="shell shell-state">
-        <section className="state-panel">
-          <span className="state-label">Error</span>
-          <p className="state-copy">{error}</p>
-        </section>
-      </main>
-    );
+    return <ShellState label="Error" message={error} />;
   }
 
   if (!bootstrap) {
-    return (
-      <main className="shell shell-state">
-        <section className="state-panel">
-          <span className="state-label">Loading</span>
-          <p className="state-copy">Preparing target definitions.</p>
-        </section>
-      </main>
-    );
+    return <ShellState label="Loading" message="Preparing target definitions." />;
   }
 
   const isOverviewView = activeView.kind === "overview";
@@ -962,13 +288,7 @@ function App() {
                 "--overview-terminal-min-height": `${30 * overviewZoom}rem`,
               } as CSSProperties}
               pageVisible={activeView.kind === "overview"}
-              registerOverviewCardElement={(targetId, element) => {
-                if (element) {
-                  overviewCardElementsRef.current.set(targetId, element);
-                } else {
-                  overviewCardElementsRef.current.delete(targetId);
-                }
-              }}
+              registerOverviewCardElement={registerOverviewCardElement}
               serverCount={bootstrap.servers.length}
               standaloneTargets={standaloneTargets}
             />
@@ -1079,71 +399,18 @@ function App() {
         </section>
       </section>
 
-      <footer className="status-bar" role="status">
-        <div className="status-bar-section">
-          <button
-            aria-label={isSidebarHidden ? "Show sidebar menu" : "Hide sidebar menu"}
-            className="panel-button panel-button-toolbar panel-button-icon status-bar-toggle"
-            onClick={() => {
-              setIsSidebarHidden((current) => !current);
-            }}
-            title={isSidebarHidden ? "Show sidebar menu" : "Hide sidebar menu"}
-            type="button"
-          >
-            <svg
-              aria-hidden="true"
-              className="panel-button-icon-svg"
-              fill="none"
-              viewBox="0 0 16 16"
-            >
-              {isSidebarHidden ? (
-                <path
-                  d="M2.75 3.25h10.5M2.75 8h10.5M2.75 12.75h10.5"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeWidth="1.25"
-                />
-              ) : (
-                <>
-                  <path
-                    d="M3.25 3.25v9.5M6.25 4h6.5M6.25 8h6.5M6.25 12h6.5"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeWidth="1.25"
-                  />
-                  <path
-                    d="M3.25 8h1.5"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeWidth="1.25"
-                  />
-                </>
-              )}
-            </svg>
-          </button>
-          <span className="status-bar-chip">{activeStatusLabel}</span>
-          <span className="status-bar-text">
-            Inventory ready
-          </span>
-        </div>
-
-        <div className="status-bar-section">
-          <span className="status-bar-text">
-            {bootstrap.servers.length} server(s)
-          </span>
-          <span className="status-bar-text">
-            {overviewContainers.length} container(s)
-          </span>
-          <span className="status-bar-text">
-            {reachableContainerCount} SSH ready
-          </span>
-          {isOverviewView ? (
-            <span className="status-bar-text">
-              Overview zoom {Math.round(overviewZoom * 100)}%
-            </span>
-          ) : null}
-        </div>
-      </footer>
+      <StatusBar
+        activeStatusLabel={activeStatusLabel}
+        containerCount={overviewContainers.length}
+        isOverviewView={isOverviewView}
+        isSidebarHidden={isSidebarHidden}
+        onToggleSidebar={() => {
+          setIsSidebarHidden((current) => !current);
+        }}
+        overviewZoom={overviewZoom}
+        reachableContainerCount={reachableContainerCount}
+        serverCount={bootstrap.servers.length}
+      />
     </main>
   );
 }
