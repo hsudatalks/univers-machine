@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ManagedServer } from "../types";
 import { loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
+import { ServerDialog } from "./ServerDialog";
 
 interface SettingsPageProps {
   configPath: string;
@@ -15,6 +16,7 @@ export function SettingsPage({ configPath, onConfigSaved, servers }: SettingsPag
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [selectedServer, setSelectedServer] = useState<ManagedServer | null>(null);
 
   const loadConfig = useCallback(async () => {
     setIsLoading(true);
@@ -23,7 +25,6 @@ export function SettingsPage({ configPath, onConfigSaved, servers }: SettingsPag
 
     try {
       const raw = await loadTargetsConfig();
-      // Pretty-print the JSON for editing
       const parsed = JSON.parse(raw);
       const formatted = JSON.stringify(parsed, null, 2);
       setConfigJson(formatted);
@@ -45,7 +46,6 @@ export function SettingsPage({ configPath, onConfigSaved, servers }: SettingsPag
     setSaveMessage(null);
 
     try {
-      // Validate JSON before sending
       JSON.parse(configJson);
     } catch {
       setError("Invalid JSON: please check your syntax.");
@@ -95,7 +95,12 @@ export function SettingsPage({ configPath, onConfigSaved, servers }: SettingsPag
           ) : (
             <div className="settings-server-list">
               {servers.map((server) => (
-                <div className="settings-server-card" key={server.id}>
+                <button
+                  className="settings-server-card"
+                  key={server.id}
+                  onClick={() => setSelectedServer(server)}
+                  type="button"
+                >
                   <div className="settings-server-header">
                     <span className="settings-server-label">{server.label}</span>
                     <span
@@ -118,7 +123,7 @@ export function SettingsPage({ configPath, onConfigSaved, servers }: SettingsPag
                       <span className="settings-server-message">{server.message}</span>
                     ) : null}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -178,6 +183,13 @@ export function SettingsPage({ configPath, onConfigSaved, servers }: SettingsPag
           />
         </section>
       </div>
+
+      {selectedServer ? (
+        <ServerDialog
+          onClose={() => setSelectedServer(null)}
+          server={selectedServer}
+        />
+      ) : null}
     </div>
   );
 }
