@@ -284,24 +284,8 @@ function App() {
               onOpenWorkspace={setContainerView}
               onRefreshInventory={refreshInventory}
               isRefreshing={isRefreshing}
-              onResetZoom={() => {
-                setOverviewZoom(OVERVIEW_ZOOM_DEFAULT);
-              }}
-              onZoomIn={() => {
-                setOverviewZoom((current) =>
-                  roundOverviewZoom(clampOverviewZoom(current + OVERVIEW_ZOOM_STEP)),
-                );
-              }}
-              onZoomOut={() => {
-                setOverviewZoom((current) =>
-                  roundOverviewZoom(clampOverviewZoom(current - OVERVIEW_ZOOM_STEP)),
-                );
-              }}
               overviewContainers={overviewContainers}
               overviewZoom={overviewZoom}
-              overviewZoomDefault={OVERVIEW_ZOOM_DEFAULT}
-              overviewZoomMax={OVERVIEW_ZOOM_MAX}
-              overviewZoomMin={OVERVIEW_ZOOM_MIN}
               overviewZoomStyle={{
                 "--overview-terminal-grid-min-width": `${30 * overviewZoom}rem`,
                 "--overview-terminal-card-height": `${32 * overviewZoom}rem`,
@@ -309,7 +293,6 @@ function App() {
               } as CSSProperties}
               pageVisible={activeView.kind === "overview"}
               registerOverviewCardElement={registerOverviewCardElement}
-              serverCount={bootstrap.servers.length}
               standaloneTargets={standaloneTargets}
             />
           </section>
@@ -475,10 +458,26 @@ function App() {
               : { kind: "settings" },
           );
         }}
+        onResetOverviewZoom={() => {
+          setOverviewZoom(OVERVIEW_ZOOM_DEFAULT);
+        }}
         onToggleSidebar={() => {
           setIsSidebarHidden((current) => !current);
         }}
+        onZoomInOverview={() => {
+          setOverviewZoom((current) =>
+            roundOverviewZoom(clampOverviewZoom(current + OVERVIEW_ZOOM_STEP)),
+          );
+        }}
+        onZoomOutOverview={() => {
+          setOverviewZoom((current) =>
+            roundOverviewZoom(clampOverviewZoom(current - OVERVIEW_ZOOM_STEP)),
+          );
+        }}
         overviewZoom={overviewZoom}
+        overviewZoomDefault={OVERVIEW_ZOOM_DEFAULT}
+        overviewZoomMax={OVERVIEW_ZOOM_MAX}
+        overviewZoomMin={OVERVIEW_ZOOM_MIN}
         reachableContainerCount={reachableContainerCount}
         serverCount={bootstrap.servers.length}
       />

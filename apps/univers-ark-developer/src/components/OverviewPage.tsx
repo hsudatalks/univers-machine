@@ -14,18 +14,11 @@ interface OverviewPageProps {
   onFocusTarget: (targetId: string) => void;
   onOpenWorkspace: (targetId: string) => void;
   onRefreshInventory: () => void;
-  onResetZoom: () => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
   overviewContainers: OverviewEntry[];
   overviewZoom: number;
-  overviewZoomDefault: number;
-  overviewZoomMax: number;
-  overviewZoomMin: number;
   overviewZoomStyle: CSSProperties;
   pageVisible: boolean;
   registerOverviewCardElement: (targetId: string, element: HTMLElement | null) => void;
-  serverCount: number;
   standaloneTargets: DeveloperTarget[];
 }
 
@@ -71,74 +64,15 @@ export function OverviewPage({
   onFocusTarget,
   onOpenWorkspace,
   onRefreshInventory,
-  onResetZoom,
-  onZoomIn,
-  onZoomOut,
   overviewContainers,
   overviewZoom,
-  overviewZoomDefault,
-  overviewZoomMax,
-  overviewZoomMin,
   overviewZoomStyle,
   pageVisible,
   registerOverviewCardElement,
-  serverCount,
   standaloneTargets,
 }: OverviewPageProps) {
-  const reachableContainers = overviewContainers.filter(
-    (entry) => entry.container.sshReachable,
-  ).length;
-
   return (
     <>
-      <header className="content-header content-header-overview">
-        <div className="content-header-copy">
-          <h1 className="content-title content-title-overview">Overview</h1>
-        </div>
-
-        <div className="content-header-tools">
-          <div className="overview-zoom-controls" aria-label="Overview zoom controls">
-            <button
-              className="panel-button panel-button-toolbar overview-zoom-button"
-              disabled={overviewZoom <= overviewZoomMin}
-              onClick={onZoomOut}
-              title="Zoom out overview terminals"
-              type="button"
-            >
-              -
-            </button>
-
-            <button
-              className="content-chip content-chip-button"
-              disabled={overviewZoom === overviewZoomDefault}
-              onClick={onResetZoom}
-              title="Reset overview zoom"
-              type="button"
-            >
-              {Math.round(overviewZoom * 100)}%
-            </button>
-
-            <button
-              className="panel-button panel-button-toolbar overview-zoom-button"
-              disabled={overviewZoom >= overviewZoomMax}
-              onClick={onZoomIn}
-              title="Zoom in overview terminals"
-              type="button"
-            >
-              +
-            </button>
-          </div>
-
-          <div className="content-meta-row">
-            <span className="content-chip">{serverCount} server(s)</span>
-            <span className="content-chip">
-              {overviewContainers.length} container(s)
-            </span>
-            <span className="content-chip">{reachableContainers} SSH ready</span>
-          </div>
-        </div>
-      </header>
-
       <section className="page-section">
         <div className="terminal-grid" style={overviewZoomStyle}>
           {overviewContainers.map(({ container, target }) =>

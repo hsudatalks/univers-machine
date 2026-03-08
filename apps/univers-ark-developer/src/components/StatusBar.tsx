@@ -1,4 +1,6 @@
 import { GithubPopover } from "./GithubPopover";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 
 type StatusBarProps = {
   activeStatusLabel: string;
@@ -6,8 +8,14 @@ type StatusBarProps = {
   isOverviewView: boolean;
   isSidebarHidden: boolean;
   onOpenSettings: () => void;
+  onResetOverviewZoom: () => void;
   onToggleSidebar: () => void;
+  onZoomInOverview: () => void;
+  onZoomOutOverview: () => void;
   overviewZoom: number;
+  overviewZoomDefault: number;
+  overviewZoomMax: number;
+  overviewZoomMin: number;
   reachableContainerCount: number;
   serverCount: number;
 };
@@ -18,20 +26,27 @@ export function StatusBar({
   isOverviewView,
   isSidebarHidden,
   onOpenSettings,
+  onResetOverviewZoom,
   onToggleSidebar,
+  onZoomInOverview,
+  onZoomOutOverview,
   overviewZoom,
+  overviewZoomDefault,
+  overviewZoomMax,
+  overviewZoomMin,
   reachableContainerCount,
   serverCount,
 }: StatusBarProps) {
   return (
     <footer className="status-bar" role="status">
-      <div className="status-bar-section">
-        <button
+      <div className="status-bar-section status-bar-section-primary">
+        <Button
           aria-label={isSidebarHidden ? "Show sidebar menu" : "Hide sidebar menu"}
-          className="panel-button panel-button-toolbar panel-button-icon status-bar-toggle"
+          className="status-bar-button"
           onClick={onToggleSidebar}
+          size="sm"
           title={isSidebarHidden ? "Show sidebar menu" : "Hide sidebar menu"}
-          type="button"
+          variant="ghost"
         >
           <svg
             aria-hidden="true"
@@ -63,27 +78,68 @@ export function StatusBar({
               </>
             )}
           </svg>
-        </button>
-        <span className="status-bar-chip">{activeStatusLabel}</span>
-        <span className="status-bar-text">Inventory ready</span>
+        </Button>
+        <Badge className="status-bar-chip" variant="neutral">
+          {activeStatusLabel}
+        </Badge>
+        <span className="status-bar-text status-bar-text-subtle">ready</span>
       </div>
 
-      <div className="status-bar-section">
-        <span className="status-bar-text">{serverCount} server(s)</span>
-        <span className="status-bar-text">{containerCount} container(s)</span>
-        <span className="status-bar-text">{reachableContainerCount} SSH ready</span>
+      <div className="status-bar-section status-bar-section-secondary">
+        <span className="status-bar-text">
+          <span className="status-bar-metric">{serverCount}</span> srv
+        </span>
+        <span className="status-bar-text">
+          <span className="status-bar-metric">{containerCount}</span> ctr
+        </span>
+        <span className="status-bar-text">
+          <span className="status-bar-metric">{reachableContainerCount}</span> ssh
+        </span>
         {isOverviewView ? (
-          <span className="status-bar-text">
-            Overview zoom {Math.round(overviewZoom * 100)}%
-          </span>
+          <div className="status-bar-zoom" aria-label="Overview zoom controls">
+            <Button
+              aria-label="Zoom out overview terminals"
+              className="status-bar-button"
+              disabled={overviewZoom <= overviewZoomMin}
+              onClick={onZoomOutOverview}
+              size="sm"
+              title="Zoom out overview terminals"
+              variant="ghost"
+            >
+              -
+            </Button>
+            <Button
+              aria-label="Reset overview zoom"
+              className="status-bar-zoom-readout"
+              disabled={overviewZoom === overviewZoomDefault}
+              onClick={onResetOverviewZoom}
+              size="sm"
+              title="Reset overview zoom"
+              variant="ghost"
+            >
+              {Math.round(overviewZoom * 100)}%
+            </Button>
+            <Button
+              aria-label="Zoom in overview terminals"
+              className="status-bar-button"
+              disabled={overviewZoom >= overviewZoomMax}
+              onClick={onZoomInOverview}
+              size="sm"
+              title="Zoom in overview terminals"
+              variant="ghost"
+            >
+              +
+            </Button>
+          </div>
         ) : null}
         <GithubPopover />
-        <button
+        <Button
           aria-label="Settings"
-          className="panel-button panel-button-toolbar panel-button-icon"
+          className="status-bar-button"
+          size="sm"
           onClick={onOpenSettings}
           title="Settings"
-          type="button"
+          variant="ghost"
         >
           <svg
             aria-hidden="true"
@@ -106,7 +162,7 @@ export function StatusBar({
               strokeWidth="1.1"
             />
           </svg>
-        </button>
+        </Button>
       </div>
     </footer>
   );
