@@ -287,6 +287,12 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
   });
 
   terminal.onData((data) => {
+    // Filter out Device Attributes responses (e.g. ESC[>0;10;1c)
+    // that xterm.js sends automatically — they are not user input.
+    if (DEVICE_ATTRIBUTES_RESPONSE_PATTERN.test(data)) {
+      return;
+    }
+
     if (!session.readyForInput) {
       session.pendingWrites.push(data);
       return;
