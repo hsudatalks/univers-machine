@@ -128,6 +128,19 @@ pub(crate) async fn restart_terminal(
     let app_clone = app.clone();
 
     async_runtime::spawn_blocking(move || {
+        // Remove the old session from the map first, then drop the lock
+        // BEFORE dropping the old session. The old session's reader thread
+        // (terminal.rs) also locks `sessions` on exit — dropping the old
+        // session while holding the lock causes a deadlock.
+        let old_session = sessions_arc
+            .lock()
+            .map_err(|_| String::from("Terminal session state is unavailable"))?
+            .remove(&target_id);
+
+        // Drop the old session outside the lock so its reader thread can
+        // acquire the lock to clean up.
+        drop(old_session);
+
         let target = resolve_raw_target(&target_id)?;
         let session = spawn_terminal_session(&app_clone, sessions_arc.clone(), &target)?;
         let snapshot = snapshot_for(&target_id, &session);
