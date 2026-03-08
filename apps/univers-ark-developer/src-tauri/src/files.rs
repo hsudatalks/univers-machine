@@ -6,6 +6,7 @@ use serde::{de::DeserializeOwned, Deserialize};
 
 const MAX_DIRECTORY_ENTRIES: usize = 512;
 const MAX_PREVIEW_BYTES: usize = 131_072;
+const DEFAULT_REMOTE_ROOT: &str = "~/repos";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,14 +68,17 @@ fn run_target_json_command<T: DeserializeOwned>(
 }
 
 fn list_directory_command(path: Option<&str>) -> String {
-    let path = path.unwrap_or("~");
+    let path = path.unwrap_or(DEFAULT_REMOTE_ROOT);
 
     format!(
         r#"UNIVERS_ARK_PATH={} python3 - <<'PY'
 import json
 import os
 
-path = os.path.abspath(os.path.expanduser(os.environ.get("UNIVERS_ARK_PATH") or "~"))
+requested_path = os.environ.get("UNIVERS_ARK_PATH") or "{default_root}"
+path = os.path.abspath(os.path.expanduser(requested_path))
+if requested_path == "{default_root}" and not os.path.isdir(path):
+    path = os.path.abspath(os.path.expanduser("~"))
 if not os.path.isdir(path):
     raise SystemExit(f"Not a directory: {{path}}")
 
@@ -132,6 +136,7 @@ print(
 PY"#,
         shell_single_quote(path),
         MAX_DIRECTORY_ENTRIES,
+        default_root = DEFAULT_REMOTE_ROOT,
     )
 }
 

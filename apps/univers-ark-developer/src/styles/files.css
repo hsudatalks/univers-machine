@@ -124,6 +124,7 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   background: #0d1117;
+  color: #e6edf3;
 }
 
 .files-editor-tab-bar {
@@ -131,15 +132,15 @@
   align-items: center;
   gap: 0.6rem;
   padding: 0 0.75rem;
-  border-bottom: 1px solid var(--border);
-  background: rgba(1, 4, 9, 0.6);
+  border-bottom: 1px solid #21262d;
+  background: #161b22;
   min-height: 2rem;
 }
 
 .files-editor-tab {
   font-size: 0.74rem;
   font-weight: 400;
-  color: var(--text-2);
+  color: #8b949e;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -147,10 +148,23 @@
 }
 
 .files-editor-tab.is-active {
-  color: var(--foreground);
-  font-weight: 500;
-  border-bottom: 1px solid var(--accent);
-  padding-bottom: 0.15rem;
+  color: #f0f6fc;
+  font-weight: 600;
+  border-bottom: 1px solid #58a6ff;
+  padding-bottom: 0.2rem;
+}
+
+.files-editor-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.16rem 0.46rem;
+  border: 1px solid #30363d;
+  border-radius: 999px;
+  background: #0d1117;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: #8b949e;
 }
 
 .files-editor-monaco {
@@ -165,17 +179,19 @@
   justify-items: start;
   gap: 0.28rem;
   padding: 1rem 0.9rem;
+  background: #0d1117;
 }
 
 .files-empty-title {
   margin: 0;
   font-size: 0.8rem;
   font-weight: 600;
+  color: #f0f6fc;
 }
 
 .files-empty-copy {
   margin: 0;
-  color: var(--text-2);
+  color: #8b949e;
   font-size: 0.76rem;
   line-height: 1.55;
 }
