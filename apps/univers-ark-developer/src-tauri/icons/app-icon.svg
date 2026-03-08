@@ -1,6 +1,47 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="120" fill="#10161B"/>
-  <rect x="42" y="42" width="428" height="428" rx="92" fill="#D89554" fill-opacity="0.12" stroke="#D89554" stroke-opacity="0.55" stroke-width="10"/>
-  <path d="M155 142V305C155 373 197 414 258 414C319 414 360 373 360 305V142H310V302C310 339 291 363 258 363C224 363 205 339 205 302V142H155Z" fill="#FFF7ED"/>
-  <path d="M201 123H311" stroke="#D89554" stroke-width="16" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="bg" x1="88" y1="64" x2="424" y2="448" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="1" stop-color="#0A0F1C"/>
+    </linearGradient>
+    <linearGradient id="border" x1="74" y1="78" x2="438" y2="434" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F3C98B" stop-opacity="0.72"/>
+      <stop offset="1" stop-color="#C27A2E" stop-opacity="0.42"/>
+    </linearGradient>
+    <linearGradient id="uMark" x1="152" y1="126" x2="356" y2="406" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6D49D"/>
+      <stop offset="1" stop-color="#CB8334"/>
+    </linearGradient>
+    <linearGradient id="aMark" x1="214" y1="164" x2="310" y2="346" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF7ED"/>
+      <stop offset="1" stop-color="#F3D5AF"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(365 154) rotate(122.38) scale(196.325)">
+      <stop stop-color="#E3A75F" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#E3A75F" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="120" fill="url(#glow)"/>
+  <rect x="40" y="40" width="432" height="432" rx="96" fill="#0F1728" fill-opacity="0.62" stroke="url(#border)" stroke-width="10"/>
+
+  <path
+    d="M156 132V299C156 369 196 410 256 410C316 410 356 369 356 299V132"
+    stroke="url(#uMark)"
+    stroke-width="42"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M256 162L334 344H292L274 304H238L220 344H178L256 162Z"
+    fill="url(#aMark)"
+  />
+  <rect x="228" y="274" width="56" height="18" rx="9" fill="#0F1728"/>
+  <path d="M210 367C223 344 239 332 256 332C273 332 289 344 302 367" stroke="#E7B066" stroke-width="18" stroke-linecap="round"/>
+
+  <path d="M168 108H344" stroke="#E0A35C" stroke-width="12" stroke-linecap="round" opacity="0.9"/>
+  <path d="M351 132L365 146" stroke="#FFF7ED" stroke-width="10" stroke-linecap="round"/>
+  <path d="M365 132L351 146" stroke="#FFF7ED" stroke-width="10" stroke-linecap="round"/>
 </svg>

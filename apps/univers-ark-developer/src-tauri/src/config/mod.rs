@@ -9,6 +9,7 @@ use std::{
     process::Output,
     sync::{Mutex, OnceLock},
 };
+use tauri::{path::BaseDirectory, AppHandle, Manager, Runtime};
 
 use self::{
     discovery::discover_remote_server_inventory,
@@ -92,12 +93,65 @@ fn default_container_name_suffix() -> String {
     String::from("-dev")
 }
 
+const TARGETS_FILE_NAME: &str = "developer-targets.json";
+
+fn configured_targets_path() -> &'static OnceLock<PathBuf> {
+    static CONFIGURED_TARGETS_PATH: OnceLock<PathBuf> = OnceLock::new();
+    &CONFIGURED_TARGETS_PATH
+}
+
 pub(crate) fn app_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
 pub(crate) fn targets_file_path() -> PathBuf {
-    app_root().join("developer-targets.json")
+    configured_targets_path()
+        .get()
+        .cloned()
+        .unwrap_or_else(|| app_root().join(TARGETS_FILE_NAME))
+}
+
+fn bundled_targets_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> PathBuf {
+    app_handle
+        .path()
+        .resolve(TARGETS_FILE_NAME, BaseDirectory::Resource)
+        .unwrap_or_else(|_| app_root().join(TARGETS_FILE_NAME))
+}
+
+pub(crate) fn initialize_targets_file_path<R: Runtime>(
+    app_handle: &AppHandle<R>,
+) -> Result<PathBuf, String> {
+    let app_config_dir = app_handle
+        .path()
+        .app_config_dir()
+        .map_err(|error| format!("Failed to resolve app config directory: {}", error))?;
+
+    fs::create_dir_all(&app_config_dir).map_err(|error| {
+        format!(
+            "Failed to create app config directory {}: {}",
+            app_config_dir.display(),
+            error
+        )
+    })?;
+
+    let writable_targets_path = app_config_dir.join(TARGETS_FILE_NAME);
+
+    if !writable_targets_path.exists() {
+        let bundled_path = bundled_targets_file_path(app_handle);
+
+        fs::copy(&bundled_path, &writable_targets_path).map_err(|error| {
+            format!(
+                "Failed to copy bundled targets file from {} to {}: {}",
+                bundled_path.display(),
+                writable_targets_path.display(),
+                error
+            )
+        })?;
+    }
+
+    let _ = configured_targets_path().set(writable_targets_path.clone());
+
+    Ok(writable_targets_path)
 }
 
 fn targets_cache() -> &'static Mutex<Option<CachedResolvedInventory>> {

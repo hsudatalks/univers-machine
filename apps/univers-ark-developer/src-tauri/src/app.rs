@@ -1,6 +1,7 @@
 use crate::{
     cleanup::cleanup_stale_ssh_tunnels,
     commands,
+    config::initialize_targets_file_path,
     models::{TerminalState, TunnelState},
     tunnel::stop_all_tunnels,
 };
@@ -150,7 +151,9 @@ pub(crate) fn run() {
                 let _ = app_handle.emit(TOGGLE_SIDEBAR_EVENT, ());
             }
         })
-        .setup(|_| {
+        .setup(|app| {
+            initialize_targets_file_path(app.handle())?;
+
             std::thread::spawn(|| match cleanup_stale_ssh_tunnels() {
                 Ok(cleaned) if cleaned > 0 => {
                     eprintln!(

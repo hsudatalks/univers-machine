@@ -43,6 +43,9 @@ The seed profile points at `automation-dev`:
 
 Edit [`developer-targets.json`](./developer-targets.json) to add more targets.
 
+On packaged builds, the app copies this seed config into the app config directory
+on first launch and reads from that writable copy afterwards.
+
 ## Development
 
 Install dependencies:
@@ -73,6 +76,12 @@ Build the desktop app:
 
 ```bash
 pnpm tauri:build
+```
+
+On macOS, the packaged app reads its writable config from:
+
+```text
+~/Library/Application Support/dev.univers.arkdeveloper/developer-targets.json
 ```
 
 ## Structure
