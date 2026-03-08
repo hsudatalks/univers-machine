@@ -217,17 +217,15 @@ export function useContainerWorkspace({
       if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
         const currentIndex = orderedTargetIds.indexOf(targetId);
 
-        if (currentIndex === -1) {
+        if (currentIndex === -1 || orderedTargetIds.length === 0) {
           return;
         }
 
         const nextIndex =
-          event.key === "ArrowLeft" ? currentIndex - 1 : currentIndex + 1;
+          event.key === "ArrowLeft"
+            ? (currentIndex - 1 + orderedTargetIds.length) % orderedTargetIds.length
+            : (currentIndex + 1) % orderedTargetIds.length;
         const nextTargetId = orderedTargetIds[nextIndex];
-
-        if (!nextTargetId) {
-          return;
-        }
 
         event.preventDefault();
         event.stopPropagation();

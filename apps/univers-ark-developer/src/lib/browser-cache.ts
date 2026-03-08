@@ -25,7 +25,7 @@ export interface BrowserFrameSnapshot {
 }
 
 const browserFrames = new Map<string, CachedBrowserFrame>();
-const HOT_BROWSER_FRAME_LIMIT = 20;
+const HOT_BROWSER_FRAME_LIMIT = 40;
 
 let parkingLotElement: HTMLDivElement | null = null;
 
