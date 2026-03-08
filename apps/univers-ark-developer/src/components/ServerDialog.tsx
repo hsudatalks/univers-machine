@@ -1,15 +1,105 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ManagedServer } from "../types";
+import { loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
 
-type ServerDialogTab = "general" | "containers";
+type ServerDialogTab = "general" | "connection" | "containers";
+
+interface RemoteServerConfig {
+  id: string;
+  label: string;
+  host: string;
+  description: string;
+  discoveryCommand: string;
+  sshUser: string;
+  sshOptions: string;
+  targetHostTemplate?: string;
+  targetDescriptionTemplate?: string;
+  notes?: string[];
+}
 
 interface ServerDialogProps {
   onClose: () => void;
+  onSaved: () => void;
   server: ManagedServer;
 }
 
-export function ServerDialog({ onClose, server }: ServerDialogProps) {
+export function ServerDialog({ onClose, onSaved, server }: ServerDialogProps) {
   const [activeTab, setActiveTab] = useState<ServerDialogTab>("general");
+  const [form, setForm] = useState<RemoteServerConfig | null>(null);
+  const [original, setOriginal] = useState<RemoteServerConfig | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  const loadServerConfig = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const raw = await loadTargetsConfig();
+      const config = JSON.parse(raw);
+      const servers: RemoteServerConfig[] = config.remoteServers ?? [];
+      const match = servers.find((s) => s.id === server.id);
+
+      if (match) {
+        setForm({ ...match });
+        setOriginal({ ...match });
+      } else {
+        setError(`Server "${server.id}" not found in config.`);
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [server.id]);
+
+  useEffect(() => {
+    void loadServerConfig();
+  }, [loadServerConfig]);
+
+  const updateField = (field: keyof RemoteServerConfig, value: string) => {
+    setForm((prev) => (prev ? { ...prev, [field]: value } : prev));
+    setError(null);
+    setSaveMessage(null);
+  };
+
+  const handleSave = async () => {
+    if (!form) return;
+
+    setIsSaving(true);
+    setError(null);
+    setSaveMessage(null);
+
+    try {
+      const raw = await loadTargetsConfig();
+      const config = JSON.parse(raw);
+      const servers: RemoteServerConfig[] = config.remoteServers ?? [];
+      const index = servers.findIndex((s) => s.id === server.id);
+
+      if (index === -1) {
+        setError(`Server "${server.id}" not found in config.`);
+        setIsSaving(false);
+        return;
+      }
+
+      // Merge form fields into the original server object (preserving surfaces etc.)
+      servers[index] = { ...servers[index], ...form };
+      config.remoteServers = servers;
+
+      await updateTargetsConfig(JSON.stringify(config, null, 2));
+      setOriginal({ ...form });
+      setSaveMessage("Saved successfully.");
+      onSaved();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const hasChanges = form && original && JSON.stringify(form) !== JSON.stringify(original);
 
   return (
     <div className="dialog-backdrop" onClick={onClose}>
@@ -50,6 +140,7 @@ export function ServerDialog({ onClose, server }: ServerDialogProps) {
           {(
             [
               { id: "general", label: "General" },
+              { id: "connection", label: "Connection" },
               { id: "containers", label: `Containers (${server.containers.length})` },
             ] as const
           ).map((tab) => (
@@ -67,34 +158,106 @@ export function ServerDialog({ onClose, server }: ServerDialogProps) {
         </nav>
 
         <div className="dialog-body">
-          {activeTab === "general" ? (
-            <GeneralTab server={server} />
+          {isLoading ? (
+            <p className="dialog-empty">Loading configuration…</p>
+          ) : !form ? (
+            <p className="dialog-empty">Could not load server configuration.</p>
+          ) : activeTab === "general" ? (
+            <GeneralTab form={form} onUpdate={updateField} />
+          ) : activeTab === "connection" ? (
+            <ConnectionTab form={form} onUpdate={updateField} />
           ) : (
             <ContainersTab server={server} />
           )}
+
+          {error ? <p className="dialog-error">{error}</p> : null}
+          {saveMessage ? <p className="dialog-success">{saveMessage}</p> : null}
         </div>
+
+        <footer className="dialog-footer">
+          <button
+            className="panel-button panel-button-toolbar"
+            disabled={!hasChanges || isSaving || isLoading}
+            onClick={() => void handleSave()}
+            type="button"
+          >
+            {isSaving ? "Saving…" : "Save"}
+          </button>
+          <button
+            className="panel-button panel-button-toolbar"
+            onClick={onClose}
+            type="button"
+          >
+            {hasChanges ? "Cancel" : "Close"}
+          </button>
+        </footer>
       </div>
     </div>
   );
 }
 
-function GeneralTab({ server }: { server: ManagedServer }) {
+function GeneralTab({
+  form,
+  onUpdate,
+}: {
+  form: RemoteServerConfig;
+  onUpdate: (field: keyof RemoteServerConfig, value: string) => void;
+}) {
   return (
     <div className="dialog-tab-content">
-      <div className="dialog-field-grid">
-        <FieldRow label="ID" value={server.id} mono />
-        <FieldRow label="Label" value={server.label} />
-        <FieldRow label="Host" value={server.host} mono />
-        <FieldRow label="Description" value={server.description} />
-        <FieldRow label="State" value={server.state} badge />
-        {server.message ? (
-          <FieldRow label="Message" value={server.message} />
-        ) : null}
-        <FieldRow
-          label="Containers"
-          value={`${server.containers.length} container(s)`}
-        />
-      </div>
+      <EditField label="ID" value={form.id} onChange={(v) => onUpdate("id", v)} mono />
+      <EditField label="Label" value={form.label} onChange={(v) => onUpdate("label", v)} />
+      <EditField label="Host" value={form.host} onChange={(v) => onUpdate("host", v)} mono />
+      <EditField
+        label="Description"
+        value={form.description}
+        onChange={(v) => onUpdate("description", v)}
+        multiline
+      />
+    </div>
+  );
+}
+
+function ConnectionTab({
+  form,
+  onUpdate,
+}: {
+  form: RemoteServerConfig;
+  onUpdate: (field: keyof RemoteServerConfig, value: string) => void;
+}) {
+  return (
+    <div className="dialog-tab-content">
+      <EditField
+        label="SSH User"
+        value={form.sshUser}
+        onChange={(v) => onUpdate("sshUser", v)}
+        mono
+      />
+      <EditField
+        label="SSH Options"
+        value={form.sshOptions}
+        onChange={(v) => onUpdate("sshOptions", v)}
+        mono
+      />
+      <EditField
+        label="Discovery Command"
+        value={form.discoveryCommand}
+        onChange={(v) => onUpdate("discoveryCommand", v)}
+        mono
+        multiline
+      />
+      <EditField
+        label="Host Template"
+        value={form.targetHostTemplate ?? ""}
+        onChange={(v) => onUpdate("targetHostTemplate", v)}
+        mono
+      />
+      <EditField
+        label="Description Template"
+        value={form.targetDescriptionTemplate ?? ""}
+        onChange={(v) => onUpdate("targetDescriptionTemplate", v)}
+        multiline
+      />
     </div>
   );
 }
@@ -146,28 +309,40 @@ function ContainersTab({ server }: { server: ManagedServer }) {
   );
 }
 
-function FieldRow({
-  badge,
+function EditField({
   label,
   mono,
+  multiline,
+  onChange,
   value,
 }: {
-  badge?: boolean;
   label: string;
   mono?: boolean;
+  multiline?: boolean;
+  onChange: (value: string) => void;
   value: string;
 }) {
+  const className = `dialog-input ${mono ? "dialog-input-mono" : ""}`;
+
   return (
     <div className="dialog-field">
-      <span className="dialog-field-label">{label}</span>
-      {badge ? (
-        <span className={`dialog-badge dialog-badge-${value.toLowerCase()}`}>
-          {value}
-        </span>
+      <label className="dialog-field-label">{label}</label>
+      {multiline ? (
+        <textarea
+          className={`${className} dialog-input-multiline`}
+          onChange={(event) => onChange(event.target.value)}
+          rows={3}
+          spellCheck={false}
+          value={value}
+        />
       ) : (
-        <span className={`dialog-field-value ${mono ? "dialog-field-mono" : ""}`}>
-          {value}
-        </span>
+        <input
+          className={className}
+          onChange={(event) => onChange(event.target.value)}
+          spellCheck={false}
+          type="text"
+          value={value}
+        />
       )}
     </div>
   );

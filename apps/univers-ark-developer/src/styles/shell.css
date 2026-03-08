@@ -917,3 +917,60 @@
   margin: 0;
 }
 
+.dialog-input {
+  flex: 1;
+  background: var(--panel-muted);
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.55rem;
+  transition: border-color 0.15s;
+}
+
+.dialog-input:focus {
+  outline: none;
+  border-color: var(--ring);
+}
+
+.dialog-input-mono {
+  font-family: "Iosevka", "SFMono-Regular", "Consolas", monospace;
+  font-size: 0.8rem;
+}
+
+.dialog-input-multiline {
+  resize: vertical;
+  min-height: 3rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.dialog-error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: hsl(0, 84%, 50%);
+  background: hsla(0, 84%, 50%, 0.08);
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.35rem;
+}
+
+.dialog-success {
+  margin: 0;
+  font-size: 0.8rem;
+  color: hsl(142, 71%, 35%);
+  background: hsla(142, 71%, 45%, 0.08);
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.35rem;
+}
+
+
