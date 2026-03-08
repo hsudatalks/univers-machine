@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { releaseBrowserFrames, syncBrowserFrames } from "../lib/browser-cache";
+import { openExternalLink } from "../lib/tauri";
 import type {
   DeveloperSurface,
   DeveloperTarget,
@@ -120,14 +121,15 @@ export function BrowserPane({
             Reload
           </button>
           {activeFrame ? (
-            <a
+            <button
               className="panel-button panel-link"
-              href={activeFrame.surface.localUrl}
-              rel="noreferrer"
-              target="_blank"
+              onClick={() => {
+                void openExternalLink(activeFrame.surface.localUrl);
+              }}
+              type="button"
             >
               Open
-            </a>
+            </button>
           ) : (
             <button className="panel-button" disabled type="button">
               Open
