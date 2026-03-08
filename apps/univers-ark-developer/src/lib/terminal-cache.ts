@@ -32,9 +32,8 @@ interface CachedTerminalSession {
 
 const DEFAULT_TERMINAL_STATUS = "Connecting";
 const DEFAULT_TERMINAL_FONT_SIZE = 12;
-const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = new RegExp(
-  `^${String.fromCharCode(27)}\\[\\??[>]?[\\d;]*[a-zA-Z]$`,
-);
+// eslint-disable-next-line no-control-regex
+const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = /^\x1b\[[\?>][\d;]*c$/;
 const terminalSessions = new Map<string, CachedTerminalSession>();
 
 let parkingLotElement: HTMLDivElement | null = null;
