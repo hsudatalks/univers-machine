@@ -30,43 +30,63 @@ use std::io::Write;
 use tauri::{async_runtime, AppHandle, State};
 
 #[tauri::command]
-pub(crate) fn load_bootstrap(tunnel_state: State<TunnelState>) -> Result<AppBootstrap, String> {
-    let (targets_file, servers) = read_bootstrap_data(false)?;
-    let hydrated_targets_file = read_runtime_targets_file(tunnel_state.inner())?;
-    let config_path = targets_file_path();
+pub(crate) async fn load_bootstrap(
+    tunnel_state: State<'_, TunnelState>,
+) -> Result<AppBootstrap, String> {
+    let tunnel_state_inner = tunnel_state.inner().clone();
 
-    Ok(AppBootstrap {
-        app_name: "Univers Ark Developer".into(),
-        config_path: config_path.display().to_string(),
-        selected_target_id: targets_file.selected_target_id,
-        targets: hydrated_targets_file.targets,
-        servers,
+    async_runtime::spawn_blocking(move || {
+        let (targets_file, servers) = read_bootstrap_data(false)?;
+        let hydrated_targets_file = read_runtime_targets_file(&tunnel_state_inner)?;
+        let config_path = targets_file_path();
+
+        Ok(AppBootstrap {
+            app_name: "Univers Ark Developer".into(),
+            config_path: config_path.display().to_string(),
+            selected_target_id: targets_file.selected_target_id,
+            targets: hydrated_targets_file.targets,
+            servers,
+        })
     })
+    .await
+    .map_err(|error| format!("Failed to join bootstrap task: {}", error))?
 }
 
 #[tauri::command]
-pub(crate) fn refresh_bootstrap(tunnel_state: State<TunnelState>) -> Result<AppBootstrap, String> {
-    let (targets_file, servers) = read_bootstrap_data(true)?;
-    let hydrated_targets_file = read_runtime_targets_file(tunnel_state.inner())?;
-    let config_path = targets_file_path();
+pub(crate) async fn refresh_bootstrap(
+    tunnel_state: State<'_, TunnelState>,
+) -> Result<AppBootstrap, String> {
+    let tunnel_state_inner = tunnel_state.inner().clone();
 
-    Ok(AppBootstrap {
-        app_name: "Univers Ark Developer".into(),
-        config_path: config_path.display().to_string(),
-        selected_target_id: targets_file.selected_target_id,
-        targets: hydrated_targets_file.targets,
-        servers,
+    async_runtime::spawn_blocking(move || {
+        let (targets_file, servers) = read_bootstrap_data(true)?;
+        let hydrated_targets_file = read_runtime_targets_file(&tunnel_state_inner)?;
+        let config_path = targets_file_path();
+
+        Ok(AppBootstrap {
+            app_name: "Univers Ark Developer".into(),
+            config_path: config_path.display().to_string(),
+            selected_target_id: targets_file.selected_target_id,
+            targets: hydrated_targets_file.targets,
+            servers,
+        })
     })
+    .await
+    .map_err(|error| format!("Failed to join refresh bootstrap task: {}", error))?
 }
 
 #[tauri::command]
-pub(crate) fn load_server_inventory() -> Result<Vec<ManagedServer>, String> {
-    read_server_inventory(false)
+pub(crate) async fn load_server_inventory() -> Result<Vec<ManagedServer>, String> {
+    async_runtime::spawn_blocking(|| read_server_inventory(false))
+        .await
+        .map_err(|error| format!("Failed to join server inventory task: {}", error))?
 }
 
 #[tauri::command]
-pub(crate) fn refresh_server_inventory() -> Result<Vec<ManagedServer>, String> {
-    read_server_inventory(true)
+pub(crate) async fn refresh_server_inventory() -> Result<Vec<ManagedServer>, String> {
+    async_runtime::spawn_blocking(|| read_server_inventory(true))
+        .await
+        .map_err(|error| format!("Failed to join refresh server inventory task: {}", error))?
 }
 
 #[tauri::command]
@@ -124,62 +144,77 @@ pub(crate) async fn restart_terminal(
 }
 
 #[tauri::command]
-pub(crate) fn ensure_tunnel(
+pub(crate) async fn ensure_tunnel(
     app: AppHandle,
-    tunnel_state: State<TunnelState>,
+    tunnel_state: State<'_, TunnelState>,
     target_id: String,
     surface_id: String,
 ) -> Result<TunnelStatus, String> {
-    let surface = resolve_runtime_surface(&target_id, &surface_id, tunnel_state.inner())?;
+    let tunnel_inner = tunnel_state.inner().clone();
+    let app_clone = app.clone();
 
-    if surface.tunnel_command.trim().is_empty() {
-        return Ok(direct_tunnel_status(&target_id, &surface));
-    }
+    async_runtime::spawn_blocking(move || {
+        let surface = resolve_runtime_surface(&target_id, &surface_id, &tunnel_inner)?;
 
-    let key = surface_key(&target_id, &surface_id);
-    let existing_session = tunnel_state
-        .sessions
-        .lock()
-        .map_err(|_| String::from("Tunnel session state is unavailable"))?
-        .get(&key)
-        .cloned();
-
-    if let Some(session) = existing_session {
-        if tunnel_session_is_alive(&session)? {
-            return Ok(active_tunnel_status(&target_id, &surface, &session));
+        if surface.tunnel_command.trim().is_empty() {
+            return Ok(direct_tunnel_status(&target_id, &surface));
         }
 
-        let _ = remove_tunnel_session_if_current(&tunnel_state.sessions, &key, session.session_id);
-    }
+        let key = surface_key(&target_id, &surface_id);
+        let existing_session = tunnel_inner
+            .sessions
+            .lock()
+            .map_err(|_| String::from("Tunnel session state is unavailable"))?
+            .get(&key)
+            .cloned();
 
-    start_tunnel(&app, tunnel_state.inner(), &target_id, &surface)
+        if let Some(session) = existing_session {
+            if tunnel_session_is_alive(&session)? {
+                return Ok(active_tunnel_status(&target_id, &surface, &session));
+            }
+
+            let _ =
+                remove_tunnel_session_if_current(&tunnel_inner.sessions, &key, session.session_id);
+        }
+
+        start_tunnel(&app_clone, &tunnel_inner, &target_id, &surface)
+    })
+    .await
+    .map_err(|error| format!("Failed to join ensure tunnel task: {}", error))?
 }
 
 #[tauri::command]
-pub(crate) fn restart_tunnel(
+pub(crate) async fn restart_tunnel(
     app: AppHandle,
-    tunnel_state: State<TunnelState>,
+    tunnel_state: State<'_, TunnelState>,
     target_id: String,
     surface_id: String,
 ) -> Result<TunnelStatus, String> {
-    let surface = resolve_runtime_surface(&target_id, &surface_id, tunnel_state.inner())?;
+    let tunnel_inner = tunnel_state.inner().clone();
+    let app_clone = app.clone();
 
-    if surface.tunnel_command.trim().is_empty() {
-        return Ok(direct_tunnel_status(&target_id, &surface));
-    }
+    async_runtime::spawn_blocking(move || {
+        let surface = resolve_runtime_surface(&target_id, &surface_id, &tunnel_inner)?;
 
-    let key = surface_key(&target_id, &surface_id);
-    let previous_session = tunnel_state
-        .sessions
-        .lock()
-        .map_err(|_| String::from("Tunnel session state is unavailable"))?
-        .remove(&key);
+        if surface.tunnel_command.trim().is_empty() {
+            return Ok(direct_tunnel_status(&target_id, &surface));
+        }
 
-    if let Some(session) = previous_session {
-        stop_tunnel_session(&session);
-    }
+        let key = surface_key(&target_id, &surface_id);
+        let previous_session = tunnel_inner
+            .sessions
+            .lock()
+            .map_err(|_| String::from("Tunnel session state is unavailable"))?
+            .remove(&key);
 
-    start_tunnel(&app, tunnel_state.inner(), &target_id, &surface)
+        if let Some(session) = previous_session {
+            stop_tunnel_session(&session);
+        }
+
+        start_tunnel(&app_clone, &tunnel_inner, &target_id, &surface)
+    })
+    .await
+    .map_err(|error| format!("Failed to join restart tunnel task: {}", error))?
 }
 
 #[tauri::command]
@@ -242,19 +277,23 @@ pub(crate) fn resize_terminal(
 }
 
 #[tauri::command]
-pub(crate) fn list_remote_directory(
+pub(crate) async fn list_remote_directory(
     target_id: String,
     path: Option<String>,
 ) -> Result<RemoteDirectoryListing, String> {
-    load_remote_directory(&target_id, path)
+    async_runtime::spawn_blocking(move || load_remote_directory(&target_id, path))
+        .await
+        .map_err(|error| format!("Failed to join remote directory task: {}", error))?
 }
 
 #[tauri::command]
-pub(crate) fn read_remote_file_preview(
+pub(crate) async fn read_remote_file_preview(
     target_id: String,
     path: String,
 ) -> Result<RemoteFilePreview, String> {
-    load_remote_file_preview(&target_id, &path)
+    async_runtime::spawn_blocking(move || load_remote_file_preview(&target_id, &path))
+        .await
+        .map_err(|error| format!("Failed to join remote file preview task: {}", error))?
 }
 
 #[tauri::command]
