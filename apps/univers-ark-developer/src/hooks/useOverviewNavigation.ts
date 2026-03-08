@@ -14,6 +14,19 @@ function adjacentOverviewTargetId(
   targetIds: string[],
   elements: Map<string, HTMLElement>,
 ): string {
+  if (direction === "left" || direction === "right") {
+    const currentIndex = targetIds.indexOf(currentTargetId);
+
+    if (currentIndex === -1) {
+      return targetIds[0] ?? currentTargetId;
+    }
+
+    const nextIndex =
+      direction === "left" ? currentIndex - 1 : currentIndex + 1;
+
+    return targetIds[nextIndex] ?? currentTargetId;
+  }
+
   const cards = targetIds
     .map((targetId) => {
       const element = elements.get(targetId);
@@ -46,16 +59,11 @@ function adjacentOverviewTargetId(
 
   const currentCard = cards.find((card) => card.id === currentTargetId) ?? cards[0];
   const candidates = cards.filter((card) => {
-    switch (direction) {
-      case "left":
-        return card.centerX < currentCard.centerX - 4;
-      case "right":
-        return card.centerX > currentCard.centerX + 4;
-      case "up":
-        return card.centerY < currentCard.centerY - 4;
-      case "down":
-        return card.centerY > currentCard.centerY + 4;
+    if (direction === "up") {
+      return card.centerY < currentCard.centerY - 4;
     }
+
+    return card.centerY > currentCard.centerY + 4;
   });
 
   if (candidates.length === 0) {
@@ -66,13 +74,9 @@ function adjacentOverviewTargetId(
 
   const bestCandidate = candidates.reduce((best, candidate) => {
     const axisDistance =
-      direction === "left" || direction === "right"
-        ? Math.abs(candidate.centerX - currentCard.centerX)
-        : Math.abs(candidate.centerY - currentCard.centerY);
+      Math.abs(candidate.centerY - currentCard.centerY);
     const perpendicularDistance =
-      direction === "left" || direction === "right"
-        ? Math.abs(candidate.centerY - currentCard.centerY)
-        : Math.abs(candidate.centerX - currentCard.centerX);
+      Math.abs(candidate.centerX - currentCard.centerX);
     const score = axisDistance + perpendicularDistance * perpendicularWeight;
 
     if (!best || score < best.score) {

@@ -32,8 +32,10 @@ interface UseContainerWorkspaceOptions {
   clampTerminalPanelWidth: (value: number, workspaceWidth: number) => number;
   defaultTerminalPanelWidthPx: () => number;
   onSetActiveView: (view: ActiveView) => void;
+  onSelectContainer: (targetId: string) => void;
   onSetOverviewFocus: (targetId: string) => void;
   onTunnelStatus: (status: TunnelStatus) => void;
+  orderedTargetIds: string[];
   targetById: Map<string, DeveloperTarget>;
 }
 
@@ -42,8 +44,10 @@ export function useContainerWorkspace({
   clampTerminalPanelWidth,
   defaultTerminalPanelWidthPx,
   onSetActiveView,
+  onSelectContainer,
   onSetOverviewFocus,
   onTunnelStatus,
+  orderedTargetIds,
   targetById,
 }: UseContainerWorkspaceOptions) {
   const [containerTools, setContainerTools] = useState<
@@ -123,6 +127,9 @@ export function useContainerWorkspace({
       selectContainerTool(target, panel);
     },
   );
+  const selectContainerFromShortcut = useEffectEvent((targetId: string) => {
+    onSelectContainer(targetId);
+  });
 
   useEffect(() => {
     if (activeView.kind !== "container") {
@@ -160,6 +167,27 @@ export function useContainerWorkspace({
         return;
       }
 
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        const currentIndex = orderedTargetIds.indexOf(targetId);
+
+        if (currentIndex === -1) {
+          return;
+        }
+
+        const nextIndex =
+          event.key === "ArrowLeft" ? currentIndex - 1 : currentIndex + 1;
+        const nextTargetId = orderedTargetIds[nextIndex];
+
+        if (!nextTargetId) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        selectContainerFromShortcut(nextTargetId);
+        return;
+      }
+
       let nextPanel: ContainerToolPanel | null = null;
 
       switch (event.key) {
@@ -193,7 +221,9 @@ export function useContainerWorkspace({
   }, [
     activeView,
     onSetActiveView,
+    onSelectContainer,
     onSetOverviewFocus,
+    orderedTargetIds,
     targetById,
   ]);
 

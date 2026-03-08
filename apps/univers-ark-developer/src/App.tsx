@@ -180,8 +180,10 @@ function App() {
     clampTerminalPanelWidth,
     defaultTerminalPanelWidthPx,
     onSetActiveView: setActiveView,
+    onSelectContainer: setContainerView,
     onSetOverviewFocus: setOverviewFocusedTargetId,
     onTunnelStatus: setTunnelStatus,
+    orderedTargetIds: overviewTerminalTargets.map((target) => target.id),
     targetById,
   });
 
