@@ -120,6 +120,13 @@ function suppressDeviceAttributeResponses(terminal: Terminal) {
   terminal.parser.registerCsiHandler({ final: "c", prefix: "?" }, () => true);
 }
 
+// Strip residual DA response text that leaked into the PTY buffer
+// from previous sessions. The full response was ESC[>0;10;1c but the
+// ESC was consumed by the remote terminal, leaving "[>N;N;Nc" or
+// "N;N;Nc" as literal text.
+// eslint-disable-next-line no-control-regex
+const DA_RESIDUE_PATTERN = /\[?>?\d+;\d+;\d+c/g;
+
 function loadTerminalSnapshot(
   session: CachedTerminalSession,
   loader: (targetId: string) => Promise<{ output: string }>,
@@ -138,7 +145,7 @@ function loadTerminalSnapshot(
       session.terminal.reset();
       suppressDeviceAttributeResponses(session.terminal);
       if (snapshot.output) {
-        session.terminal.write(snapshot.output);
+        session.terminal.write(snapshot.output.replaceAll(DA_RESIDUE_PATTERN, ""));
       }
       session.hasAttachedSnapshot = true;
       setStatus(session, "Connected");
@@ -329,7 +336,7 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
       return;
     }
 
-    terminal.write(payload.data);
+    terminal.write(payload.data.replaceAll(DA_RESIDUE_PATTERN, ""));
     setStatus(session, "Connected");
   }).then((unlisten) => {
     session.outputUnlisten = unlisten;
