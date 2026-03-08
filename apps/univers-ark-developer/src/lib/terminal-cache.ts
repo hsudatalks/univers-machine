@@ -188,6 +188,17 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
   terminal.loadAddon(fitAddon);
   terminal.open(hostElement);
 
+  // Suppress Device Attributes (DA) responses entirely.
+  // When the remote shell sends a DA query (ESC[c or ESC[>c), xterm.js
+  // normally responds with ESC[?...c or ESC[>0;10;1c via onData. These
+  // responses get sent to the PTY and can be echoed as literal text
+  // "0;10;1c". We intercept the DA queries at the parser level so
+  // xterm.js never generates a response. The TERM=xterm-256color env
+  // variable already provides capability info to remote programs.
+  terminal.parser.registerCsiHandler({ final: "c" }, () => true);
+  terminal.parser.registerCsiHandler({ final: "c", prefix: ">" }, () => true);
+  terminal.parser.registerCsiHandler({ final: "c", prefix: "?" }, () => true);
+
   const session: CachedTerminalSession = {
     fitAddon,
     fontScale: 1,
