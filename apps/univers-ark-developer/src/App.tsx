@@ -168,6 +168,7 @@ function App() {
 
   const {
     browserFrameVersions,
+    containerTerminalCollapsed,
     containerTerminalWidths,
     containerTools,
     prepareContainerView,
@@ -175,6 +176,7 @@ function App() {
     restartBrowserTunnel,
     selectContainerTool,
     startContainerResize,
+    toggleTerminalCollapsed,
   } = useContainerWorkspace({
     activeView,
     clampTerminalPanelWidth,
@@ -363,6 +365,7 @@ function App() {
                     browserSurface={browserSurface}
                     developmentPanel={developmentPanel}
                     developmentSurface={developmentSurface}
+                    isTerminalCollapsed={Boolean(containerTerminalCollapsed[target.id])}
                     onReloadBrowser={() => {
                       if (browserSurface) {
                         reloadBrowserFrame(target.id, browserSurface.id);
@@ -378,6 +381,9 @@ function App() {
                     }}
                     onStartResize={(event) => {
                       startContainerResize(event, target.id);
+                    }}
+                    onToggleTerminalCollapsed={() => {
+                      toggleTerminalCollapsed(target.id);
                     }}
                     pageVisible={isVisible}
                     previewPanel={previewPanel}

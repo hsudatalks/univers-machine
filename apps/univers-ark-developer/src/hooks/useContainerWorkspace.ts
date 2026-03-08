@@ -56,6 +56,9 @@ export function useContainerWorkspace({
   const [containerTerminalWidths, setContainerTerminalWidths] = useState<
     Record<string, number>
   >({});
+  const [containerTerminalCollapsed, setContainerTerminalCollapsed] = useState<
+    Record<string, boolean | undefined>
+  >({});
   const [browserFrameVersions, setBrowserFrameVersions] = useState<
     Record<string, number>
   >({});
@@ -239,10 +242,21 @@ export function useContainerWorkspace({
     warmTargetTunnels(target, undefined, onTunnelStatus);
   }
 
+  function toggleTerminalCollapsed(targetId: string) {
+    setContainerTerminalCollapsed((current) => ({
+      ...current,
+      [targetId]: !current[targetId],
+    }));
+  }
+
   function startContainerResize(
     event: ReactPointerEvent<HTMLDivElement>,
     targetId: string,
   ) {
+    if (containerTerminalCollapsed[targetId]) {
+      return;
+    }
+
     const workspace = event.currentTarget.parentElement;
 
     if (!workspace) {
@@ -292,6 +306,7 @@ export function useContainerWorkspace({
 
   return {
     browserFrameVersions,
+    containerTerminalCollapsed,
     containerTerminalWidths,
     containerTools,
     prepareContainerView,
@@ -299,5 +314,6 @@ export function useContainerWorkspace({
     restartBrowserTunnel,
     selectContainerTool,
     startContainerResize,
+    toggleTerminalCollapsed,
   };
 }

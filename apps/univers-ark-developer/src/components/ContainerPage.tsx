@@ -11,10 +11,12 @@ interface ContainerPageProps {
   browserSurface?: DeveloperSurface;
   developmentPanel: ContainerToolPanel | null;
   developmentSurface?: DeveloperSurface;
+  isTerminalCollapsed: boolean;
   onReloadBrowser: () => void;
   onRestartBrowser: () => void;
   onSelectTool: (panel: ContainerToolPanel) => void;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onToggleTerminalCollapsed: () => void;
   pageVisible: boolean;
   previewPanel: ContainerToolPanel | null;
   previewSurface?: DeveloperSurface;
@@ -34,10 +36,12 @@ export function ContainerPage({
   browserSurface,
   developmentPanel,
   developmentSurface,
+  isTerminalCollapsed,
   onReloadBrowser,
   onRestartBrowser,
   onSelectTool,
   onStartResize,
+  onToggleTerminalCollapsed,
   pageVisible,
   previewPanel,
   previewSurface,
@@ -48,7 +52,61 @@ export function ContainerPage({
     <>
       <header className="content-header content-header-container">
         <div className="content-header-copy">
-          <h1 className="content-title content-title-container">{target.label}</h1>
+          <div className="content-title-row">
+            <button
+              aria-label={
+                isTerminalCollapsed ? "Show terminal pane" : "Hide terminal pane"
+              }
+              className="panel-button panel-button-icon panel-button-toolbar content-title-toggle"
+              onClick={onToggleTerminalCollapsed}
+              title={
+                isTerminalCollapsed ? "Show terminal pane" : "Hide terminal pane"
+              }
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                className="panel-button-icon-svg"
+                fill="none"
+                viewBox="0 0 16 16"
+              >
+                {isTerminalCollapsed ? (
+                  <>
+                    <path
+                      d="M2.75 3.25h10.5v9.5H2.75z"
+                      stroke="currentColor"
+                      strokeWidth="1.25"
+                    />
+                    <path
+                      d="M5.75 4.25v7.5"
+                      stroke="currentColor"
+                      strokeWidth="1.25"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <path
+                      d="M2.75 3.25h10.5v9.5H2.75z"
+                      stroke="currentColor"
+                      strokeWidth="1.25"
+                    />
+                    <path
+                      d="M5.75 4.25v7.5"
+                      stroke="currentColor"
+                      strokeWidth="1.25"
+                    />
+                    <path
+                      d="M4.5 8 3.25 8"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeWidth="1.25"
+                    />
+                  </>
+                )}
+              </svg>
+            </button>
+            <h1 className="content-title content-title-container">{target.label}</h1>
+          </div>
         </div>
 
         <div className="content-header-tools content-header-tools-container">
@@ -90,10 +148,10 @@ export function ContainerPage({
 
       <section className="page-section">
         <div
-          className={`container-workspace ${isBrowserToolPanel(activeTool) ? "tool-browser" : "tool-files"}`}
+          className={`container-workspace ${isBrowserToolPanel(activeTool) ? "tool-browser" : "tool-files"} ${isTerminalCollapsed ? "is-terminal-collapsed" : ""}`}
           style={workspaceStyle}
         >
-          <article className="panel terminal-panel">
+          <article className={`panel terminal-panel ${isTerminalCollapsed ? "is-collapsed" : ""}`}>
             <TerminalPane active={pageVisible} target={target} />
           </article>
 

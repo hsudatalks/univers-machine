@@ -19,6 +19,10 @@
   overflow: hidden;
 }
 
+.container-workspace.is-terminal-collapsed {
+  grid-template-columns: 0 0 minmax(0, 1fr);
+}
+
 .container-resizer {
   position: relative;
   min-height: 0;
@@ -37,6 +41,15 @@
 
 .container-resizer:hover::before {
   background: color-mix(in srgb, var(--ring) 56%, var(--border));
+}
+
+.container-workspace.is-terminal-collapsed .terminal-panel,
+.container-workspace.is-terminal-collapsed .container-resizer {
+  display: none;
+}
+
+.container-workspace.is-terminal-collapsed .tool-panel {
+  grid-column: 3;
 }
 
 .workspace-placeholder {

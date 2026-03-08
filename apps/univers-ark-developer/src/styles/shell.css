@@ -256,6 +256,26 @@
   line-height: 1;
 }
 
+.content-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.content-title-toggle {
+  flex-shrink: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.content-title-toggle:hover:not(:disabled) {
+  background: var(--secondary);
+  border-color: transparent;
+  color: var(--foreground);
+}
+
 .content-meta-row {
   min-width: 0;
   display: flex;
