@@ -4,6 +4,7 @@ import {
   fitClaimedTerminalSession,
   focusClaimedTerminalSession,
   getTerminalStatus,
+  restartTerminalSession,
   releaseTerminalSession,
   subscribeTerminalStatus,
 } from "../lib/terminal-cache";
@@ -101,6 +102,37 @@ export function TerminalPane({
               {status}
             </span>
           )}
+          <button
+            aria-label="Reconnect terminal"
+            className="panel-button panel-button-toolbar panel-button-icon"
+            onClick={() => {
+              void restartTerminalSession(target.id);
+            }}
+            title="Reconnect terminal"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              className="panel-button-icon-svg"
+              fill="none"
+              viewBox="0 0 16 16"
+            >
+              <path
+                d="M13.25 8A5.25 5.25 0 1 1 11.7 4.29"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.25"
+              />
+              <path
+                d="M10.75 2.75h2.5v2.5"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.25"
+              />
+            </svg>
+          </button>
         </div>
       </header>
 

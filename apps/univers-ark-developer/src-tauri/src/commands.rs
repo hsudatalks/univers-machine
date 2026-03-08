@@ -83,6 +83,25 @@ pub(crate) fn attach_terminal(
 }
 
 #[tauri::command]
+pub(crate) fn restart_terminal(
+    app: AppHandle,
+    terminal_state: State<TerminalState>,
+    target_id: String,
+) -> Result<TerminalSnapshot, String> {
+    let target = resolve_raw_target(&target_id)?;
+    let session = spawn_terminal_session(&app, terminal_state.sessions.clone(), &target)?;
+    let snapshot = snapshot_for(&target_id, &session);
+
+    terminal_state
+        .sessions
+        .lock()
+        .map_err(|_| String::from("Terminal session state is unavailable"))?
+        .insert(target_id.clone(), session);
+
+    Ok(snapshot)
+}
+
+#[tauri::command]
 pub(crate) fn ensure_tunnel(
     app: AppHandle,
     tunnel_state: State<TunnelState>,

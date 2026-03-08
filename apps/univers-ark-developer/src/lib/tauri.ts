@@ -334,6 +334,16 @@ export async function attachTerminal(
   return invoke<TerminalSnapshot>("attach_terminal", { targetId });
 }
 
+export async function restartTerminal(
+  targetId: string,
+): Promise<TerminalSnapshot> {
+  if (!isTauri()) {
+    return attachTerminal(targetId);
+  }
+
+  return invoke<TerminalSnapshot>("restart_terminal", { targetId });
+}
+
 export async function writeTerminal(
   targetId: string,
   data: string,

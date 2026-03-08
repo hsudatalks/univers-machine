@@ -172,6 +172,7 @@ pub(crate) fn run() {
             commands::load_server_inventory,
             commands::refresh_server_inventory,
             commands::attach_terminal,
+            commands::restart_terminal,
             commands::ensure_tunnel,
             commands::restart_tunnel,
             commands::list_remote_directory,

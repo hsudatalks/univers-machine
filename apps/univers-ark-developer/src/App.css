@@ -491,7 +491,7 @@
   display: grid;
   grid-template-columns: repeat(
     auto-fill,
-    minmax(var(--overview-terminal-grid-min-width, 25rem), 1fr)
+    minmax(var(--overview-terminal-grid-min-width, 30rem), 1fr)
   );
   gap: 0.5rem;
   overflow: auto;
@@ -507,13 +507,13 @@
 
 .content-page-overview .terminal-card {
   height: var(--overview-terminal-card-height, 32rem);
-  min-width: var(--overview-terminal-grid-min-width, 25rem);
+  min-width: var(--overview-terminal-grid-min-width, 30rem);
   min-height: var(--overview-terminal-min-height, 30rem);
 }
 
 .terminal-card,
 .terminal-panel {
-  min-width: 25rem;
+  min-width: 30rem;
   min-height: 30rem;
 }
 
@@ -598,11 +598,11 @@
 }
 
 .container-workspace {
-  --container-terminal-width: 35rem;
+  --container-terminal-width: 30rem;
   min-height: 0;
   display: grid;
   grid-template-columns:
-    minmax(35rem, var(--container-terminal-width))
+    minmax(30rem, var(--container-terminal-width))
     0.45rem
     minmax(0, 1fr);
   gap: 0;

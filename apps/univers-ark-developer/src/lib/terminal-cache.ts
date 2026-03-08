@@ -5,6 +5,7 @@ import {
   listenTerminalExit,
   listenTerminalOutput,
   resizeTerminal,
+  restartTerminal,
   writeTerminal,
 } from "./tauri";
 
@@ -29,6 +30,9 @@ interface CachedTerminalSession {
 
 const DEFAULT_TERMINAL_STATUS = "Connecting";
 const DEFAULT_TERMINAL_FONT_SIZE = 12;
+const DEVICE_ATTRIBUTES_RESPONSE_PATTERN = new RegExp(
+  `^${String.fromCharCode(27)}\\[\\??[>]?[\\d;]*[a-zA-Z]$`,
+);
 const terminalSessions = new Map<string, CachedTerminalSession>();
 
 let parkingLotElement: HTMLDivElement | null = null;
@@ -102,14 +106,20 @@ function applyTerminalFontScale(
   );
 }
 
-function refreshTerminalSnapshot(session: CachedTerminalSession) {
+function loadTerminalSnapshot(
+  session: CachedTerminalSession,
+  loader: (targetId: string) => Promise<{ output: string }>,
+) {
   if (session.attachPromise) {
     return session.attachPromise;
   }
 
   setStatus(session, DEFAULT_TERMINAL_STATUS);
+  session.readyForInput = false;
+  session.pendingWrites = [];
+  session.hasAttachedSnapshot = false;
 
-  session.attachPromise = attachTerminal(session.targetId)
+  session.attachPromise = loader(session.targetId)
     .then((snapshot) => {
       session.terminal.reset();
       if (snapshot.output) {
@@ -124,7 +134,7 @@ function refreshTerminalSnapshot(session: CachedTerminalSession) {
         for (const data of session.pendingWrites) {
           // Filter out Device Attributes responses (e.g. ESC[>0;10;1c)
           // that xterm.js sends automatically — they are not user input.
-          if (/^\x1b\[\??[>]?[\d;]*[a-zA-Z]$/.test(data)) {
+          if (DEVICE_ATTRIBUTES_RESPONSE_PATTERN.test(data)) {
             continue;
           }
           void writeTerminal(session.targetId, data).catch(() => undefined);
@@ -144,6 +154,10 @@ function refreshTerminalSnapshot(session: CachedTerminalSession) {
     });
 
   return session.attachPromise;
+}
+
+function refreshTerminalSnapshot(session: CachedTerminalSession) {
+  return loadTerminalSnapshot(session, attachTerminal);
 }
 
 function createTerminalSession(targetId: string): CachedTerminalSession {
@@ -313,4 +327,9 @@ export function focusClaimedTerminalSession(targetId: string, ownerId: symbol) {
   }
 
   session.terminal.focus();
+}
+
+export function restartTerminalSession(targetId: string) {
+  const session = terminalSession(targetId);
+  return loadTerminalSnapshot(session, restartTerminal);
 }

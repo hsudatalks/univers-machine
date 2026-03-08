@@ -914,7 +914,7 @@ function App() {
       (entry) => entry.container.sshReachable,
     ).length;
     const overviewZoomStyle = {
-      "--overview-terminal-grid-min-width": `${25 * overviewZoom}rem`,
+      "--overview-terminal-grid-min-width": `${30 * overviewZoom}rem`,
       "--overview-terminal-card-height": `${32 * overviewZoom}rem`,
       "--overview-terminal-min-height": `${30 * overviewZoom}rem`,
     } as CSSProperties;
