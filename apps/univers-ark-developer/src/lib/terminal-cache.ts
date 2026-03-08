@@ -243,32 +243,29 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
 
   // Workaround for xterm.js regression #4781: Shift+drag selection
   // vanishes on mouse release when tmux mouse mode is active.
-  // When Shift is held during mousedown, temporarily tell tmux to
-  // disable mouse reporting. Re-enable on mouseup.
+  // When Shift is held during mousedown, temporarily tell xterm.js
+  // to disable mouse reporting. Re-enable on mouseup.
+  // NOTE: terminal.write() sends data AS IF from the application to
+  // the terminal emulator — this is the correct direction for DECSET
+  // sequences (unlike writeTerminal which writes to the PTY stdin).
   hostElement.addEventListener(
     "mousedown",
     (event) => {
-      if (event.shiftKey && session.readyForInput) {
-        // Send DECSET reset for all mouse tracking modes
-        // \e[?1000l = disable normal tracking
-        // \e[?1002l = disable button event tracking
-        // \e[?1003l = disable any event tracking
-        // \e[?1006l = disable SGR extended coordinates
-        void writeTerminal(
-          targetId,
+      if (event.shiftKey) {
+        // Tell xterm.js to disable mouse tracking modes
+        terminal.write(
           "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l",
-        ).catch(() => undefined);
+        );
 
         const reenable = () => {
           window.removeEventListener("mouseup", reenable);
           // Give xterm.js time to finalize the selection, then
           // re-enable mouse reporting so tmux keeps working
           setTimeout(() => {
-            void writeTerminal(
-              targetId,
+            terminal.write(
               "\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h",
-            ).catch(() => undefined);
-          }, 100);
+            );
+          }, 150);
         };
 
         window.addEventListener("mouseup", reenable);
