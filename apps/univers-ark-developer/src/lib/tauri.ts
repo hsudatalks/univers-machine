@@ -333,6 +333,22 @@ export async function restartContainer(
   });
 }
 
+export async function clipboardWrite(text: string): Promise<void> {
+  if (!isTauri()) {
+    return;
+  }
+
+  return invoke<void>("clipboard_write", { text });
+}
+
+export async function clipboardRead(): Promise<string> {
+  if (!isTauri()) {
+    return "";
+  }
+
+  return invoke<string>("clipboard_read");
+}
+
 export async function attachTerminal(
   targetId: string,
 ): Promise<TerminalSnapshot> {

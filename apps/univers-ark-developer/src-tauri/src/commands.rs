@@ -346,5 +346,23 @@ pub(crate) async fn restart_container(
 ) -> Result<(), String> {
     async_runtime::spawn_blocking(move || restart_remote_container(&server_id, &container_name))
         .await
-        .map_err(|error| format!("Failed to join pull request merge task: {}", error))?
+        .map_err(|error| format!("Failed to join restart container task: {}", error))?
+}
+
+#[tauri::command]
+pub(crate) fn clipboard_write(text: String) -> Result<(), String> {
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|error| format!("Clipboard unavailable: {}", error))?;
+    clipboard
+        .set_text(text)
+        .map_err(|error| format!("Failed to write to clipboard: {}", error))
+}
+
+#[tauri::command]
+pub(crate) fn clipboard_read() -> Result<String, String> {
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|error| format!("Clipboard unavailable: {}", error))?;
+    clipboard
+        .get_text()
+        .map_err(|error| format!("Failed to read clipboard: {}", error))
 }
