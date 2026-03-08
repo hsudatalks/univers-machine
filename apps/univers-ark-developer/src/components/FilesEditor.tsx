@@ -1,9 +1,12 @@
+import { X } from "lucide-react";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import type { RemoteFileEntry, RemoteFilePreview } from "../types";
+import { Button } from "./ui/button";
 
 type FilesEditorProps = {
   editorLanguage: string;
   isLoadingPreview: boolean;
+  onClosePreview: () => void;
   preview: RemoteFilePreview | null;
   selectedEntry: RemoteFileEntry | undefined;
 };
@@ -43,6 +46,7 @@ function configureMonacoTheme(monaco: Monaco) {
 export function FilesEditor({
   editorLanguage,
   isLoadingPreview,
+  onClosePreview,
   preview,
   selectedEntry,
 }: FilesEditorProps) {
@@ -62,6 +66,15 @@ export function FilesEditor({
               {preview.truncated ? (
                 <span className="files-editor-chip">Preview truncated</span>
               ) : null}
+              <Button
+                className="files-editor-close"
+                onClick={onClosePreview}
+                size="sm"
+                title="Close preview"
+                variant="ghost"
+              >
+                <X aria-hidden="true" size={14} />
+              </Button>
             </div>
 
           {preview.isBinary ? (

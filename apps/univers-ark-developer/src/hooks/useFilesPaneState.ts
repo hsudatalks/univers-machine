@@ -19,7 +19,20 @@ export interface FilesRootOption {
   path: string;
 }
 
-export type FilesBrowserView = "list" | "details";
+export type FilesBrowserView = "tree" | "list" | "icons" | "details";
+export type FilesSortKey = "name" | "kind" | "size";
+export type FilesSortDirection = "asc" | "desc";
+
+function isVisibleEntry(
+  entry: RemoteFileEntry,
+  showHiddenDirectories: boolean,
+): boolean {
+  if (showHiddenDirectories) {
+    return true;
+  }
+
+  return !(entry.kind === "directory" && entry.name.startsWith("."));
+}
 
 export function formatFileSize(size: number): string {
   if (size < 1024) return `${size} B`;
@@ -91,6 +104,7 @@ function buildFlatTree(
   childrenByPath: Map<string, RemoteFileEntry[]>,
   expandedPaths: Set<string>,
   loadingPaths: Set<string>,
+  showHiddenDirectories: boolean,
 ): FilesTreeNode[] {
   if (!rootPath) {
     return [];
@@ -105,6 +119,10 @@ function buildFlatTree(
     }
 
     for (const entry of children) {
+      if (!isVisibleEntry(entry, showHiddenDirectories)) {
+        continue;
+      }
+
       const isDir = entry.kind === "directory";
       const isExpanded = isDir && expandedPaths.has(entry.path);
       const isLoading = loadingPaths.has(entry.path);
@@ -121,27 +139,85 @@ function buildFlatTree(
   return nodes;
 }
 
+function buildDirectoryEntries(
+  currentDirectoryPath: string | null,
+  childrenByPath: Map<string, RemoteFileEntry[]>,
+  showHiddenDirectories: boolean,
+  sortKey: FilesSortKey,
+  sortDirection: FilesSortDirection,
+): FilesTreeNode[] {
+  if (!currentDirectoryPath) {
+    return [];
+  }
+
+  const children = (childrenByPath.get(currentDirectoryPath) ?? [])
+    .filter((entry) => isVisibleEntry(entry, showHiddenDirectories))
+    .slice()
+    .sort((left, right) => {
+      if (left.kind !== right.kind) {
+        if (left.kind === "directory") return -1;
+        if (right.kind === "directory") return 1;
+      }
+
+      let result = 0;
+      if (sortKey === "size") {
+        result = left.size - right.size;
+      } else if (sortKey === "kind") {
+        result = left.kind.localeCompare(right.kind);
+        if (result === 0) {
+          result = left.name.localeCompare(right.name, undefined, {
+            numeric: true,
+            sensitivity: "base",
+          });
+        }
+      } else {
+        result = left.name.localeCompare(right.name, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+      }
+
+      return sortDirection === "asc" ? result : -result;
+    });
+
+  return children.map((entry) => ({
+    entry,
+    depth: 0,
+    isExpanded: false,
+    isLoading: false,
+  }));
+}
+
 export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
   const [childrenByPath, setChildrenByPath] = useState<Map<string, RemoteFileEntry[]>>(
+    new Map(),
+  );
+  const [parentByPath, setParentByPath] = useState<Map<string, string | null>>(
     new Map(),
   );
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
   const [rootPath, setRootPath] = useState<string | null>(null);
   const [rootParentPath, setRootParentPath] = useState<string | null>(null);
+  const [currentDirectoryPath, setCurrentDirectoryPath] = useState<string | null>(null);
   const [preview, setPreview] = useState<RemoteFilePreview | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rootOptions, setRootOptions] = useState<FilesRootOption[]>([]);
   const [isLoadingRoots, setIsLoadingRoots] = useState(false);
-  const [browserView, setBrowserView] = useState<FilesBrowserView>("list");
+  const [browserView, setBrowserView] = useState<FilesBrowserView>("icons");
+  const [showHiddenDirectories, setShowHiddenDirectories] = useState(false);
+  const [sortKey, setSortKey] = useState<FilesSortKey>("name");
+  const [sortDirection, setSortDirection] = useState<FilesSortDirection>("asc");
 
   const resetBrowser = () => {
     setChildrenByPath(new Map());
+    setParentByPath(new Map());
     setExpandedPaths(new Set());
     setRootPath(null);
     setRootParentPath(null);
+    setCurrentDirectoryPath(null);
     setPreview(null);
     setSelectedPath(null);
     setError(null);
@@ -161,10 +237,16 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
           next.set(listing.path, listing.entries);
           return next;
         });
+        setParentByPath((prev) => {
+          const next = new Map(prev);
+          next.set(listing.path, listing.parentPath ?? null);
+          return next;
+        });
 
         if (!rootPath || dirPath === null || dirPath === undefined) {
           setRootPath(listing.path);
           setRootParentPath(listing.parentPath ?? null);
+          setCurrentDirectoryPath(listing.path);
           setExpandedPaths((prev) => new Set(prev).add(listing.path));
         }
       })
@@ -198,7 +280,8 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
     ])
       .then(([homeListing, reposListing]) => {
         const repoDirectories = reposListing.entries.filter(
-          (entry) => entry.kind === "directory",
+          (entry) =>
+            entry.kind === "directory" && isVisibleEntry(entry, showHiddenDirectories),
         );
         const preferredRepo =
           repoDirectories.find((entry) => entry.name === "hvac-workbench") ??
@@ -267,11 +350,31 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
     }
   };
 
-  const openFile = (entry: RemoteFileEntry) => {
-    if (!isPreviewableEntry(entry)) {
-      setSelectedPath(entry.path);
+  const enterDirectory = (entry: RemoteFileEntry) => {
+    if (entry.kind !== "directory") {
+      return;
+    }
+
+    setSelectedPath(entry.path);
+    setPreview(null);
+    setIsLoadingPreview(false);
+    setCurrentDirectoryPath(entry.path);
+    if (!childrenByPath.has(entry.path)) {
+      loadDirectory(entry.path);
+    }
+  };
+
+  const selectEntry = (entry: RemoteFileEntry) => {
+    setSelectedPath(entry.path);
+    if (entry.kind !== "file" && entry.kind !== "symlink") {
       setPreview(null);
       setIsLoadingPreview(false);
+    }
+  };
+
+  const openFile = (entry: RemoteFileEntry) => {
+    if (!isPreviewableEntry(entry)) {
+      selectEntry(entry);
       return;
     }
 
@@ -295,10 +398,33 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
       });
   };
 
+  const closePreview = () => {
+    setPreview(null);
+    setIsLoadingPreview(false);
+  };
+
   const navigateUp = () => {
-    if (!rootParentPath) return;
-    resetBrowser();
-    loadDirectory(rootParentPath);
+    const parentPath =
+      (currentDirectoryPath ? parentByPath.get(currentDirectoryPath) : null) ?? null;
+
+    if (browserView === "tree") {
+      if (!rootParentPath) return;
+      resetBrowser();
+      loadDirectory(rootParentPath);
+      return;
+    }
+
+    if (!currentDirectoryPath || !parentPath) {
+      return;
+    }
+
+    setCurrentDirectoryPath(parentPath);
+    setPreview(null);
+    setIsLoadingPreview(false);
+    setSelectedPath(parentPath);
+    if (!childrenByPath.has(parentPath)) {
+      loadDirectory(parentPath);
+    }
   };
 
   const selectRoot = (path: string) => {
@@ -312,10 +438,45 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
     loadDirectory(nextPath);
   };
 
-  const flatTree = useMemo(
-    () => buildFlatTree(rootPath, childrenByPath, expandedPaths, loadingPaths),
-    [childrenByPath, expandedPaths, loadingPaths, rootPath],
-  );
+  const toggleSort = (nextSortKey: FilesSortKey) => {
+    if (sortKey === nextSortKey) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(nextSortKey);
+    setSortDirection(nextSortKey === "size" ? "desc" : "asc");
+  };
+
+  const flatTree = useMemo(() => {
+    if (browserView === "tree") {
+      return buildFlatTree(
+        rootPath,
+        childrenByPath,
+        expandedPaths,
+        loadingPaths,
+        showHiddenDirectories,
+      );
+    }
+
+    return buildDirectoryEntries(
+      currentDirectoryPath ?? rootPath,
+      childrenByPath,
+      showHiddenDirectories,
+      sortKey,
+      sortDirection,
+    );
+  }, [
+    browserView,
+    childrenByPath,
+    currentDirectoryPath,
+    expandedPaths,
+    loadingPaths,
+    rootPath,
+    showHiddenDirectories,
+    sortDirection,
+    sortKey,
+  ]);
 
   const selectedEntry = useMemo(() => {
     for (const [, entries] of childrenByPath) {
@@ -330,10 +491,13 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
   const editorLanguage = preview ? languageFromPath(preview.path) : "plaintext";
 
   return {
+    currentDirectoryPath,
     editorLanguage,
+    enterDirectory,
     error,
     flatTree,
     browserView,
+    closePreview,
     isLoadingPreview,
     isLoadingRoots,
     loadingPaths,
@@ -344,10 +508,16 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
     rootOptions,
     rootParentPath,
     rootPath,
+    setShowHiddenDirectories,
+    sortDirection,
+    sortKey,
+    selectEntry,
     selectedEntry,
     selectedPath,
     selectRoot,
     setBrowserView,
+    showHiddenDirectories,
+    toggleSort,
     toggleDirectory,
   };
 }
