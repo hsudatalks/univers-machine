@@ -70,45 +70,57 @@ pub(crate) fn refresh_server_inventory() -> Result<Vec<ManagedServer>, String> {
 }
 
 #[tauri::command]
-pub(crate) fn attach_terminal(
+pub(crate) async fn attach_terminal(
     app: AppHandle,
-    terminal_state: State<TerminalState>,
+    terminal_state: State<'_, TerminalState>,
     target_id: String,
 ) -> Result<TerminalSnapshot, String> {
-    let mut sessions = terminal_state
-        .sessions
-        .lock()
-        .map_err(|_| String::from("Terminal session state is unavailable"))?;
+    let sessions_arc = terminal_state.sessions.clone();
+    let app_clone = app.clone();
 
-    if let Some(session) = sessions.get(&target_id) {
-        return Ok(snapshot_for(&target_id, session));
-    }
+    async_runtime::spawn_blocking(move || {
+        let mut sessions = sessions_arc
+            .lock()
+            .map_err(|_| String::from("Terminal session state is unavailable"))?;
 
-    let target = resolve_raw_target(&target_id)?;
-    let session = spawn_terminal_session(&app, terminal_state.sessions.clone(), &target)?;
-    let snapshot = snapshot_for(&target_id, &session);
-    sessions.insert(target_id.clone(), session);
+        if let Some(session) = sessions.get(&target_id) {
+            return Ok(snapshot_for(&target_id, session));
+        }
 
-    Ok(snapshot)
+        let target = resolve_raw_target(&target_id)?;
+        let session = spawn_terminal_session(&app_clone, sessions_arc.clone(), &target)?;
+        let snapshot = snapshot_for(&target_id, &session);
+        sessions.insert(target_id.clone(), session);
+
+        Ok(snapshot)
+    })
+    .await
+    .map_err(|error| format!("Failed to join attach terminal task: {}", error))?
 }
 
 #[tauri::command]
-pub(crate) fn restart_terminal(
+pub(crate) async fn restart_terminal(
     app: AppHandle,
-    terminal_state: State<TerminalState>,
+    terminal_state: State<'_, TerminalState>,
     target_id: String,
 ) -> Result<TerminalSnapshot, String> {
-    let target = resolve_raw_target(&target_id)?;
-    let session = spawn_terminal_session(&app, terminal_state.sessions.clone(), &target)?;
-    let snapshot = snapshot_for(&target_id, &session);
+    let sessions_arc = terminal_state.sessions.clone();
+    let app_clone = app.clone();
 
-    terminal_state
-        .sessions
-        .lock()
-        .map_err(|_| String::from("Terminal session state is unavailable"))?
-        .insert(target_id.clone(), session);
+    async_runtime::spawn_blocking(move || {
+        let target = resolve_raw_target(&target_id)?;
+        let session = spawn_terminal_session(&app_clone, sessions_arc.clone(), &target)?;
+        let snapshot = snapshot_for(&target_id, &session);
 
-    Ok(snapshot)
+        sessions_arc
+            .lock()
+            .map_err(|_| String::from("Terminal session state is unavailable"))?
+            .insert(target_id.clone(), session);
+
+        Ok(snapshot)
+    })
+    .await
+    .map_err(|error| format!("Failed to join restart terminal task: {}", error))?
 }
 
 #[tauri::command]
