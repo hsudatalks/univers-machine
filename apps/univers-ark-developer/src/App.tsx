@@ -2,16 +2,17 @@ import {
   useEffect,
   useEffectEvent,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { isTauri } from "@tauri-apps/api/core";
-import { BrowserPane, type BrowserFrameInstance } from "./components/BrowserPane";
-import { FilesPane } from "./components/FilesPane";
+import type { BrowserFrameInstance } from "./components/BrowserPane";
+import { ContainerPage } from "./components/ContainerPage";
+import { OverviewPage } from "./components/OverviewPage";
+import { ServerPage } from "./components/ServerPage";
 import { SidebarNav } from "./components/SidebarNav";
-import { TerminalCard } from "./components/TerminalCard";
-import { TerminalPane } from "./components/TerminalPane";
 import "./App.css";
 import {
   listenTunnelStatus,
@@ -24,17 +25,15 @@ import type {
   AppBootstrap,
   DeveloperSurface,
   DeveloperTarget,
-  ManagedContainer,
   ManagedServer,
   TunnelStatus,
 } from "./types";
+import type { ContainerToolPanel } from "./lib/view-types";
 
 type ActiveView =
   | { kind: "overview" }
   | { kind: "server"; serverId: string }
   | { kind: "container"; targetId: string };
-
-type ContainerToolPanel = "files" | `browser:${string}`;
 
 const IS_MAC = navigator.platform.toUpperCase().includes("MAC");
 
@@ -294,7 +293,7 @@ function App() {
   const [browserFrameVersions, setBrowserFrameVersions] = useState<Record<string, number>>({});
   const [tunnelStatuses, setTunnelStatuses] = useState<Record<string, TunnelStatus>>({});
   const [error, setError] = useState<string | null>(null);
-  const overviewCardElements = useMemo(() => new Map<string, HTMLElement>(), []);
+  const overviewCardElementsRef = useRef(new Map<string, HTMLElement>());
   const [overviewZoom, setOverviewZoom] = useState(() => {
     if (typeof window === "undefined") {
       return OVERVIEW_ZOOM_DEFAULT;
@@ -578,7 +577,8 @@ function App() {
       return;
     }
 
-    const element = overviewCardElements.get(activeOverviewFocusedTargetId);
+    const element = overviewCardElementsRef.current.get(activeOverviewFocusedTargetId);
+
 
     if (!element) {
       return;
@@ -589,7 +589,7 @@ function App() {
       block: "nearest",
       inline: "nearest",
     });
-  }, [activeOverviewFocusedTargetId, activeView.kind, overviewCardElements]);
+  }, [activeOverviewFocusedTargetId, activeView.kind]);
 
   const setContainerView = (targetId: string) => {
     const nextTarget = targetById.get(targetId);
@@ -672,7 +672,7 @@ function App() {
         direction,
         currentTargetId,
         overviewTerminalTargets.map((target) => target.id),
-        overviewCardElements,
+        overviewCardElementsRef.current,
       );
 
       if (!nextTargetId || nextTargetId === currentTargetId) {
@@ -692,7 +692,6 @@ function App() {
   }, [
     activeOverviewFocusedTargetId,
     activeView.kind,
-    overviewCardElements,
     overviewTerminalTargets,
   ]);
 
@@ -866,337 +865,6 @@ function App() {
     );
   };
 
-  const renderUnavailableTerminalCard = (container: ManagedContainer) => (
-    <article className="panel terminal-card terminal-card-unavailable" key={container.targetId}>
-      <header className="panel-header terminal-placeholder-header">
-        <div className="terminal-copy">
-          <span className="panel-title">{container.label}</span>
-        </div>
-
-        <div className="terminal-meta">
-          <span className="terminal-status status-error">{container.sshState}</span>
-        </div>
-      </header>
-
-      <div className="terminal-placeholder-body">
-        <p className="terminal-placeholder-copy">{container.sshMessage}</p>
-      </div>
-    </article>
-  );
-
-  const renderTerminalCard = (
-    target: DeveloperTarget,
-    options?: {
-      isGridFocused?: boolean;
-      key?: string;
-      onFocusRequest?: () => void;
-      pageVisible?: boolean;
-      registerElement?: (element: HTMLElement | null) => void;
-      scale?: number;
-      title?: string;
-    },
-  ) => (
-    <TerminalCard
-      isGridFocused={options?.isGridFocused}
-      key={options?.key ?? target.id}
-      onFocusRequest={options?.onFocusRequest}
-      onOpenWorkspace={() => setContainerView(target.id)}
-      pageVisible={options?.pageVisible}
-      registerElement={options?.registerElement}
-      scale={options?.scale}
-      target={target}
-      title={options?.title ?? target.label}
-    />
-  );
-
-  const renderOverviewPage = (pageVisible: boolean) => {
-    const reachableContainers = overviewContainers.filter(
-      (entry) => entry.container.sshReachable,
-    ).length;
-    const overviewZoomStyle = {
-      "--overview-terminal-grid-min-width": `${30 * overviewZoom}rem`,
-      "--overview-terminal-card-height": `${32 * overviewZoom}rem`,
-      "--overview-terminal-min-height": `${30 * overviewZoom}rem`,
-    } as CSSProperties;
-
-    return (
-      <>
-        <header className="content-header content-header-overview">
-          <div className="content-header-copy">
-            <h1 className="content-title content-title-overview">Overview</h1>
-          </div>
-
-          <div className="content-header-tools">
-            <div className="overview-zoom-controls" aria-label="Overview zoom controls">
-              <button
-                className="panel-button panel-button-toolbar overview-zoom-button"
-                disabled={overviewZoom <= OVERVIEW_ZOOM_MIN}
-                onClick={() => {
-                  setOverviewZoom((current) =>
-                    roundOverviewZoom(
-                      clampOverviewZoom(current - OVERVIEW_ZOOM_STEP),
-                    ),
-                  );
-                }}
-                title="Zoom out overview terminals"
-                type="button"
-              >
-                -
-              </button>
-
-              <button
-                className="content-chip content-chip-button"
-                disabled={overviewZoom === OVERVIEW_ZOOM_DEFAULT}
-                onClick={() => {
-                  setOverviewZoom(OVERVIEW_ZOOM_DEFAULT);
-                }}
-                title="Reset overview zoom"
-                type="button"
-              >
-                {Math.round(overviewZoom * 100)}%
-              </button>
-
-              <button
-                className="panel-button panel-button-toolbar overview-zoom-button"
-                disabled={overviewZoom >= OVERVIEW_ZOOM_MAX}
-                onClick={() => {
-                  setOverviewZoom((current) =>
-                    roundOverviewZoom(
-                      clampOverviewZoom(current + OVERVIEW_ZOOM_STEP),
-                    ),
-                  );
-                }}
-                title="Zoom in overview terminals"
-                type="button"
-              >
-                +
-              </button>
-            </div>
-
-            <div className="content-meta-row">
-              <span className="content-chip">
-                {bootstrap?.servers.length ?? 0} server(s)
-              </span>
-              <span className="content-chip">
-                {overviewContainers.length} container(s)
-              </span>
-              <span className="content-chip">{reachableContainers} SSH ready</span>
-            </div>
-          </div>
-        </header>
-
-        <section className="page-section">
-          <div className="terminal-grid" style={overviewZoomStyle}>
-            {overviewContainers.map(({ container, target }) =>
-              target
-                ? renderTerminalCard(target, {
-                    isGridFocused: activeOverviewFocusedTargetId === target.id,
-                    key: container.targetId,
-                    onFocusRequest: () => {
-                      setOverviewFocusedTargetId(target.id);
-                    },
-                    pageVisible,
-                    registerElement: (element) => {
-                      if (element) {
-                        overviewCardElements.set(target.id, element);
-                      } else {
-                        overviewCardElements.delete(target.id);
-                      }
-                    },
-                    scale: overviewZoom,
-                    title: container.label,
-                  })
-                : renderUnavailableTerminalCard(container),
-            )}
-
-            {standaloneTargets.map((target) =>
-              renderTerminalCard(target, {
-                isGridFocused: activeOverviewFocusedTargetId === target.id,
-                key: target.id,
-                onFocusRequest: () => {
-                  setOverviewFocusedTargetId(target.id);
-                },
-                pageVisible,
-                    registerElement: (element) => {
-                      if (element) {
-                        overviewCardElements.set(target.id, element);
-                      } else {
-                        overviewCardElements.delete(target.id);
-                      }
-                    },
-                scale: overviewZoom,
-                title: target.label,
-              }),
-            )}
-          </div>
-        </section>
-      </>
-    );
-  };
-
-  const renderServerPage = (server: ManagedServer, pageVisible: boolean) => {
-    const reachableContainers = server.containers.filter(
-      (container) => container.sshReachable,
-    ).length;
-
-    return (
-      <>
-        <header className="content-header">
-          <div className="content-header-copy">
-            <span className="panel-title">Server</span>
-            <h1 className="content-title">{server.label}</h1>
-            <p className="panel-description">{server.description}</p>
-          </div>
-
-          <div className="content-meta-row">
-            <span className="content-chip">{server.host}</span>
-            <span className="content-chip">
-              {server.containers.length} container(s)
-            </span>
-            <span className="content-chip">{reachableContainers} SSH ready</span>
-          </div>
-        </header>
-
-        <section className="page-section">
-          <div className="terminal-grid">
-            {server.containers.map((container) => {
-              const target = targetById.get(container.targetId);
-
-              return target
-                ? renderTerminalCard(target, {
-                    key: container.targetId,
-                    pageVisible,
-                    title: container.label,
-                  })
-                : renderUnavailableTerminalCard(container);
-            })}
-          </div>
-        </section>
-      </>
-    );
-  };
-
-  const renderContainerPage = (target: DeveloperTarget, pageVisible: boolean) => {
-    const activeTool = containerTools[target.id] ?? "files";
-    const developmentSurface = target.surfaces.find(
-      (surface) => surface.id === "development",
-    );
-    const previewSurface = target.surfaces.find((surface) => surface.id === "preview");
-    const developmentPanel = developmentSurface
-      ? (`browser:${developmentSurface.id}` as const)
-      : null;
-    const previewPanel = previewSurface ? (`browser:${previewSurface.id}` as const) : null;
-    const activeBrowserSurfaceId = browserSurfaceIdFromPanel(activeTool);
-    const browserSurface = activeBrowserSurfaceId
-      ? target.surfaces.find((surface) => surface.id === activeBrowserSurfaceId)
-      : undefined;
-    const browserStatus = browserSurface
-      ? tunnelStatuses[surfaceKey(target.id, browserSurface.id)] ??
-        fallbackTunnelStatus(target.id, browserSurface)
-      : undefined;
-    const browserFrame: BrowserFrameInstance | undefined =
-      browserSurface && browserStatus
-        ? {
-            cacheKey: surfaceKey(target.id, browserSurface.id),
-            frameVersion:
-              browserFrameVersions[surfaceKey(target.id, browserSurface.id)] ?? 0,
-            isActive: pageVisible,
-            status: browserStatus,
-            surface: browserSurface,
-            target,
-          }
-        : undefined;
-    const workspaceStyle = {
-      "--container-terminal-width": `${containerTerminalWidths[target.id] ?? defaultTerminalPanelWidthPx()}px`,
-    } as CSSProperties;
-
-    return (
-      <>
-        <header className="content-header content-header-container">
-          <div className="content-header-copy">
-            <h1 className="content-title content-title-container">{target.label}</h1>
-          </div>
-
-          <div className="content-header-tools content-header-tools-container">
-            <button
-              className={`panel-button panel-button-toolbar ${activeTool === "files" ? "is-active" : ""}`}
-              onClick={() => {
-                selectContainerTool(target, "files");
-              }}
-              type="button"
-            >
-              Files
-            </button>
-            <button
-              className={`panel-button panel-button-toolbar ${activeTool === developmentPanel ? "is-active" : ""}`}
-              disabled={!developmentSurface}
-              onClick={() => {
-                if (developmentPanel) {
-                  selectContainerTool(target, developmentPanel);
-                }
-              }}
-              type="button"
-            >
-              Dev
-            </button>
-            <button
-              className={`panel-button panel-button-toolbar ${activeTool === previewPanel ? "is-active" : ""}`}
-              disabled={!previewSurface}
-              onClick={() => {
-                if (previewPanel) {
-                  selectContainerTool(target, previewPanel);
-                }
-              }}
-              type="button"
-            >
-              Pre
-            </button>
-          </div>
-        </header>
-
-        <section className="page-section">
-          <div className={`container-workspace ${isBrowserToolPanel(activeTool) ? "tool-browser" : "tool-files"}`} style={workspaceStyle}>
-            <article className="panel terminal-panel">
-              <TerminalPane active={pageVisible} target={target} />
-            </article>
-
-            <div
-              className="container-resizer"
-              onPointerDown={(event) => {
-                startContainerResize(event, target.id);
-              }}
-              role="separator"
-              aria-label="Resize terminal and tool panels"
-              aria-orientation="vertical"
-            />
-
-            {activeTool === "files" ? (
-              <FilesPane active={pageVisible} target={target} />
-            ) : null}
-
-            {isBrowserToolPanel(activeTool) && pageVisible ? (
-              <BrowserPane
-                activeFrame={browserFrame}
-                onReload={() => {
-                  if (browserSurface) {
-                    reloadBrowserFrame(target.id, browserSurface.id);
-                  }
-                }}
-                onRestart={() => {
-                  if (browserSurface) {
-                    restartBrowserTunnel(target.id, browserSurface.id);
-                  }
-                }}
-                retainedFrames={browserFrame ? [browserFrame] : []}
-                slotLabel={browserSurface?.label ?? "Browser"}
-              />
-            ) : null}
-          </div>
-        </section>
-      </>
-    );
-  };
-
   if (error) {
     return (
       <main className="shell shell-state">
@@ -1263,10 +931,47 @@ function App() {
         ) : null}
 
         <section className={`content-shell ${isOverviewView ? "content-shell-overview" : ""}`}>
-          <section
-            className={`content-page content-page-overview ${activeView.kind === "overview" ? "" : "is-hidden"}`}
-          >
-            {renderOverviewPage(activeView.kind === "overview")}
+        <section
+          className={`content-page content-page-overview ${activeView.kind === "overview" ? "" : "is-hidden"}`}
+        >
+            <OverviewPage
+              activeFocusedTargetId={activeOverviewFocusedTargetId}
+              onFocusTarget={setOverviewFocusedTargetId}
+              onOpenWorkspace={setContainerView}
+              onResetZoom={() => {
+                setOverviewZoom(OVERVIEW_ZOOM_DEFAULT);
+              }}
+              onZoomIn={() => {
+                setOverviewZoom((current) =>
+                  roundOverviewZoom(clampOverviewZoom(current + OVERVIEW_ZOOM_STEP)),
+                );
+              }}
+              onZoomOut={() => {
+                setOverviewZoom((current) =>
+                  roundOverviewZoom(clampOverviewZoom(current - OVERVIEW_ZOOM_STEP)),
+                );
+              }}
+              overviewContainers={overviewContainers}
+              overviewZoom={overviewZoom}
+              overviewZoomDefault={OVERVIEW_ZOOM_DEFAULT}
+              overviewZoomMax={OVERVIEW_ZOOM_MAX}
+              overviewZoomMin={OVERVIEW_ZOOM_MIN}
+              overviewZoomStyle={{
+                "--overview-terminal-grid-min-width": `${30 * overviewZoom}rem`,
+                "--overview-terminal-card-height": `${32 * overviewZoom}rem`,
+                "--overview-terminal-min-height": `${30 * overviewZoom}rem`,
+              } as CSSProperties}
+              pageVisible={activeView.kind === "overview"}
+              registerOverviewCardElement={(targetId, element) => {
+                if (element) {
+                  overviewCardElementsRef.current.set(targetId, element);
+                } else {
+                  overviewCardElementsRef.current.delete(targetId);
+                }
+              }}
+              serverCount={bootstrap.servers.length}
+              standaloneTargets={standaloneTargets}
+            />
           </section>
 
           {visitedServers.map((server) => (
@@ -1274,16 +979,55 @@ function App() {
               key={server.id}
               className={`content-page ${activeView.kind === "server" && activeView.serverId === server.id ? "" : "is-hidden"}`}
             >
-              {renderServerPage(
-                server,
-                activeView.kind === "server" && activeView.serverId === server.id,
-              )}
+              <ServerPage
+                onOpenWorkspace={setContainerView}
+                pageVisible={
+                  activeView.kind === "server" && activeView.serverId === server.id
+                }
+                resolveTarget={(targetId) => targetById.get(targetId)}
+                server={server}
+              />
             </section>
           ))}
 
           {visitedContainerIds.map((targetId) => {
             const target = targetById.get(targetId);
             const isVisible = activeView.kind === "container" && activeView.targetId === targetId;
+            const activeTool = target ? (containerTools[target.id] ?? "files") : "files";
+            const developmentSurface = target?.surfaces.find(
+              (surface) => surface.id === "development",
+            );
+            const previewSurface = target?.surfaces.find(
+              (surface) => surface.id === "preview",
+            );
+            const developmentPanel = developmentSurface
+              ? (`browser:${developmentSurface.id}` as const)
+              : null;
+            const previewPanel = previewSurface
+              ? (`browser:${previewSurface.id}` as const)
+              : null;
+            const activeBrowserSurfaceId = browserSurfaceIdFromPanel(activeTool);
+            const browserSurface =
+              activeBrowserSurfaceId && target
+                ? target.surfaces.find((surface) => surface.id === activeBrowserSurfaceId)
+                : undefined;
+            const browserStatus =
+              browserSurface && target
+                ? tunnelStatuses[surfaceKey(target.id, browserSurface.id)] ??
+                  fallbackTunnelStatus(target.id, browserSurface)
+                : undefined;
+            const browserFrame: BrowserFrameInstance | undefined =
+              browserSurface && browserStatus && target
+                ? {
+                    cacheKey: surfaceKey(target.id, browserSurface.id),
+                    frameVersion:
+                      browserFrameVersions[surfaceKey(target.id, browserSurface.id)] ?? 0,
+                    isActive: isVisible,
+                    status: browserStatus,
+                    surface: browserSurface,
+                    target,
+                  }
+                : undefined;
 
             return (
               <section
@@ -1291,7 +1035,36 @@ function App() {
                 key={targetId}
               >
                 {target ? (
-                  renderContainerPage(target, isVisible)
+                  <ContainerPage
+                    activeTool={activeTool}
+                    browserFrame={browserFrame}
+                    browserSurface={browserSurface}
+                    developmentPanel={developmentPanel}
+                    developmentSurface={developmentSurface}
+                    onReloadBrowser={() => {
+                      if (browserSurface) {
+                        reloadBrowserFrame(target.id, browserSurface.id);
+                      }
+                    }}
+                    onRestartBrowser={() => {
+                      if (browserSurface) {
+                        restartBrowserTunnel(target.id, browserSurface.id);
+                      }
+                    }}
+                    onSelectTool={(panel) => {
+                      selectContainerTool(target, panel);
+                    }}
+                    onStartResize={(event) => {
+                      startContainerResize(event, target.id);
+                    }}
+                    pageVisible={isVisible}
+                    previewPanel={previewPanel}
+                    previewSurface={previewSurface}
+                    target={target}
+                    workspaceStyle={{
+                      "--container-terminal-width": `${containerTerminalWidths[target.id] ?? defaultTerminalPanelWidthPx()}px`,
+                    } as CSSProperties}
+                  />
                 ) : (
                   <section className="state-panel">
                     <span className="state-label">Unavailable</span>
