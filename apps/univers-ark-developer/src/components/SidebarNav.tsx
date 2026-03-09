@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { AppBootstrap } from "../types";
 import { isMachineHostTarget, visibleContainers } from "../lib/container-visibility";
 import { ConnectionStatusLight } from "./ConnectionStatusLight";
@@ -52,6 +53,7 @@ export function SidebarNav({
   onSelectMachine,
   onToggleMachine,
 }: SidebarNavProps) {
+  const [isServersCollapsed, setIsServersCollapsed] = useState(true);
   const availableTargetSet = new Set(availableTargetIds);
   const managedTargetIds = new Set(
     bootstrap.machines.flatMap((machine) =>
@@ -97,9 +99,19 @@ export function SidebarNav({
         </SidebarGroup>
 
         <SidebarGroup className="sidebar-section">
-          <SidebarGroupLabel>Machines</SidebarGroupLabel>
+          <SidebarGroupLabel
+            className="sidebar-section-label"
+            onClick={() => setIsServersCollapsed((c) => !c)}
+            style={{ cursor: "pointer", userSelect: "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+          >
+            Machines
+            <ChevronRight
+              className={isServersCollapsed ? "transition-transform" : "rotate-90 transition-transform"}
+              size={12}
+            />
+          </SidebarGroupLabel>
 
-          <SidebarMenu className="sidebar-tree">
+          {!isServersCollapsed && <SidebarMenu className="sidebar-tree">
             {bootstrap.machines.map((machine) => {
               const isExpanded = expandedMachineIds.includes(machine.id);
               const isMachineActive = activeMachineId === machine.id;
@@ -179,7 +191,7 @@ export function SidebarNav({
                 </SidebarMenuItem>
               );
             })}
-          </SidebarMenu>
+          </SidebarMenu>}
         </SidebarGroup>
 
         {standaloneTargets.length > 0 ? (
