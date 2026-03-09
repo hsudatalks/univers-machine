@@ -13,9 +13,7 @@ use tauri::{
     },
     AppHandle, Emitter, Manager, Runtime,
 };
-use tauri_plugin_global_shortcut::{
-    Builder as GlobalShortcutBuilder, Code, Modifiers, ShortcutState,
-};
+
 
 const TOGGLE_SIDEBAR_MENU_ID: &str = "toggle_sidebar";
 const TOGGLE_SIDEBAR_EVENT: &str = "toggle-sidebar-requested";
@@ -192,25 +190,9 @@ pub(crate) fn run() {
         .manage(TerminalState::default())
         .manage(TunnelState::default())
         .manage(DashboardState::default())
-        .plugin(
-            GlobalShortcutBuilder::new()
-                .with_shortcuts(["Cmd+Alt+Left", "Cmd+Alt+Right"])
-                .expect("failed to configure global shortcuts")
-                .with_handler(|app_handle, shortcut, event| {
-                    if event.state != ShortcutState::Pressed {
-                        return;
-                    }
-
-                    if shortcut.matches(Modifiers::SUPER | Modifiers::ALT, Code::ArrowLeft) {
-                        let _ = app_handle.emit(PREVIOUS_CONTAINER_EVENT, ());
-                    } else if shortcut
-                        .matches(Modifiers::SUPER | Modifiers::ALT, Code::ArrowRight)
-                    {
-                        let _ = app_handle.emit(NEXT_CONTAINER_EVENT, ());
-                    }
-                })
-                .build(),
-        )
+        // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right
+        // on Windows, Cmd+Alt+Left/Right on macOS) are handled by the menu
+        // accelerators in build_app_menu, not by global shortcuts.
         .menu(build_app_menu)
         .on_menu_event(|app_handle, event| {
             if event.id().as_ref() == TOGGLE_SIDEBAR_MENU_ID {
