@@ -1,23 +1,28 @@
 use crate::{
     constants::{TUNNEL_PROBE_INTERVAL, TUNNEL_PROBE_MESSAGE_DELAY, TUNNEL_PROBE_TIMEOUT},
-    models::{BrowserSurface, TunnelProcess, TunnelSession, TunnelState, TunnelStatus},
+    config::read_server_inventory,
+    models::{
+        BrowserSurface, RusshTunnelForward, TunnelProcess, TunnelSession, TunnelState, TunnelStatus,
+    },
     proxy::{proxy_error_message, start_vite_proxy},
     runtime::{
         allocate_internal_tunnel_port, internal_probe_url, resolve_runtime_vite_hmr_tunnel_command,
-        rewrite_tunnel_forward_port, surface_key, surface_local_port,
+        surface_key, surface_local_port,
     },
-    terminal::append_output,
 };
 use std::{
     collections::HashMap,
     io::{ErrorKind, Read, Write},
     net::{TcpStream, ToSocketAddrs},
-    process::Stdio,
     sync::{atomic::Ordering, Arc, Mutex},
     time::Instant,
 };
 use tauri::{AppHandle, Emitter};
 use url::Url;
+use univers_ark_russh::{
+    start_local_forward_chain, ClientOptions as RusshClientOptions, ResolvedEndpoint,
+    ResolvedEndpointChain, SshConfigResolver,
+};
 
 pub(crate) fn tunnel_status(
     target_id: &str,
@@ -113,6 +118,15 @@ fn tunnel_process_excerpt(processes: &[TunnelProcess]) -> Option<String> {
     })
 }
 
+fn russh_forward_excerpt(forwards: &[RusshTunnelForward]) -> Option<String> {
+    forwards.iter().find_map(|forward| {
+        forward
+            .forward
+            .last_error()
+            .map(|error| format!("{}: {}", forward.label, error))
+    })
+}
+
 fn tunnel_process_is_alive(process: &TunnelProcess) -> Result<bool, String> {
     let mut child = process
         .child
@@ -128,6 +142,12 @@ fn tunnel_process_is_alive(process: &TunnelProcess) -> Result<bool, String> {
 pub(crate) fn tunnel_session_is_alive(session: &TunnelSession) -> Result<bool, String> {
     for process in &session.processes {
         if !tunnel_process_is_alive(process)? {
+            return Ok(false);
+        }
+    }
+
+    for forward in &session.russh_forwards {
+        if !forward.forward.is_running() {
             return Ok(false);
         }
     }
@@ -291,6 +311,10 @@ pub(crate) fn stop_tunnel_session(session: &TunnelSession) {
         proxy.stop_requested.store(true, Ordering::Release);
     }
 
+    for forward in &session.russh_forwards {
+        forward.forward.request_stop();
+    }
+
     for process in &session.processes {
         if let Ok(mut child) = process.child.lock() {
             let _ = child.kill();
@@ -298,63 +322,103 @@ pub(crate) fn stop_tunnel_session(session: &TunnelSession) {
     }
 }
 
-fn spawn_output_reader<R>(mut reader: R, output: Arc<Mutex<String>>)
-where
-    R: Read + Send + 'static,
-{
-    std::thread::spawn(move || {
-        let mut buffer = [0u8; 8192];
+fn resolve_container_chain(target_id: &str) -> Result<ResolvedEndpointChain, String> {
+    let servers = read_server_inventory(false)?;
+    let Some((server_host, container_ip, ssh_user, container_name)) = servers
+        .iter()
+        .find_map(|server| {
+            server
+                .containers
+                .iter()
+                .find(|container| container.target_id == target_id)
+                .map(|container| {
+                    (
+                        server.host.clone(),
+                        container.ipv4.clone(),
+                        container.ssh_user.clone(),
+                        container.name.clone(),
+                    )
+                })
+        })
+    else {
+        return Err(format!("No container inventory found for {}", target_id));
+    };
 
-        loop {
-            match reader.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(read_count) => {
-                    let chunk = String::from_utf8_lossy(&buffer[..read_count]).to_string();
-                    append_output(&output, &chunk);
-                }
-                Err(_) => break,
-            }
-        }
-    });
+    let resolver =
+        SshConfigResolver::from_default_path().map_err(|error| format!("Failed to load SSH config: {}", error))?;
+    let mut chain = resolver
+        .resolve(&server_host)
+        .map_err(|error| format!("Failed to resolve SSH destination {}: {}", server_host, error))?;
+    chain.push(ResolvedEndpoint::new(
+        format!("{}::{}", server_host, container_name),
+        container_ip,
+        ssh_user,
+        22,
+        Vec::new(),
+    ));
+
+    Ok(chain)
 }
 
-fn spawn_tunnel_process(
-    command_line: &str,
+fn parse_forward_target(command_line: &str) -> Result<(String, u16), String> {
+    let tokens = command_line.split_whitespace().collect::<Vec<_>>();
+
+    for index in 0..tokens.len() {
+        let forward_spec = if tokens[index] == "-L" {
+            tokens.get(index + 1).copied()
+        } else {
+            tokens[index].strip_prefix("-L")
+        };
+
+        let Some(forward_spec) = forward_spec else {
+            continue;
+        };
+
+        let Some((before_port, remote_port)) = forward_spec.rsplit_once(':') else {
+            continue;
+        };
+        let remote_port = remote_port
+            .parse::<u16>()
+            .map_err(|error| format!("Invalid remote forward port in {}: {}", forward_spec, error))?;
+        let Some(remote_host) = before_port.rsplit(':').next() else {
+            continue;
+        };
+
+        return Ok((remote_host.to_string(), remote_port));
+    }
+
+    Err(format!(
+        "Failed to parse -L forward target from tunnel command: {}",
+        command_line
+    ))
+}
+
+fn spawn_russh_forward(
+    target_id: &str,
+    local_bind_addr: &str,
+    remote_host: &str,
+    remote_port: u16,
     label: impl Into<String>,
-) -> Result<TunnelProcess, String> {
-    let label = label.into();
-    let mut command = crate::shell::shell_command(command_line);
-    command.stdin(Stdio::null());
-    command.stdout(Stdio::piped());
-    command.stderr(Stdio::piped());
+) -> Result<RusshTunnelForward, String> {
+    let chain = resolve_container_chain(target_id)?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| format!("Failed to build russh runtime: {}", error))?;
+    let forward = runtime
+        .block_on(start_local_forward_chain(
+            &chain,
+            local_bind_addr,
+            remote_host,
+            remote_port,
+            &RusshClientOptions::default(),
+        ))
+        .map_err(|error| format!("Failed to start russh forward: {}", error))?;
 
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("Failed to start {}: {}", label, error))?;
-
-    let output = Arc::new(Mutex::new(String::new()));
-
-    if let Some(stdout) = child.stdout.take() {
-        spawn_output_reader(stdout, output.clone());
-    }
-
-    if let Some(stderr) = child.stderr.take() {
-        spawn_output_reader(stderr, output.clone());
-    }
-
-    Ok(TunnelProcess {
-        label,
-        child: Arc::new(Mutex::new(child)),
-        output,
+    Ok(RusshTunnelForward {
+        label: label.into(),
+        forward,
     })
-}
-
-fn stop_tunnel_processes(processes: &[TunnelProcess]) {
-    for process in processes {
-        if let Ok(mut child) = process.child.lock() {
-            let _ = child.kill();
-        }
-    }
 }
 
 fn spawn_managed_tunnel_session(
@@ -364,6 +428,7 @@ fn spawn_managed_tunnel_session(
     target_id: &str,
     surface: &BrowserSurface,
     processes: Vec<TunnelProcess>,
+    russh_forwards: Vec<RusshTunnelForward>,
     proxy: Option<crate::models::LocalProxyHandle>,
     probe_urls: Vec<String>,
 ) -> TunnelSession {
@@ -372,6 +437,7 @@ fn spawn_managed_tunnel_session(
         session_id,
         started_at,
         processes: processes.clone(),
+        russh_forwards: russh_forwards.clone(),
         proxy: proxy.clone(),
         ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
@@ -385,6 +451,7 @@ fn spawn_managed_tunnel_session(
     let local_url = surface.local_url.clone();
     let session_key = surface_key(&target_id, &surface_id);
     let monitored_processes = processes;
+    let monitored_forwards = russh_forwards;
     let monitored_proxy = proxy;
     let probe_targets = probe_urls;
 
@@ -480,6 +547,20 @@ fn spawn_managed_tunnel_session(
                 }
             }
 
+            if monitor_error.is_none() {
+                for forward in &monitored_forwards {
+                    if !forward.forward.is_running() {
+                        monitor_error = Some(
+                            forward
+                                .forward
+                                .last_error()
+                                .unwrap_or_else(|| format!("{} stopped unexpectedly.", forward.label)),
+                        );
+                        break;
+                    }
+                }
+            }
+
             if let Some(error) = monitor_error {
                 if remove_tunnel_session_if_current(&monitor_sessions, &session_key, session_id) {
                     let _ = app_handle.emit(
@@ -494,7 +575,9 @@ fn spawn_managed_tunnel_session(
                 if remove_tunnel_session_if_current(&monitor_sessions, &session_key, session_id) {
                     let message = if success {
                         format!("{} exited.", label)
-                    } else if let Some(excerpt) = tunnel_process_excerpt(&monitored_processes) {
+                    } else if let Some(excerpt) = tunnel_process_excerpt(&monitored_processes)
+                        .or_else(|| russh_forward_excerpt(&monitored_forwards))
+                    {
                         format!("{} exited with {}. {}", label, status, excerpt)
                     } else {
                         format!("{} exited with {}.", label, status)
@@ -516,28 +599,6 @@ fn spawn_managed_tunnel_session(
     session
 }
 
-fn spawn_tunnel_session(
-    app: &AppHandle,
-    sessions: Arc<Mutex<HashMap<String, TunnelSession>>>,
-    session_id: u64,
-    target_id: &str,
-    surface: &BrowserSurface,
-) -> Result<TunnelSession, String> {
-    let process =
-        spawn_tunnel_process(&surface.tunnel_command, format!("{} tunnel", surface.label))?;
-
-    Ok(spawn_managed_tunnel_session(
-        app,
-        sessions,
-        session_id,
-        target_id,
-        surface,
-        vec![process],
-        None,
-        vec![surface.local_url.clone()],
-    ))
-}
-
 fn spawn_vite_proxy_session(
     app: &AppHandle,
     sessions: Arc<Mutex<HashMap<String, TunnelSession>>>,
@@ -552,29 +613,52 @@ fn spawn_vite_proxy_session(
     let hmr_forward_port =
         allocate_internal_tunnel_port(tunnel_state, target_id, &surface.id, "vite-hmr")?;
 
-    let http_tunnel_command =
-        rewrite_tunnel_forward_port(&surface.tunnel_command, http_forward_port);
-    let hmr_tunnel_command =
-        resolve_runtime_vite_hmr_tunnel_command(&surface.vite_hmr_tunnel_command, hmr_forward_port);
+    let remote_url = Url::parse(&surface.remote_url).map_err(|error| {
+        format!(
+            "Failed to parse remote URL for {} surface: {}",
+            surface.id, error
+        )
+    })?;
+    let remote_host = remote_url
+        .host_str()
+        .ok_or_else(|| format!("Remote URL for {} surface is missing a host", surface.id))?;
+    let remote_port = remote_url
+        .port_or_known_default()
+        .ok_or_else(|| format!("Remote URL for {} surface is missing a port", surface.id))?;
+    let (_, hmr_remote_port) = parse_forward_target(
+        &resolve_runtime_vite_hmr_tunnel_command(&surface.vite_hmr_tunnel_command, hmr_forward_port),
+    )?;
 
-    let http_process = spawn_tunnel_process(
-        &http_tunnel_command,
+    let local_http_bind = format!("127.0.0.1:{}", http_forward_port);
+    let http_forward = spawn_russh_forward(
+        target_id,
+        &local_http_bind,
+        remote_host,
+        remote_port,
         format!("{} HTTP tunnel", surface.label),
     )?;
-    let hmr_process =
-        match spawn_tunnel_process(&hmr_tunnel_command, format!("{} HMR tunnel", surface.label)) {
-            Ok(process) => process,
-            Err(error) => {
-                stop_tunnel_processes(std::slice::from_ref(&http_process));
-                return Err(error);
-            }
-        };
+    let local_hmr_bind = format!("127.0.0.1:{}", hmr_forward_port);
+    let hmr_forward = match spawn_russh_forward(
+        target_id,
+        &local_hmr_bind,
+        "127.0.0.1",
+        hmr_remote_port,
+        format!("{} HMR tunnel", surface.label),
+    ) {
+        Ok(forward) => forward,
+        Err(error) => {
+            http_forward.forward.request_stop();
+            return Err(error);
+        }
+    };
 
-    let processes = vec![http_process, hmr_process];
+    let russh_forwards = vec![http_forward, hmr_forward];
     let proxy = match start_vite_proxy(public_port, http_forward_port, hmr_forward_port) {
         Ok(proxy) => proxy,
         Err(error) => {
-            stop_tunnel_processes(&processes);
+            for forward in &russh_forwards {
+                forward.forward.request_stop();
+            }
             return Err(error);
         }
     };
@@ -585,7 +669,8 @@ fn spawn_vite_proxy_session(
         session_id,
         target_id,
         surface,
-        processes,
+        Vec::new(),
+        russh_forwards,
         Some(proxy),
         vec![
             internal_probe_url(http_forward_port),
@@ -613,13 +698,39 @@ pub(crate) fn start_tunnel(
             surface,
         )?
     } else {
-        spawn_tunnel_session(
+        let local_port = surface_local_port(surface)?;
+        let remote_url = Url::parse(&surface.remote_url).map_err(|error| {
+            format!(
+                "Failed to parse remote URL for {} surface: {}",
+                surface.id, error
+            )
+        })?;
+        let remote_host = remote_url
+            .host_str()
+            .ok_or_else(|| format!("Remote URL for {} surface is missing a host", surface.id))?;
+        let remote_port = remote_url
+            .port_or_known_default()
+            .ok_or_else(|| format!("Remote URL for {} surface is missing a port", surface.id))?;
+        let local_bind_addr = format!("127.0.0.1:{}", local_port);
+        let forward = spawn_russh_forward(
+            target_id,
+            &local_bind_addr,
+            remote_host,
+            remote_port,
+            format!("{} tunnel", surface.label),
+        )?;
+
+        spawn_managed_tunnel_session(
             app,
             tunnel_state.sessions.clone(),
             session_id,
             target_id,
             surface,
-        )?
+            Vec::new(),
+            vec![forward],
+            None,
+            vec![surface.local_url.clone()],
+        )
     };
 
     tunnel_state

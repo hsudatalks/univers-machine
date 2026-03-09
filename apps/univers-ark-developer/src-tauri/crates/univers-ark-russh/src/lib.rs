@@ -1,6 +1,16 @@
 mod ssh_config;
 
-use std::{env, fs, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    env, fs,
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex,
+    },
+    thread,
+    time::Duration,
+};
 
 use russh::{
     client, client::Handle, keys::PrivateKeyWithHashAlg, ChannelMsg, Disconnect, Preferred,
@@ -11,7 +21,6 @@ use tokio::{
     io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     sync::oneshot,
-    task::JoinHandle,
 };
 
 pub use ssh_config::{ResolvedEndpoint, ResolvedEndpointChain, SshConfigResolver};
@@ -91,27 +100,38 @@ pub enum RusshError {
     ForwardTask(String),
 }
 
+#[derive(Clone)]
 pub struct LocalForward {
-    local_addr: SocketAddr,
-    shutdown: Option<oneshot::Sender<()>>,
-    task: JoinHandle<Result<(), RusshError>>,
+    inner: Arc<LocalForwardInner>,
 }
 
 impl LocalForward {
     pub fn local_addr(&self) -> SocketAddr {
-        self.local_addr
+        self.inner.local_addr
     }
 
-    pub async fn stop(mut self) -> Result<(), RusshError> {
-        if let Some(shutdown) = self.shutdown.take() {
-            let _ = shutdown.send(());
-        }
+    pub fn is_running(&self) -> bool {
+        self.inner.running.load(Ordering::Acquire)
+    }
 
-        match self.task.await {
-            Ok(result) => result,
-            Err(error) => Err(RusshError::ForwardTask(error.to_string())),
+    pub fn last_error(&self) -> Option<String> {
+        self.inner.error.lock().ok().and_then(|error| error.clone())
+    }
+
+    pub fn request_stop(&self) {
+        if let Ok(mut shutdown) = self.inner.shutdown.lock() {
+            if let Some(sender) = shutdown.take() {
+                let _ = sender.send(());
+            }
         }
     }
+}
+
+struct LocalForwardInner {
+    local_addr: SocketAddr,
+    shutdown: Mutex<Option<oneshot::Sender<()>>>,
+    running: AtomicBool,
+    error: Mutex<Option<String>>,
 }
 
 pub async fn execute_alias(
@@ -347,46 +367,110 @@ pub async fn start_local_forward_chain(
     remote_port: u16,
     options: &ClientOptions,
 ) -> Result<LocalForward, RusshError> {
-    let listener = TcpListener::bind(local_bind_addr).await?;
-    let local_addr = listener.local_addr()?;
-    let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
     let chain = chain.clone();
     let remote_host = remote_host.to_string();
     let options = options.clone();
+    let local_bind_addr = local_bind_addr.to_string();
+    let (ready_tx, ready_rx) = mpsc::sync_channel::<Result<LocalForward, RusshError>>(1);
 
-    let task = tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                _ = &mut shutdown_rx => break,
-                accepted = listener.accept() => {
-                    let (socket, _) = accepted?;
-                    let chain = chain.clone();
-                    let remote_host = remote_host.clone();
-                    let options = options.clone();
+    thread::spawn(move || {
+        let runtime = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                let _ = ready_tx.send(Err(RusshError::ForwardTask(format!(
+                    "failed to build forward runtime: {error}"
+                ))));
+                return;
+            }
+        };
 
-                    tokio::spawn(async move {
-                        if let Err(error) = forward_connection(
-                            socket,
-                            &chain,
-                            &remote_host,
-                            remote_port,
-                            &options,
-                        ).await {
-                            eprintln!("univers-ark-russh forward connection failed: {error}");
+        runtime.block_on(async move {
+            let listener = match TcpListener::bind(&local_bind_addr).await {
+                Ok(listener) => listener,
+                Err(error) => {
+                    let _ = ready_tx.send(Err(RusshError::Io(error)));
+                    return;
+                }
+            };
+            let local_addr = match listener.local_addr() {
+                Ok(addr) => addr,
+                Err(error) => {
+                    let _ = ready_tx.send(Err(RusshError::Io(error)));
+                    return;
+                }
+            };
+
+            let client = match connect_chain(&chain, &options).await {
+                Ok(client) => client,
+                Err(error) => {
+                    let _ = ready_tx.send(Err(error));
+                    return;
+                }
+            };
+            let handle = Arc::new(client.handle);
+
+            let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
+            let inner = Arc::new(LocalForwardInner {
+                local_addr,
+                shutdown: Mutex::new(Some(shutdown_tx)),
+                running: AtomicBool::new(true),
+                error: Mutex::new(None),
+            });
+
+            let _ = ready_tx.send(Ok(LocalForward {
+                inner: inner.clone(),
+            }));
+
+            loop {
+                tokio::select! {
+                    _ = &mut shutdown_rx => break,
+                    accepted = listener.accept() => {
+                        match accepted {
+                            Ok((socket, _)) => {
+                                let remote_host = remote_host.clone();
+                                let handle = handle.clone();
+                                let inner = inner.clone();
+                                tokio::spawn(async move {
+                                    if let Err(error) =
+                                        forward_connection(socket, &handle, &remote_host, remote_port).await
+                                    {
+                                        if let Ok(mut stored) = inner.error.lock() {
+                                            *stored = Some(format!(
+                                                "forward connection failed: {error}"
+                                            ));
+                                        }
+                                        if let Ok(mut shutdown) = inner.shutdown.lock() {
+                                            if let Some(sender) = shutdown.take() {
+                                                let _ = sender.send(());
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                            Err(error) => {
+                                if let Ok(mut stored) = inner.error.lock() {
+                                    *stored = Some(format!("failed to accept local forward connection: {error}"));
+                                }
+                                break;
+                            }
                         }
-                    });
+                    }
                 }
             }
-        }
 
-        Ok(())
+            inner.running.store(false, Ordering::Release);
+            let _ = handle
+                .disconnect(Disconnect::ByApplication, "", "English")
+                .await;
+        });
     });
 
-    Ok(LocalForward {
-        local_addr,
-        shutdown: Some(shutdown_tx),
-        task,
-    })
+    ready_rx
+        .recv()
+        .map_err(|error| RusshError::ForwardTask(format!("failed to receive local forward startup: {error}")))?
 }
 
 pub async fn list_directory_chain(
@@ -536,14 +620,11 @@ async fn connect_via_handle(
 
 async fn forward_connection(
     mut inbound: TcpStream,
-    chain: &ResolvedEndpointChain,
+    handle: &Handle<ClientHandler>,
     remote_host: &str,
     remote_port: u16,
-    options: &ClientOptions,
 ) -> Result<(), RusshError> {
-    let client = connect_chain(chain, options).await?;
-    let channel = client
-        .handle
+    let channel = handle
         .channel_open_direct_tcpip(
             remote_host.to_string(),
             remote_port.into(),
@@ -555,10 +636,6 @@ async fn forward_connection(
 
     let _ = copy_bidirectional(&mut inbound, &mut outbound).await?;
     let _ = outbound.shutdown().await;
-    let _ = client
-        .handle
-        .disconnect(Disconnect::ByApplication, "", "English")
-        .await;
 
     Ok(())
 }

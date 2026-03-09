@@ -10,6 +10,7 @@ use std::{
     },
     time::Instant,
 };
+use univers_ark_russh::LocalForward;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -352,6 +353,12 @@ pub(crate) struct TunnelProcess {
 }
 
 #[derive(Clone)]
+pub(crate) struct RusshTunnelForward {
+    pub(crate) label: String,
+    pub(crate) forward: LocalForward,
+}
+
+#[derive(Clone)]
 pub(crate) struct LocalProxyHandle {
     pub(crate) stop_requested: Arc<AtomicBool>,
     pub(crate) running: Arc<AtomicBool>,
@@ -363,6 +370,7 @@ pub(crate) struct TunnelSession {
     pub(crate) session_id: u64,
     pub(crate) started_at: Instant,
     pub(crate) processes: Vec<TunnelProcess>,
+    pub(crate) russh_forwards: Vec<RusshTunnelForward>,
     pub(crate) proxy: Option<LocalProxyHandle>,
     pub(crate) ready: Arc<AtomicBool>,
 }

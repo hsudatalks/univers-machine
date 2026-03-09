@@ -146,7 +146,7 @@ async fn main() -> ExitCode {
             let mut socket = match TcpStream::connect(local_addr).await {
                 Ok(socket) => socket,
                 Err(error) => {
-                    let _ = forward.stop().await;
+                    forward.request_stop();
                     eprintln!("failed to connect to local forward: {error}");
                     return ExitCode::from(1);
                 }
@@ -157,7 +157,7 @@ async fn main() -> ExitCode {
                 path
             );
             if let Err(error) = socket.write_all(request.as_bytes()).await {
-                let _ = forward.stop().await;
+                forward.request_stop();
                 eprintln!("failed to write request: {error}");
                 return ExitCode::from(1);
             }
@@ -169,7 +169,7 @@ async fn main() -> ExitCode {
                     Ok(0) => break,
                     Ok(bytes_read) => response.extend_from_slice(&buffer[..bytes_read]),
                     Err(error) => {
-                        let _ = forward.stop().await;
+                        forward.request_stop();
                         eprintln!("failed to read response: {error}");
                         return ExitCode::from(1);
                     }
@@ -186,13 +186,8 @@ async fn main() -> ExitCode {
                 }
             }
 
-            match forward.stop().await {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(error) => {
-                    eprintln!("failed to stop local forward: {error}");
-                    ExitCode::from(1)
-                }
-            }
+            forward.request_stop();
+            ExitCode::SUCCESS
         }
         "pty-shell-probe" => {
             let Some(destination) = args.next() else {
