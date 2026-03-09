@@ -20,6 +20,14 @@
   overflow: hidden;
 }
 
+.server-workspace {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(24rem, 30rem) minmax(0, 1fr);
+  gap: 0.9rem;
+  overflow: hidden;
+}
+
 .shell-sidebar-hidden .container-workspace {
   --container-terminal-min-width: 18rem;
   width: 100%;
@@ -99,6 +107,15 @@
   min-height: 0;
 }
 
+.server-pane-slot {
+  min-height: 0;
+  display: grid;
+}
+
+.server-pane-slot.is-hidden {
+  display: none;
+}
+
 .workspace-placeholder {
   flex: 1;
   min-height: 0;
@@ -111,6 +128,10 @@
 @media (max-width: 1360px) {
   .container-workspace {
     --container-terminal-min-width: 22rem;
+  }
+
+  .server-workspace {
+    grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr);
   }
 
   .shell-sidebar-hidden .container-workspace {
@@ -127,6 +148,11 @@
   .container-workspace {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(30rem, 42vh) minmax(24rem, 1fr);
+  }
+
+  .server-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(26rem, 38vh) minmax(24rem, 1fr);
   }
 
   .container-resizer {
