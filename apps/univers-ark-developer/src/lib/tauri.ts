@@ -30,7 +30,7 @@ const NEXT_CONTAINER_REQUESTED_EVENT = "next-container-requested";
 const fallbackBootstrapSeed: AppBootstrap = {
   appName: "Univers Ark Developer",
   configPath: "developer-targets.json",
-  selectedTargetId: "automation-dev",
+  selectedTargetId: "local",
   servers: [],
   targets: [
     {
@@ -54,38 +54,6 @@ const fallbackBootstrapSeed: AppBootstrap = {
           label: "Preview",
           tunnelCommand: "",
           localUrl: "http://127.0.0.1:4173/",
-          remoteUrl: "http://127.0.0.1:4173/",
-        },
-      ],
-    },
-    {
-      id: "automation-dev",
-      label: "Automation",
-      host: "automation-dev",
-      description:
-        "LXD container profile for the automation workspace with separate development and preview browser surfaces.",
-      terminalCommand: "ssh automation-dev",
-      notes: [
-        "Development maps the container's 3432 port for the live app surface.",
-        "Preview maps the container's 4173 port for the production-like preview build.",
-      ],
-      surfaces: [
-        {
-          id: "development",
-          label: "Development",
-          tunnelCommand:
-            "ssh -NT -L {localPort}:127.0.0.1:3432 automation-dev",
-          viteHmrTunnelCommand:
-            "ssh -NT -L {localPort}:127.0.0.1:3433 automation-dev",
-          localUrl: "http://127.0.0.1:{localPort}/",
-          remoteUrl: "http://127.0.0.1:3432/",
-        },
-        {
-          id: "preview",
-          label: "Preview",
-          tunnelCommand:
-            "ssh -NT -L {localPort}:127.0.0.1:4173 automation-dev",
-          localUrl: "http://127.0.0.1:{localPort}/",
           remoteUrl: "http://127.0.0.1:4173/",
         },
       ],

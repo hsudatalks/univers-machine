@@ -32,14 +32,13 @@ The current UI is intentionally opinionated so the app already feels like a focu
 
 ## Default target
 
-The seed profile points at `automation-dev`:
+The seed profile now only includes `local`:
 
-- terminal: `ssh automation-dev`
-- development tunnel template: `ssh -NT -L {localPort}:127.0.0.1:3432 automation-dev`
-- development HMR tunnel template: `ssh -NT -L {localPort}:127.0.0.1:3433 automation-dev`
-- preview tunnel template: `ssh -NT -L {localPort}:127.0.0.1:4173 automation-dev`
-- browser surfaces: runtime-mapped to free local ports in `43000-43999`
-- development surfaces with `viteHmrTunnelCommand` are exposed through a local proxy that rewrites Vite's `@vite/client` HMR port to the runtime-mapped browser port
+- terminal: `exec /bin/zsh -l`
+- development surface: `http://127.0.0.1:3432/`
+- preview surface: `http://127.0.0.1:4173/`
+- managed tunnels are not required for the seed target
+- remote servers can be added later by editing [`developer-targets.json`](./developer-targets.json)
 
 Edit [`developer-targets.json`](./developer-targets.json) to add more targets.
 
