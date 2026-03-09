@@ -16,4 +16,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2.1.1", features = [] }
 tauri-plugin-global-shortcut = "2"
+tokio = { version = "1", features = ["rt"] }
 url = "2.5"
+univers-ark-russh = { path = "crates/univers-ark-russh" }

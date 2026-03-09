@@ -1,5 +1,5 @@
 use crate::{
-    config::run_target_shell_command,
+    config::{read_server_inventory, run_target_shell_command},
     models::{
         ContainerAgentInfo, ContainerDashboard, ContainerDashboardUpdate, ContainerProjectInfo,
         ContainerRuntimeInfo, ContainerServiceInfo, ContainerTmuxInfo,
@@ -16,6 +16,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Runtime, State};
+use univers_ark_russh::{execute_chain, ClientOptions as RusshClientOptions, ResolvedEndpoint, SshConfigResolver};
 
 const DEFAULT_PROJECT_PATH: &str = "~/repos/hvac-workbench";
 pub(crate) const DASHBOARD_UPDATED_EVENT: &str = "container-dashboard-updated";
@@ -515,21 +516,9 @@ PY"##,
 }
 
 pub(crate) fn load_container_dashboard(target_id: &str) -> Result<ContainerDashboard, String> {
-    let output = run_target_shell_command(target_id, &dashboard_command())?;
+    let stdout = load_container_dashboard_stdout(target_id)?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        return Err(if !stderr.is_empty() {
-            stderr
-        } else if !stdout.is_empty() {
-            stdout
-        } else {
-            format!("Dashboard command failed for {}", target_id)
-        });
-    }
-
-    let payload = serde_json::from_slice::<DashboardPayload>(&output.stdout)
+    let payload = serde_json::from_slice::<DashboardPayload>(&stdout)
         .map_err(|error| format!("Failed to parse dashboard for {}: {}", target_id, error))?;
 
     Ok(ContainerDashboard {
@@ -593,6 +582,88 @@ pub(crate) fn load_container_dashboard(target_id: &str) -> Result<ContainerDashb
                 .collect(),
         },
     })
+}
+
+fn load_container_dashboard_stdout(target_id: &str) -> Result<Vec<u8>, String> {
+    let command = dashboard_command();
+
+    if let Ok(stdout) = load_container_dashboard_via_russh(target_id, &command) {
+        return Ok(stdout);
+    }
+
+    let output = run_target_shell_command(target_id, &command)?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Err(if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!("Dashboard command failed for {}", target_id)
+        });
+    }
+
+    Ok(output.stdout)
+}
+
+fn load_container_dashboard_via_russh(target_id: &str, command: &str) -> Result<Vec<u8>, String> {
+    let servers = read_server_inventory(false)?;
+    let Some((server_host, container_ip, ssh_user, container_name)) = servers
+        .iter()
+        .find_map(|server| {
+            server
+                .containers
+                .iter()
+                .find(|container| container.target_id == target_id)
+                .map(|container| {
+                    (
+                        server.host.clone(),
+                        container.ipv4.clone(),
+                        container.ssh_user.clone(),
+                        container.name.clone(),
+                    )
+                })
+        })
+    else {
+        return Err(format!("No container inventory found for {}", target_id));
+    };
+
+    let resolver =
+        SshConfigResolver::from_default_path().map_err(|error| format!("Failed to load SSH config: {}", error))?;
+    let mut chain = resolver
+        .resolve(&server_host)
+        .map_err(|error| format!("Failed to resolve SSH destination {}: {}", server_host, error))?;
+    chain.push(ResolvedEndpoint::new(
+        format!("{}::{}", server_host, container_name),
+        container_ip,
+        ssh_user,
+        22,
+        Vec::new(),
+    ));
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| format!("Failed to build russh runtime: {}", error))?;
+    let output = runtime
+        .block_on(execute_chain(&chain, command, &RusshClientOptions::default()))
+        .map_err(|error| format!("russh dashboard exec failed for {}: {}", target_id, error))?;
+
+    if output.exit_status != 0 {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Err(if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!("russh dashboard command failed for {}", target_id)
+        });
+    }
+
+    Ok(output.stdout)
 }
 
 fn now_ms() -> u64 {
