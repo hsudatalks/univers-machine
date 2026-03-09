@@ -94,6 +94,7 @@ fn default_container_name_suffix() -> String {
 }
 
 const TARGETS_FILE_NAME: &str = "developer-targets.json";
+const SERVER_TERMINAL_TARGET_PREFIX: &str = "server-host::";
 
 fn configured_targets_path() -> &'static OnceLock<PathBuf> {
     static CONFIGURED_TARGETS_PATH: OnceLock<PathBuf> = OnceLock::new();
@@ -222,13 +223,43 @@ pub(crate) fn read_targets_file() -> Result<TargetsFile, String> {
     load_inventory(false).map(|inventory| inventory.targets_file)
 }
 
+fn resolve_server_terminal_target(target_id: &str) -> Result<Option<DeveloperTarget>, String> {
+    let Some(server_id) = target_id.strip_prefix(SERVER_TERMINAL_TARGET_PREFIX) else {
+        return Ok(None);
+    };
+
+    let raw_targets_file = read_raw_targets_file()?;
+    let Some(server) = raw_targets_file
+        .remote_servers
+        .into_iter()
+        .find(|server| server.id == server_id)
+    else {
+        return Ok(None);
+    };
+
+    Ok(Some(DeveloperTarget {
+        id: target_id.to_string(),
+        label: format!("{} host", server.label),
+        host: server.host.clone(),
+        description: format!("Interactive shell on {}.", server.host),
+        terminal_command: format!("ssh {}", server.host),
+        notes: vec![format!("Server shell for {}.", server.host)],
+        surfaces: vec![],
+    }))
+}
+
 pub(crate) fn resolve_raw_target(target_id: &str) -> Result<DeveloperTarget, String> {
     let targets_file = read_targets_file()?;
 
-    targets_file
+    if let Some(target) = targets_file
         .targets
         .into_iter()
         .find(|target| target.id == target_id)
+    {
+        return Ok(target);
+    }
+
+    resolve_server_terminal_target(target_id)?
         .ok_or_else(|| format!("Unknown target: {}", target_id))
 }
 
