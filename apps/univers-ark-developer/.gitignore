@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 src-tauri/target
+src-tauri/crates/*/target
 developer-targets.local.json
 
 # Editor directories and files
