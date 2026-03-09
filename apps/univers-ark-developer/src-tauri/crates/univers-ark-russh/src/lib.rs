@@ -3,6 +3,7 @@ mod ssh_config;
 use std::{
     env, fs,
     net::SocketAddr,
+    io::ErrorKind,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -28,12 +29,14 @@ pub use ssh_config::{ResolvedEndpoint, ResolvedEndpointChain, SshConfigResolver}
 #[derive(Debug, Clone)]
 pub struct ClientOptions {
     pub connect_timeout: Duration,
+    pub inactivity_timeout: Option<Duration>,
 }
 
 impl Default for ClientOptions {
     fn default() -> Self {
         Self {
             connect_timeout: Duration::from_secs(8),
+            inactivity_timeout: None,
         }
     }
 }
@@ -437,6 +440,9 @@ pub async fn start_local_forward_chain(
                                     if let Err(error) =
                                         forward_connection(socket, &handle, &remote_host, remote_port).await
                                     {
+                                        if is_benign_forward_error(&error) {
+                                            return;
+                                        }
                                         if let Ok(mut stored) = inner.error.lock() {
                                             *stored = Some(format!(
                                                 "forward connection failed: {error}"
@@ -640,6 +646,27 @@ async fn forward_connection(
     Ok(())
 }
 
+fn is_benign_forward_error(error: &RusshError) -> bool {
+    match error {
+        RusshError::Io(source) => matches!(
+            source.kind(),
+            ErrorKind::BrokenPipe
+                | ErrorKind::ConnectionReset
+                | ErrorKind::ConnectionAborted
+                | ErrorKind::UnexpectedEof
+                | ErrorKind::NotConnected
+        ),
+        RusshError::Russh(source) => {
+            let message = source.to_string().to_ascii_lowercase();
+            message.contains("channel closed")
+                || message.contains("channel eof")
+                || message.contains("connection reset")
+                || message.contains("send error")
+        }
+        _ => false,
+    }
+}
+
 async fn authenticate_endpoint(
     handle: &mut Handle<ClientHandler>,
     endpoint: &ResolvedEndpoint,
@@ -682,7 +709,7 @@ async fn authenticate_endpoint(
 
 fn client_config(options: &ClientOptions) -> Arc<client::Config> {
     Arc::new(client::Config {
-        inactivity_timeout: Some(options.connect_timeout),
+        inactivity_timeout: options.inactivity_timeout,
         preferred: Preferred {
             kex: std::borrow::Cow::Owned(vec![
                 russh::kex::CURVE25519_PRE_RFC_8731,
