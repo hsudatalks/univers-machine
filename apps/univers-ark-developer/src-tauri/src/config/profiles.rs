@@ -18,7 +18,7 @@ fn ark_workbench_profile_defaults() -> ContainerProfileDefaults {
             default_tool: String::from("dashboard"),
             project_path: String::from("~/repos/hvac-workbench"),
             files_root: String::from("~/repos/hvac-workbench"),
-            primary_browser_service_id: String::from("development"),
+            primary_web_service_id: String::from("development"),
             tmux_command_service_id: String::from("tmux-developer"),
         },
         services: vec![
@@ -95,8 +95,8 @@ fn merge_workspace_defaults(
     fill_string(&mut workspace.project_path, &defaults.project_path);
     fill_string(&mut workspace.files_root, &defaults.files_root);
     fill_string(
-        &mut workspace.primary_browser_service_id,
-        &defaults.primary_browser_service_id,
+        &mut workspace.primary_web_service_id,
+        &defaults.primary_web_service_id,
     );
     fill_string(
         &mut workspace.tmux_command_service_id,
@@ -157,7 +157,7 @@ mod tests {
         apply_profile_defaults_to_target(&mut target);
 
         assert_eq!(target.workspace.default_tool, "dashboard");
-        assert_eq!(target.workspace.primary_browser_service_id, "development");
+        assert_eq!(target.workspace.primary_web_service_id, "development");
         assert_eq!(target.services.len(), 3);
         assert_eq!(target.surfaces.len(), 2);
         assert!(target

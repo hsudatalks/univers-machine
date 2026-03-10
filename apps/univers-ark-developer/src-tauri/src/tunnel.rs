@@ -7,8 +7,8 @@ use crate::{
     },
     proxy::{proxy_error_message, start_vite_proxy},
     runtime::{
-        allocate_internal_tunnel_port, internal_probe_url, resolve_runtime_surface,
-        resolve_runtime_vite_hmr_tunnel_command, surface_key, surface_local_port,
+        allocate_internal_tunnel_port, internal_probe_url, resolve_runtime_web_surface,
+        resolve_runtime_vite_hmr_tunnel_command, service_key, surface_key, surface_local_port,
     },
 };
 use std::{
@@ -31,14 +31,15 @@ const TUNNEL_RETRY_INTERVAL: Duration = Duration::from_secs(2);
 
 pub(crate) fn tunnel_status(
     target_id: &str,
-    surface_id: &str,
+    service_id: &str,
     local_url: Option<String>,
     state: &str,
     message: impl Into<String>,
 ) -> TunnelStatus {
     TunnelStatus {
         target_id: target_id.to_string(),
-        surface_id: surface_id.to_string(),
+        service_id: service_id.to_string(),
+        surface_id: service_id.to_string(),
         local_url,
         state: state.to_string(),
         message: message.into(),
@@ -340,15 +341,15 @@ pub(crate) fn stop_tunnel_session(session: &TunnelSession) {
 pub(crate) fn register_desired_tunnel(
     tunnel_state: &TunnelState,
     target_id: &str,
-    surface_id: &str,
+    service_id: &str,
 ) {
-    let key = surface_key(target_id, surface_id);
+    let key = service_key(target_id, service_id);
     if let Ok(mut desired) = tunnel_state.desired_tunnels.lock() {
         desired.insert(
             key,
             TunnelRegistration {
                 target_id: target_id.to_string(),
-                surface_id: surface_id.to_string(),
+                service_id: service_id.to_string(),
                 next_attempt_at: Instant::now(),
             },
         );
@@ -368,11 +369,11 @@ pub(crate) fn sync_desired_tunnels(
 
     let mut next = HashMap::with_capacity(requests.len());
 
-    for (target_id, surface_id) in requests {
-        let key = surface_key(target_id, surface_id);
+    for (target_id, service_id) in requests {
+        let key = service_key(target_id, service_id);
         let registration = desired.remove(&key).unwrap_or(TunnelRegistration {
             target_id: target_id.clone(),
-            surface_id: surface_id.clone(),
+            service_id: service_id.clone(),
             next_attempt_at: now,
         });
         next.insert(key, registration);
@@ -400,14 +401,14 @@ pub(crate) fn sync_desired_tunnels(
 
     let mut statuses = Vec::with_capacity(requests.len());
 
-    for (target_id, surface_id) in requests {
-        let status = reconcile_registered_tunnel(app, tunnel_state, target_id, surface_id, false)
+    for (target_id, service_id) in requests {
+        let status = reconcile_registered_tunnel(app, tunnel_state, target_id, service_id, false)
             .unwrap_or_else(|error| {
-                let local_url = resolve_runtime_surface(target_id, surface_id, tunnel_state)
+                let local_url = resolve_runtime_web_surface(target_id, service_id, tunnel_state)
                     .ok()
                     .map(|surface| surface.local_url);
 
-                tunnel_status(target_id, surface_id, local_url, "error", error)
+                tunnel_status(target_id, service_id, local_url, "error", error)
             });
 
         statuses.push(status);
@@ -416,8 +417,8 @@ pub(crate) fn sync_desired_tunnels(
     Ok(statuses)
 }
 
-fn schedule_tunnel_retry(tunnel_state: &TunnelState, target_id: &str, surface_id: &str) {
-    let key = surface_key(target_id, surface_id);
+fn schedule_tunnel_retry(tunnel_state: &TunnelState, target_id: &str, service_id: &str) {
+    let key = service_key(target_id, service_id);
     if let Ok(mut desired) = tunnel_state.desired_tunnels.lock() {
         if let Some(registration) = desired.get_mut(&key) {
             registration.next_attempt_at = Instant::now() + TUNNEL_RETRY_INTERVAL;
@@ -429,10 +430,10 @@ pub(crate) fn reconcile_registered_tunnel(
     app: &AppHandle,
     tunnel_state: &TunnelState,
     target_id: &str,
-    surface_id: &str,
+    service_id: &str,
     emit_status_event: bool,
 ) -> Result<TunnelStatus, String> {
-    let surface = resolve_runtime_surface(target_id, surface_id, tunnel_state)?;
+    let surface = resolve_runtime_web_surface(target_id, service_id, tunnel_state)?;
 
     if surface.tunnel_command.trim().is_empty() {
         let status = direct_tunnel_status(target_id, &surface);
@@ -442,7 +443,7 @@ pub(crate) fn reconcile_registered_tunnel(
         return Ok(status);
     }
 
-    let key = surface_key(target_id, surface_id);
+    let key = service_key(target_id, service_id);
     let stale_session = {
         let mut sessions = tunnel_state
             .sessions
@@ -478,10 +479,10 @@ pub(crate) fn reconcile_registered_tunnel(
             Ok(status)
         }
         Err(error) => {
-            schedule_tunnel_retry(tunnel_state, target_id, surface_id);
+            schedule_tunnel_retry(tunnel_state, target_id, service_id);
             let status = tunnel_status(
                 target_id,
-                surface_id,
+                service_id,
                 Some(surface.local_url.clone()),
                 "error",
                 error.clone(),
@@ -513,7 +514,7 @@ pub(crate) fn start_tunnel_supervisor(app: AppHandle, tunnel_state: TunnelState)
                 &app,
                 &tunnel_state,
                 &registration.target_id,
-                &registration.surface_id,
+                &registration.service_id,
                 true,
             );
         }
@@ -649,7 +650,7 @@ fn spawn_managed_tunnel_session(
     let surface_id = surface.id.clone();
     let surface_label = surface.label.clone();
     let local_url = surface.local_url.clone();
-    let session_key = surface_key(&target_id, &surface_id);
+    let session_key = service_key(&target_id, &surface_id);
     let monitored_processes = processes;
     let monitored_forwards = russh_forwards;
     let monitored_proxy = proxy;

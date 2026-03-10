@@ -184,8 +184,8 @@ fn render_workspace(
         default_tool: replace_remote_placeholders(&workspace.default_tool, context),
         project_path: replace_remote_placeholders(&workspace.project_path, context),
         files_root: replace_remote_placeholders(&workspace.files_root, context),
-        primary_browser_service_id: replace_remote_placeholders(
-            &workspace.primary_browser_service_id,
+        primary_web_service_id: replace_remote_placeholders(
+            &workspace.primary_web_service_id,
             context,
         ),
         tmux_command_service_id: replace_remote_placeholders(

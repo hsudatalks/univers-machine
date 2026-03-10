@@ -26,7 +26,7 @@ use crate::{
         RemoteFilePreview, TerminalSnapshot, TerminalState, TunnelState, TunnelStatus,
         tmux_command_service,
     },
-    runtime::{read_runtime_targets_file, resolve_runtime_surface, surface_key},
+    runtime::{read_runtime_targets_file, resolve_runtime_web_surface, surface_key},
     settings::{load_app_settings as read_app_settings, save_app_settings as write_app_settings},
     terminal::{snapshot_for, spawn_terminal_session},
     tunnel::{
@@ -44,23 +44,24 @@ use tauri::{async_runtime, AppHandle, Emitter, State};
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TunnelRestartSpec {
     pub(crate) target_id: String,
-    pub(crate) surface_id: String,
+    #[serde(alias = "surfaceId")]
+    pub(crate) service_id: String,
 }
 
 fn restart_tunnel_inner(
     app: &AppHandle,
     tunnel_inner: &TunnelState,
     target_id: &str,
-    surface_id: &str,
+    service_id: &str,
 ) -> Result<TunnelStatus, String> {
-    register_desired_tunnel(tunnel_inner, target_id, surface_id);
-    let surface = resolve_runtime_surface(target_id, surface_id, tunnel_inner)?;
+    register_desired_tunnel(tunnel_inner, target_id, service_id);
+    let surface = resolve_runtime_web_surface(target_id, service_id, tunnel_inner)?;
 
     if surface.tunnel_command.trim().is_empty() {
         return Ok(direct_tunnel_status(target_id, &surface));
     }
 
-    let key = surface_key(target_id, surface_id);
+    let key = surface_key(target_id, service_id);
     let previous_session = tunnel_inner
         .sessions
         .lock()
@@ -206,20 +207,20 @@ pub(crate) async fn ensure_tunnel(
     app: AppHandle,
     tunnel_state: State<'_, TunnelState>,
     target_id: String,
-    surface_id: String,
+    service_id: String,
 ) -> Result<TunnelStatus, String> {
     let tunnel_inner = tunnel_state.inner().clone();
     let app_clone = app.clone();
 
     async_runtime::spawn_blocking(move || {
-        register_desired_tunnel(&tunnel_inner, &target_id, &surface_id);
-        let surface = resolve_runtime_surface(&target_id, &surface_id, &tunnel_inner)?;
+        register_desired_tunnel(&tunnel_inner, &target_id, &service_id);
+        let surface = resolve_runtime_web_surface(&target_id, &service_id, &tunnel_inner)?;
 
         if surface.tunnel_command.trim().is_empty() {
             return Ok(direct_tunnel_status(&target_id, &surface));
         }
 
-        let key = surface_key(&target_id, &surface_id);
+        let key = surface_key(&target_id, &service_id);
         let existing_session = tunnel_inner
             .sessions
             .lock()
@@ -236,7 +237,7 @@ pub(crate) async fn ensure_tunnel(
                 remove_tunnel_session_if_current(&tunnel_inner.sessions, &key, session.session_id);
         }
 
-        reconcile_registered_tunnel(&app_clone, &tunnel_inner, &target_id, &surface_id, false)
+        reconcile_registered_tunnel(&app_clone, &tunnel_inner, &target_id, &service_id, false)
     })
     .await
     .map_err(|error| format!("Failed to join ensure tunnel task: {}", error))?
@@ -254,7 +255,7 @@ pub(crate) async fn sync_tunnel_registrations(
     async_runtime::spawn_blocking(move || {
         let request_pairs = requests
             .iter()
-            .map(|request| (request.target_id.clone(), request.surface_id.clone()))
+            .map(|request| (request.target_id.clone(), request.service_id.clone()))
             .collect::<Vec<_>>();
 
         let statuses = sync_desired_tunnels(&app_clone, &tunnel_inner, &request_pairs)?;
@@ -274,13 +275,13 @@ pub(crate) async fn restart_tunnel(
     app: AppHandle,
     tunnel_state: State<'_, TunnelState>,
     target_id: String,
-    surface_id: String,
+    service_id: String,
 ) -> Result<TunnelStatus, String> {
     let tunnel_inner = tunnel_state.inner().clone();
     let app_clone = app.clone();
 
     async_runtime::spawn_blocking(move || {
-        restart_tunnel_inner(&app_clone, &tunnel_inner, &target_id, &surface_id)
+        restart_tunnel_inner(&app_clone, &tunnel_inner, &target_id, &service_id)
     })
     .await
     .map_err(|error| format!("Failed to join restart tunnel task: {}", error))?
@@ -303,7 +304,7 @@ pub(crate) async fn restart_all_tunnels(
                     &app_clone,
                     &tunnel_inner,
                     &request.target_id,
-                    &request.surface_id,
+                    &request.service_id,
                 )
             })
         })

@@ -12,8 +12,12 @@ use crate::{
 use std::net::TcpListener;
 use url::Url;
 
+pub(crate) fn service_key(target_id: &str, service_id: &str) -> String {
+    format!("{}::{}", target_id, service_id)
+}
+
 pub(crate) fn surface_key(target_id: &str, surface_id: &str) -> String {
-    format!("{}::{}", target_id, surface_id)
+    service_key(target_id, surface_id)
 }
 
 fn tunnel_port_key(target_id: &str, surface_id: &str, suffix: &str) -> String {
@@ -334,21 +338,22 @@ fn resolve_runtime_target(
     hydrate_target(&target, tunnel_state)
 }
 
-pub(crate) fn resolve_runtime_surface(
+pub(crate) fn resolve_runtime_web_surface(
     target_id: &str,
-    surface_id: &str,
+    service_id: &str,
     tunnel_state: &TunnelState,
 ) -> Result<BrowserSurface, String> {
     let target = resolve_runtime_target(target_id, tunnel_state)?;
 
     target
-        .surfaces
+        .services
         .into_iter()
-        .find(|surface| surface.id == surface_id)
+        .find(|service| service.id == service_id)
+        .and_then(|service| service.web)
         .ok_or_else(|| {
             format!(
-                "Unknown browser surface {} for target {}",
-                surface_id, target_id
+                "Unknown web service {} for target {}",
+                service_id, target_id
             )
         })
 }

@@ -89,8 +89,8 @@ pub(crate) struct ContainerWorkspace {
     #[serde(default)]
     pub(crate) files_root: String,
     #[serde(default)]
-    pub(crate) primary_browser_service_id: String,
-    #[serde(default)]
+    #[serde(alias = "primaryBrowserServiceId")]
+    pub(crate) primary_web_service_id: String,
     pub(crate) tmux_command_service_id: String,
 }
 
@@ -400,6 +400,7 @@ pub(crate) struct TerminalExitEvent {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TunnelStatus {
     pub(crate) target_id: String,
+    pub(crate) service_id: String,
     pub(crate) surface_id: String,
     pub(crate) local_url: Option<String>,
     pub(crate) state: String,
@@ -536,7 +537,7 @@ pub(crate) struct TunnelSession {
 #[derive(Clone)]
 pub(crate) struct TunnelRegistration {
     pub(crate) target_id: String,
-    pub(crate) surface_id: String,
+    pub(crate) service_id: String,
     pub(crate) next_attempt_at: Instant,
 }
 
