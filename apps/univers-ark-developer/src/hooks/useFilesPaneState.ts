@@ -228,7 +228,7 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
     setError(null);
   };
 
-  const loadDirectory = (dirPath: string | null | undefined) => {
+  const loadDirectory = (dirPath: string | null | undefined, asRoot = false) => {
     const targetPath = dirPath ?? undefined;
     const pathKey = dirPath ?? "__root__";
 
@@ -248,7 +248,7 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
           return next;
         });
 
-        if (!rootPath || dirPath === null || dirPath === undefined) {
+        if (asRoot || !rootPath || dirPath === null || dirPath === undefined) {
           setRootPath(listing.path);
           setRootParentPath(listing.parentPath ?? null);
           setCurrentDirectoryPath(listing.path);
@@ -285,38 +285,42 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
       listRemoteDirectory(target.id, "~/repos"),
     ])
       .then(([homeListing, reposListing]) => {
+        // If ~/repos fell back to home dir (path is same), use home subdirs directly
+        const reposIsSeparate = reposListing.path !== homeListing.path;
         const repoDirectories = reposListing.entries.filter(
           (entry) =>
             entry.kind === "directory" && isVisibleEntry(entry, showHiddenDirectories),
         );
-        const preferredRepo =
-          repoDirectories.find((entry) => entry.path === preferredFilesRoot) ?? repoDirectories[0];
+        const homeDirectories = homeListing.entries.filter(
+          (entry) =>
+            entry.kind === "directory" && isVisibleEntry(entry, showHiddenDirectories),
+        );
+
         const nextRootOptions: FilesRootOption[] = [];
 
-        if (preferredRepo) {
-          nextRootOptions.push({
-            label:
-              preferredRepo.path === preferredFilesRoot
-                ? preferredFilesRoot
-                : `~/repos/${preferredRepo.name}`,
-            path: preferredRepo.path,
-          });
-        }
-
-        for (const entry of repoDirectories) {
-          if (entry.path === preferredRepo?.path) {
-            continue;
+        if (reposIsSeparate) {
+          // Remote target: prefer ~/repos subdirs
+          const preferredRepo =
+            repoDirectories.find((entry) => entry.path === preferredFilesRoot) ?? repoDirectories[0];
+          if (preferredRepo) {
+            nextRootOptions.push({ label: `~/repos/${preferredRepo.name}`, path: preferredRepo.path });
           }
-
-          nextRootOptions.push({
-            label: `~/repos/${entry.name}`,
-            path: entry.path,
-          });
+          for (const entry of repoDirectories) {
+            if (entry.path === preferredRepo?.path) continue;
+            nextRootOptions.push({ label: `~/repos/${entry.name}`, path: entry.path });
+          }
+          nextRootOptions.push({ label: "~", path: homeListing.path });
+          loadDirectory(preferredRepo?.path ?? preferredFilesRoot ?? homeListing.path);
+        } else {
+          // Localhost: show home directory subdirs with their actual names
+          nextRootOptions.push({ label: homeListing.path, path: homeListing.path });
+          for (const entry of homeDirectories) {
+            nextRootOptions.push({ label: entry.name, path: entry.path });
+          }
+          loadDirectory(homeListing.path);
         }
 
-        nextRootOptions.push({ label: "~", path: homeListing.path });
         setRootOptions(nextRootOptions);
-        loadDirectory(preferredRepo?.path ?? preferredFilesRoot ?? homeListing.path);
       })
       .catch((loadError) => {
         setError(
@@ -433,8 +437,16 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
   };
 
   const selectRoot = (path: string) => {
-    resetBrowser();
-    loadDirectory(path);
+    // Clear browser state WITHOUT nulling rootPath — nulling rootPath triggers
+    // the init effect which would navigate back to the home directory.
+    setChildrenByPath(new Map());
+    setParentByPath(new Map());
+    setExpandedPaths(new Set());
+    setCurrentDirectoryPath(null);
+    setPreview(null);
+    setSelectedPath(null);
+    setError(null);
+    loadDirectory(path, true);
   };
 
   const refresh = () => {
