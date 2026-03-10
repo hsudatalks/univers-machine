@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ManagedMachine } from "../types";
+import { visibleContainers } from "../lib/container-visibility";
 import { loadTargetsConfig, scanMachineInventory, updateTargetsConfig } from "../lib/tauri";
 import {
   createEmptyMachine,
@@ -125,6 +126,29 @@ export function ServerDialog({
     setSaveMessage(null);
   };
 
+  const updateContainerWorkspaceField = (
+    index: number,
+    field: keyof MachineConfig["containers"][number]["workspace"],
+    value: string,
+  ) => {
+    setForm((prev) => ({
+      ...prev,
+      containers: prev.containers.map((container, containerIndex) =>
+        containerIndex === index
+          ? {
+              ...container,
+              workspace: {
+                ...container.workspace,
+                [field]: value,
+              },
+            }
+          : container,
+      ),
+    }));
+    setError(null);
+    setSaveMessage(null);
+  };
+
   const handleSave = async () => {
     if (!config) return;
 
@@ -147,27 +171,12 @@ export function ServerDialog({
         ...config,
         machines: [...config.machines],
       };
-      const hostContainer =
-        form.containers.find((container) => container.kind === "host") ?? {
-          ...form.containers[0],
-          id: "host",
-          name: "host",
-          kind: "host" as const,
-          enabled: true,
-          label: "Host",
-        };
       const nextServer: MachineConfig = {
         ...form,
         id: nextId,
-        containers: [
-          {
-            ...hostContainer,
-            enabled: true,
-          },
-          ...form.containers.filter(
-            (container) => container.kind === "managed" && container.name.trim(),
-          ),
-        ],
+        containers: form.containers.filter(
+          (container) => container.kind === "managed" && container.name.trim(),
+        ),
       };
 
       const existingIndex = nextConfig.machines.findIndex(
@@ -231,7 +240,7 @@ export function ServerDialog({
     <div className="dialog-backdrop" onClick={onClose}>
       <div
         aria-label={isCreateMode ? "Create machine" : `${form.label || form.id} machine settings`}
-        className="dialog-panel"
+        className="dialog-panel dialog-panel-wide"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
@@ -262,12 +271,12 @@ export function ServerDialog({
             <TabsTrigger className="dialog-tab" value="general">General</TabsTrigger>
             <TabsTrigger className="dialog-tab" value="connection">Connection</TabsTrigger>
             <TabsTrigger className="dialog-tab" value="discovery">Discovery</TabsTrigger>
-            <TabsTrigger className="dialog-tab" value="containers">
+                <TabsTrigger className="dialog-tab" value="containers">
               Containers
               {form.discoveryMode === "manual"
                 ? ` (${form.containers.filter((container) => container.kind === "managed").length})`
                 : server
-                  ? ` (${server.containers.length})`
+                  ? ` (${visibleContainers(server.containers).length})`
                   : ""}
             </TabsTrigger>
           </TabsList>
@@ -443,6 +452,12 @@ export function ServerDialog({
                                 <EditField label="Label" onChange={(value) => updateContainerField(index, "label", value)} value={container.label} />
                                 <EditField label="IPv4" mono onChange={(value) => updateContainerField(index, "ipv4", value)} value={container.ipv4} />
                                 <EditField label="SSH User" mono onChange={(value) => updateContainerField(index, "sshUser", value)} value={container.sshUser} />
+                                <SelectField
+                                  label="Profile"
+                                  onChange={(value) => updateContainerWorkspaceField(index, "profile", value)}
+                                  options={profileOptions.map((profile) => ({ value: profile, label: profile }))}
+                                  value={container.workspace.profile}
+                                />
                                 <EditField label="Status" mono onChange={(value) => updateContainerField(index, "status", value)} value={container.status} />
                                 <ToggleField
                                   checked={container.enabled}
@@ -459,6 +474,8 @@ export function ServerDialog({
                     <ContainersTable
                       containers={form.containers}
                       isScanning={isScanning}
+                      profileOptions={profileOptions}
+                      onProfileChange={(index, profile) => updateContainerWorkspaceField(index, "profile", profile)}
                       onScan={() => void handleScan()}
                       onSshUserChange={(index, sshUser) => updateContainerField(index, "sshUser", sshUser)}
                       onToggleEnabled={(index, enabled) => updateContainerField(index, "enabled", enabled)}
@@ -492,12 +509,16 @@ export function ServerDialog({
 function ContainersTable({
   containers,
   isScanning,
+  profileOptions,
+  onProfileChange,
   onScan,
   onSshUserChange,
   onToggleEnabled,
 }: {
   containers: MachineConfig["containers"];
   isScanning: boolean;
+  profileOptions: string[];
+  onProfileChange: (index: number, profile: string) => void;
   onScan: () => void;
   onSshUserChange: (index: number, sshUser: string) => void;
   onToggleEnabled: (index: number, enabled: boolean) => void;
@@ -526,48 +547,79 @@ function ContainersTable({
           {isScanning ? "Scanning…" : "Scan containers"}
         </Button>
       </div>
-      <table className="dialog-table">
-        <thead>
-          <tr>
-            <th>Enabled</th>
-            <th>Source</th>
-            <th>Name</th>
-            <th>Status</th>
-            <th>IPv4</th>
-            <th>SSH User</th>
-          </tr>
-        </thead>
-        <tbody>
-          {managedContainers.map(({ container, index }) => (
-            <tr key={container.id || container.name || index}>
-              <td>
-                <input
-                  checked={container.enabled}
-                  onChange={(event) => onToggleEnabled(index, event.target.checked)}
-                  type="checkbox"
-                />
-              </td>
-              <td>{formatContainerSource(container.source)}</td>
-              <td className="dialog-table-mono">{container.name || container.label || "—"}</td>
-              <td>
-                <Badge variant={container.status === "RUNNING" ? "success" : "warning"}>
-                  {container.status}
-                </Badge>
-              </td>
-              <td className="dialog-table-mono">{container.ipv4 || "—"}</td>
-              <td>
-                <SshUserInput
-                  inputId={`container-ssh-user-${container.id || container.name || index}`}
-                  onChange={(sshUser) => onSshUserChange(index, sshUser)}
-                  options={container.sshUserCandidates}
-                  value={container.sshUser}
-                />
-              </td>
+      <div className="dialog-table-scroll">
+        <table className="dialog-table">
+          <thead>
+            <tr>
+              <th>Enabled</th>
+              <th>Source</th>
+              <th>Name</th>
+              <th>Status</th>
+              <th>IPv4</th>
+              <th>Profile</th>
+              <th>SSH User</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {managedContainers.map(({ container, index }) => (
+              <tr key={container.id || container.name || index}>
+                <td>
+                  <input
+                    checked={container.enabled}
+                    onChange={(event) => onToggleEnabled(index, event.target.checked)}
+                    type="checkbox"
+                  />
+                </td>
+                <td>{formatContainerSource(container.source)}</td>
+                <td className="dialog-table-mono">{container.name || container.label || "—"}</td>
+                <td>
+                  <Badge variant={container.status === "RUNNING" ? "success" : "warning"}>
+                    {container.status}
+                  </Badge>
+                </td>
+                <td className="dialog-table-mono">{container.ipv4 || "—"}</td>
+                <td>
+                  <ProfileSelectInput
+                    onChange={(profile) => onProfileChange(index, profile)}
+                    options={profileOptions}
+                    value={container.workspace.profile}
+                  />
+                </td>
+                <td>
+                  <SshUserInput
+                    inputId={`container-ssh-user-${container.id || container.name || index}`}
+                    onChange={(sshUser) => onSshUserChange(index, sshUser)}
+                    options={container.sshUserCandidates}
+                    value={container.sshUser}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
+  );
+}
+
+function ProfileSelectInput({
+  onChange,
+  options,
+  value,
+}: {
+  onChange: (value: string) => void;
+  options: string[];
+  value: string;
+}) {
+  return (
+    <select className="dialog-input" onChange={(event) => onChange(event.target.value)} value={value}>
+      <option value="">Machine default</option>
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
   );
 }
 

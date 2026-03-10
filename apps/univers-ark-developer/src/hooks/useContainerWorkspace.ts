@@ -200,6 +200,34 @@ export function useContainerWorkspace({
     };
   }, [activeResize, clampTerminalPanelWidth]);
 
+  useEffect(() => {
+    setContainerTools((current) => {
+      let changed = false;
+      const next = { ...current };
+
+      for (const [targetId, panel] of Object.entries(current)) {
+        if (!panel) {
+          continue;
+        }
+
+        const target = targetById.get(targetId);
+
+        if (!target) {
+          continue;
+        }
+
+        const surfaceId = browserSurfaceIdFromPanel(panel);
+
+        if (surfaceId && !browserSurfaceById(target, surfaceId)) {
+          next[targetId] = resolveDefaultToolPanel(target);
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [targetById]);
+
   const selectContainerTool = (
     target: DeveloperTarget,
     panel: ContainerToolPanel,
