@@ -1,9 +1,10 @@
 mod discovery;
+mod profiles;
 mod ssh;
 
 use crate::models::{
     BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget, ManagedServer,
-    TargetsFile, sync_target_services,
+    TargetsFile,
 };
 use serde::Deserialize;
 use std::{
@@ -16,6 +17,7 @@ use tauri::{path::BaseDirectory, AppHandle, Manager, Runtime};
 
 use self::{
     discovery::discover_remote_server_inventory,
+    profiles::{apply_profile_defaults_to_remote_server, apply_profile_defaults_to_target},
     ssh::{build_ssh_command, run_target_shell_command_internal, shell_single_quote},
 };
 
@@ -187,10 +189,17 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
         }
     }
 
-    let raw_targets_file = read_raw_targets_file()?;
+    let mut raw_targets_file = read_raw_targets_file()?;
     let mut targets = raw_targets_file.targets;
-    targets.iter_mut().for_each(sync_target_services);
+    targets
+        .iter_mut()
+        .for_each(apply_profile_defaults_to_target);
     let mut servers = Vec::new();
+
+    raw_targets_file
+        .remote_servers
+        .iter_mut()
+        .for_each(apply_profile_defaults_to_remote_server);
 
     let discovered: Vec<_> = std::thread::scope(|scope| {
         let handles: Vec<_> = raw_targets_file
@@ -385,7 +394,9 @@ pub(crate) fn read_bootstrap_data(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::ssh::ssh_destination;
     use crate::models::ManagedContainer;
+    use crate::models::BrowserServiceType;
     use super::discovery::{
         build_target_from_container, parse_discovered_containers, server_state_for_containers,
     };
