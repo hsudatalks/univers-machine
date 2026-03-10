@@ -8,7 +8,6 @@ import { ServerDialog } from "./components/ServerDialog";
 import { SettingsPage } from "./components/SettingsPage";
 import { ShellState } from "./components/ShellState";
 import { ServerPage } from "./components/ServerPage";
-import { DockerServerPage } from "./components/DockerServerPage";
 import { SidebarNav } from "./components/SidebarNav";
 import { StatusBar } from "./components/StatusBar";
 import {
@@ -21,7 +20,6 @@ import {
   browserSurfaceById,
   primaryBrowserSurface,
   resolveDefaultToolPanel,
-  webServices,
 } from "./lib/target-services";
 import { preloadBrowserFrames } from "./lib/browser-cache";
 import { registerTunnelRequests } from "./lib/tunnel-manager";
@@ -694,17 +692,10 @@ function App() {
             const activeTool = target
               ? (containerTools[target.id] ?? resolveDefaultToolPanel(target))
               : "dashboard";
-            const allBrowserSurfaces = target
-              ? webServices(target).map((s) => s.web)
-              : [];
             const primarySurface = target
               ? primaryBrowserSurface(target)
               : undefined;
             const activeBrowserSurfaceId = browserSurfaceIdFromPanel(activeTool);
-            const activeSurface =
-              (activeBrowserSurfaceId && target
-                ? browserSurfaceById(target, activeBrowserSurfaceId)
-                : null) ?? primarySurface;
             const browserSurface =
               activeBrowserSurfaceId && target
                 ? browserSurfaceById(target, activeBrowserSurfaceId)
@@ -747,9 +738,9 @@ function App() {
                   )
                 : undefined;
             const primaryBrowserStatus =
-              activeSurface && target
-                ? tunnelStatuses[surfaceKey(target.id, activeSurface.id)] ??
-                  fallbackTunnelStatus(target, activeSurface)
+              primarySurface && target
+                ? tunnelStatuses[surfaceKey(target.id, primarySurface.id)] ??
+                  fallbackTunnelStatus(target, primarySurface)
                 : undefined;
             return (
               <section
@@ -759,7 +750,6 @@ function App() {
                 {target ? (
                   <ContainerPage
                     activeTool={activeTool}
-                    allBrowserSurfaces={allBrowserSurfaces}
                     browserFrame={browserFrame}
                     browserFrames={browserFrames}
                     browserPanel={browserPanel}
@@ -774,7 +764,7 @@ function App() {
                     browserSurface={browserSurface}
                     dashboardRefreshSeconds={appSettings.dashboardRefreshSeconds}
                     primaryBrowserStatus={primaryBrowserStatus}
-                    primaryBrowserSurface={activeSurface}
+                    primaryBrowserSurface={primarySurface}
                     isTerminalCollapsed={Boolean(containerTerminalCollapsed[target.id])}
                     onExecuteCommandService={(serviceId, action) =>
                       executeCommandService(target.id, serviceId, action)

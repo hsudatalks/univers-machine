@@ -16,7 +16,6 @@ import { FolderOpen, Globe, LayoutDashboard, Rows4 } from "lucide-react";
 
 interface ContainerPageProps {
   activeTool: ContainerToolPanel;
-  allBrowserSurfaces: DeveloperSurface[];
   dashboardRefreshSeconds: number;
   browserFrame?: BrowserFrameInstance;
   browserFrames: BrowserFrameInstance[];
@@ -41,7 +40,6 @@ interface ContainerPageProps {
 
 export function ContainerPage({
   activeTool,
-  allBrowserSurfaces,
   dashboardRefreshSeconds,
   browserFrame,
   browserFrames,
@@ -159,41 +157,21 @@ export function ContainerPage({
           >
             <FolderOpen size={16} />
           </Button>
-          {allBrowserSurfaces.length <= 1 ? (
-            <Button
-              aria-label={primaryBrowserSurface?.label ?? "Primary browser"}
-              disabled={!primaryBrowserSurface}
-              isActive={activeTool === browserPanel}
-              onClick={() => {
-                if (browserPanel) {
-                  onSelectTool(browserPanel);
-                }
-              }}
-              size="icon"
-              title={primaryBrowserSurface?.label ?? "Primary browser"}
-              variant={activeTool === browserPanel ? "default" : "ghost"}
-            >
-              <Globe size={16} />
-            </Button>
-          ) : (
-            allBrowserSurfaces.map((surface) => {
-              const panel = `browser:${surface.id}` as ContainerToolPanel;
-              const isActive = activeTool === panel;
-              return (
-                <Button
-                  key={surface.id}
-                  aria-label={surface.label}
-                  isActive={isActive}
-                  onClick={() => onSelectTool(panel)}
-                  size="sm"
-                  title={surface.label}
-                  variant={isActive ? "default" : "ghost"}
-                >
-                  {surface.label}
-                </Button>
-              );
-            })
-          )}
+          <Button
+            aria-label={primaryBrowserSurface?.label ?? "Primary browser"}
+            disabled={!primaryBrowserSurface}
+            isActive={activeTool === browserPanel}
+            onClick={() => {
+              if (browserPanel) {
+                onSelectTool(browserPanel);
+              }
+            }}
+            size="icon"
+            title={primaryBrowserSurface?.label ?? "Primary browser"}
+            variant={activeTool === browserPanel ? "default" : "ghost"}
+          >
+            <Globe size={16} />
+          </Button>
 
           {onRestartContainer ? (
             <Button
