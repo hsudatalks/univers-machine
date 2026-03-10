@@ -4,7 +4,7 @@ use crate::{
     config::initialize_targets_file_path,
     dashboard::stop_all_dashboard_monitors,
     models::{DashboardState, TerminalState, TunnelState},
-    tunnel::stop_all_tunnels,
+    tunnel::{start_tunnel_supervisor, stop_all_tunnels},
 };
 use tauri::{
     menu::{
@@ -205,6 +205,7 @@ pub(crate) fn run() {
         })
         .setup(|app| {
             initialize_targets_file_path(app.handle())?;
+            start_tunnel_supervisor(app.handle().clone(), app.state::<TunnelState>().inner().clone());
 
             std::thread::spawn(|| match cleanup_stale_ssh_tunnels() {
                 Ok(cleaned) if cleaned > 0 => {
@@ -229,6 +230,7 @@ pub(crate) fn run() {
             commands::attach_terminal,
             commands::restart_terminal,
             commands::ensure_tunnel,
+            commands::sync_tunnel_registrations,
             commands::restart_tunnel,
             commands::restart_all_tunnels,
             commands::list_remote_directory,

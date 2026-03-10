@@ -29,14 +29,15 @@ use crate::{
     settings::{load_app_settings as read_app_settings, save_app_settings as write_app_settings},
     terminal::{snapshot_for, spawn_terminal_session},
     tunnel::{
-        active_tunnel_status, direct_tunnel_status, remove_tunnel_session_if_current, start_tunnel,
-        stop_tunnel_session, tunnel_session_is_alive,
+        active_tunnel_status, direct_tunnel_status, reconcile_registered_tunnel,
+        register_desired_tunnel, remove_tunnel_session_if_current, start_tunnel,
+        stop_tunnel_session, sync_desired_tunnels, tunnel_session_is_alive,
     },
 };
 use portable_pty::PtySize;
 use serde::Deserialize;
 use std::io::Write;
-use tauri::{async_runtime, AppHandle, State};
+use tauri::{async_runtime, AppHandle, Emitter, State};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,6 +52,7 @@ fn restart_tunnel_inner(
     target_id: &str,
     surface_id: &str,
 ) -> Result<TunnelStatus, String> {
+    register_desired_tunnel(tunnel_inner, target_id, surface_id);
     let surface = resolve_runtime_surface(target_id, surface_id, tunnel_inner)?;
 
     if surface.tunnel_command.trim().is_empty() {
@@ -209,6 +211,7 @@ pub(crate) async fn ensure_tunnel(
     let app_clone = app.clone();
 
     async_runtime::spawn_blocking(move || {
+        register_desired_tunnel(&tunnel_inner, &target_id, &surface_id);
         let surface = resolve_runtime_surface(&target_id, &surface_id, &tunnel_inner)?;
 
         if surface.tunnel_command.trim().is_empty() {
@@ -232,10 +235,37 @@ pub(crate) async fn ensure_tunnel(
                 remove_tunnel_session_if_current(&tunnel_inner.sessions, &key, session.session_id);
         }
 
-        start_tunnel(&app_clone, &tunnel_inner, &target_id, &surface)
+        reconcile_registered_tunnel(&app_clone, &tunnel_inner, &target_id, &surface_id, false)
     })
     .await
     .map_err(|error| format!("Failed to join ensure tunnel task: {}", error))?
+}
+
+#[tauri::command]
+pub(crate) async fn sync_tunnel_registrations(
+    app: AppHandle,
+    tunnel_state: State<'_, TunnelState>,
+    requests: Vec<TunnelRestartSpec>,
+) -> Result<Vec<TunnelStatus>, String> {
+    let tunnel_inner = tunnel_state.inner().clone();
+    let app_clone = app.clone();
+
+    async_runtime::spawn_blocking(move || {
+        let request_pairs = requests
+            .iter()
+            .map(|request| (request.target_id.clone(), request.surface_id.clone()))
+            .collect::<Vec<_>>();
+
+        let statuses = sync_desired_tunnels(&app_clone, &tunnel_inner, &request_pairs)?;
+
+        for status in &statuses {
+            let _ = app_clone.emit("tunnel-status", status.clone());
+        }
+
+        Ok(statuses)
+    })
+    .await
+    .map_err(|error| format!("Failed to join sync tunnel registrations task: {}", error))?
 }
 
 #[tauri::command]

@@ -244,6 +244,7 @@ pub(crate) struct TerminalExitEvent {
 pub(crate) struct TunnelStatus {
     pub(crate) target_id: String,
     pub(crate) surface_id: String,
+    pub(crate) local_url: Option<String>,
     pub(crate) state: String,
     pub(crate) message: String,
 }
@@ -375,6 +376,13 @@ pub(crate) struct TunnelSession {
     pub(crate) ready: Arc<AtomicBool>,
 }
 
+#[derive(Clone)]
+pub(crate) struct TunnelRegistration {
+    pub(crate) target_id: String,
+    pub(crate) surface_id: String,
+    pub(crate) next_attempt_at: Instant,
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct TerminalState {
     pub(crate) sessions: Arc<Mutex<HashMap<String, TerminalSession>>>,
@@ -382,6 +390,7 @@ pub(crate) struct TerminalState {
 
 pub(crate) struct TunnelState {
     pub(crate) sessions: Arc<Mutex<HashMap<String, TunnelSession>>>,
+    pub(crate) desired_tunnels: Arc<Mutex<HashMap<String, TunnelRegistration>>>,
     pub(crate) local_ports: Arc<Mutex<HashMap<String, u16>>>,
     pub(crate) next_session_id: AtomicU64,
 }
@@ -400,6 +409,7 @@ impl Clone for TunnelState {
     fn clone(&self) -> Self {
         Self {
             sessions: self.sessions.clone(),
+            desired_tunnels: self.desired_tunnels.clone(),
             local_ports: self.local_ports.clone(),
             next_session_id: AtomicU64::new(
                 self.next_session_id.load(std::sync::atomic::Ordering::Relaxed),
@@ -428,6 +438,7 @@ impl Default for TunnelState {
     fn default() -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            desired_tunnels: Arc::new(Mutex::new(HashMap::new())),
             local_ports: Arc::new(Mutex::new(HashMap::new())),
             next_session_id: AtomicU64::new(1),
         }

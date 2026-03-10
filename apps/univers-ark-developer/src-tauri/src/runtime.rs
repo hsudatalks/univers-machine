@@ -48,7 +48,17 @@ fn allocate_stable_port(
         .map_err(|_| String::from("Surface port state is unavailable"))?;
 
     if let Some(port) = local_ports.get(key).copied() {
-        return Ok(port);
+        let session_exists = tunnel_state
+            .sessions
+            .lock()
+            .map(|sessions| sessions.contains_key(key))
+            .unwrap_or(false);
+
+        if session_exists || port_is_available(port) {
+            return Ok(port);
+        }
+
+        local_ports.remove(key);
     }
 
     let span = port_span(start, end);

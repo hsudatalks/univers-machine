@@ -2,12 +2,13 @@ use crate::{
     constants::{TUNNEL_PROBE_INTERVAL, TUNNEL_PROBE_MESSAGE_DELAY, TUNNEL_PROBE_TIMEOUT},
     config::read_server_inventory,
     models::{
-        BrowserSurface, RusshTunnelForward, TunnelProcess, TunnelSession, TunnelState, TunnelStatus,
+        BrowserSurface, RusshTunnelForward, TunnelProcess, TunnelRegistration, TunnelSession,
+        TunnelState, TunnelStatus,
     },
     proxy::{proxy_error_message, start_vite_proxy},
     runtime::{
-        allocate_internal_tunnel_port, internal_probe_url, resolve_runtime_vite_hmr_tunnel_command,
-        surface_key, surface_local_port,
+        allocate_internal_tunnel_port, internal_probe_url, resolve_runtime_surface,
+        resolve_runtime_vite_hmr_tunnel_command, surface_key, surface_local_port,
     },
 };
 use std::{
@@ -15,7 +16,7 @@ use std::{
     io::{ErrorKind, Read, Write},
     net::{TcpStream, ToSocketAddrs},
     sync::{atomic::Ordering, Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant},
 };
 use tauri::{AppHandle, Emitter};
 use url::Url;
@@ -24,15 +25,21 @@ use univers_ark_russh::{
     ResolvedEndpointChain, SshConfigResolver,
 };
 
+const TUNNEL_STOP_WAIT_TIMEOUT: Duration = Duration::from_secs(2);
+const TUNNEL_SUPERVISOR_INTERVAL: Duration = Duration::from_millis(500);
+const TUNNEL_RETRY_INTERVAL: Duration = Duration::from_secs(2);
+
 pub(crate) fn tunnel_status(
     target_id: &str,
     surface_id: &str,
+    local_url: Option<String>,
     state: &str,
     message: impl Into<String>,
 ) -> TunnelStatus {
     TunnelStatus {
         target_id: target_id.to_string(),
         surface_id: surface_id.to_string(),
+        local_url,
         state: state.to_string(),
         message: message.into(),
     }
@@ -42,6 +49,7 @@ pub(crate) fn direct_tunnel_status(target_id: &str, surface: &BrowserSurface) ->
     tunnel_status(
         target_id,
         &surface.id,
+        Some(surface.local_url.clone()),
         "direct",
         format!("{} is using the local URL directly.", surface.label),
     )
@@ -51,6 +59,7 @@ pub(crate) fn starting_tunnel_status(target_id: &str, surface: &BrowserSurface) 
     tunnel_status(
         target_id,
         &surface.id,
+        Some(surface.local_url.clone()),
         "starting",
         format!(
             "Starting the {} tunnel and probing {} for readiness.",
@@ -64,6 +73,7 @@ pub(crate) fn running_tunnel_status(target_id: &str, surface: &BrowserSurface) -
     tunnel_status(
         target_id,
         &surface.id,
+        Some(surface.local_url.clone()),
         "running",
         format!(
             "{} is forwarding browser traffic to {}.",
@@ -85,6 +95,7 @@ pub(crate) fn active_tunnel_status(
         return tunnel_status(
             target_id,
             &surface.id,
+            Some(surface.local_url.clone()),
             "starting",
             format!(
                 "{} tunnel is up, waiting for {} to accept connections.",
@@ -315,11 +326,200 @@ pub(crate) fn stop_tunnel_session(session: &TunnelSession) {
         forward.forward.request_stop();
     }
 
+    for forward in &session.russh_forwards {
+        let _ = forward.forward.wait_stopped(TUNNEL_STOP_WAIT_TIMEOUT);
+    }
+
     for process in &session.processes {
         if let Ok(mut child) = process.child.lock() {
             let _ = child.kill();
         }
     }
+}
+
+pub(crate) fn register_desired_tunnel(
+    tunnel_state: &TunnelState,
+    target_id: &str,
+    surface_id: &str,
+) {
+    let key = surface_key(target_id, surface_id);
+    if let Ok(mut desired) = tunnel_state.desired_tunnels.lock() {
+        desired.insert(
+            key,
+            TunnelRegistration {
+                target_id: target_id.to_string(),
+                surface_id: surface_id.to_string(),
+                next_attempt_at: Instant::now(),
+            },
+        );
+    }
+}
+
+pub(crate) fn sync_desired_tunnels(
+    app: &AppHandle,
+    tunnel_state: &TunnelState,
+    requests: &[(String, String)],
+) -> Result<Vec<TunnelStatus>, String> {
+    let now = Instant::now();
+    let mut desired = tunnel_state
+        .desired_tunnels
+        .lock()
+        .map_err(|_| String::from("Tunnel registration state is unavailable"))?;
+
+    let mut next = HashMap::with_capacity(requests.len());
+
+    for (target_id, surface_id) in requests {
+        let key = surface_key(target_id, surface_id);
+        let registration = desired.remove(&key).unwrap_or(TunnelRegistration {
+            target_id: target_id.clone(),
+            surface_id: surface_id.clone(),
+            next_attempt_at: now,
+        });
+        next.insert(key, registration);
+    }
+
+    let removed_keys = desired.keys().cloned().collect::<Vec<_>>();
+    *desired = next;
+    drop(desired);
+
+    let removed_sessions = {
+        let mut sessions = tunnel_state
+            .sessions
+            .lock()
+            .map_err(|_| String::from("Tunnel session state is unavailable"))?;
+
+        removed_keys
+            .into_iter()
+            .filter_map(|key| sessions.remove(&key))
+            .collect::<Vec<_>>()
+    };
+
+    for session in removed_sessions {
+        stop_tunnel_session(&session);
+    }
+
+    let mut statuses = Vec::with_capacity(requests.len());
+
+    for (target_id, surface_id) in requests {
+        let status = reconcile_registered_tunnel(app, tunnel_state, target_id, surface_id, false)
+            .unwrap_or_else(|error| {
+                let local_url = resolve_runtime_surface(target_id, surface_id, tunnel_state)
+                    .ok()
+                    .map(|surface| surface.local_url);
+
+                tunnel_status(target_id, surface_id, local_url, "error", error)
+            });
+
+        statuses.push(status);
+    }
+
+    Ok(statuses)
+}
+
+fn schedule_tunnel_retry(tunnel_state: &TunnelState, target_id: &str, surface_id: &str) {
+    let key = surface_key(target_id, surface_id);
+    if let Ok(mut desired) = tunnel_state.desired_tunnels.lock() {
+        if let Some(registration) = desired.get_mut(&key) {
+            registration.next_attempt_at = Instant::now() + TUNNEL_RETRY_INTERVAL;
+        }
+    }
+}
+
+pub(crate) fn reconcile_registered_tunnel(
+    app: &AppHandle,
+    tunnel_state: &TunnelState,
+    target_id: &str,
+    surface_id: &str,
+    emit_status_event: bool,
+) -> Result<TunnelStatus, String> {
+    let surface = resolve_runtime_surface(target_id, surface_id, tunnel_state)?;
+
+    if surface.tunnel_command.trim().is_empty() {
+        let status = direct_tunnel_status(target_id, &surface);
+        if emit_status_event {
+            let _ = app.emit("tunnel-status", status.clone());
+        }
+        return Ok(status);
+    }
+
+    let key = surface_key(target_id, surface_id);
+    let stale_session = {
+        let mut sessions = tunnel_state
+            .sessions
+            .lock()
+            .map_err(|_| String::from("Tunnel session state is unavailable"))?;
+
+        match sessions.get(&key).cloned() {
+            Some(session) => {
+                if tunnel_session_is_alive(&session)? {
+                    let status = active_tunnel_status(target_id, &surface, &session);
+                    if emit_status_event {
+                        let _ = app.emit("tunnel-status", status.clone());
+                    }
+                    return Ok(status);
+                }
+
+                sessions.remove(&key);
+                Some(session)
+            }
+            None => None,
+        }
+    };
+
+    if let Some(session) = stale_session {
+        stop_tunnel_session(&session);
+    }
+
+    match start_tunnel(app, tunnel_state, target_id, &surface) {
+        Ok(status) => {
+            if emit_status_event {
+                let _ = app.emit("tunnel-status", status.clone());
+            }
+            Ok(status)
+        }
+        Err(error) => {
+            schedule_tunnel_retry(tunnel_state, target_id, surface_id);
+            let status = tunnel_status(
+                target_id,
+                surface_id,
+                Some(surface.local_url.clone()),
+                "error",
+                error.clone(),
+            );
+            if emit_status_event {
+                let _ = app.emit("tunnel-status", status);
+            }
+            Err(error)
+        }
+    }
+}
+
+pub(crate) fn start_tunnel_supervisor(app: AppHandle, tunnel_state: TunnelState) {
+    std::thread::spawn(move || loop {
+        let due_registrations = tunnel_state
+            .desired_tunnels
+            .lock()
+            .map(|desired| {
+                desired
+                    .values()
+                    .filter(|registration| registration.next_attempt_at <= Instant::now())
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        for registration in due_registrations {
+            let _ = reconcile_registered_tunnel(
+                &app,
+                &tunnel_state,
+                &registration.target_id,
+                &registration.surface_id,
+                true,
+            );
+        }
+
+        std::thread::sleep(TUNNEL_SUPERVISOR_INTERVAL);
+    });
 }
 
 fn resolve_container_chain(target_id: &str) -> Result<ResolvedEndpointChain, String> {
@@ -469,6 +669,7 @@ fn spawn_managed_tunnel_session(
                         tunnel_status(
                             &target_id,
                             &surface_id,
+                            Some(local_url.clone()),
                             "running",
                             format!(
                                 "{} is forwarding browser traffic to {}.",
@@ -484,6 +685,7 @@ fn spawn_managed_tunnel_session(
                         tunnel_status(
                             &target_id,
                             &surface_id,
+                            Some(local_url.clone()),
                             "starting",
                             format!(
                                 "{} tunnel is up, waiting for {} to accept connections.",
@@ -504,6 +706,7 @@ fn spawn_managed_tunnel_session(
                             tunnel_status(
                                 &target_id,
                                 &surface_id,
+                                Some(local_url.clone()),
                                 "error",
                                 proxy_error_message(proxy).unwrap_or_else(|| {
                                     format!("{} proxy exited unexpectedly.", surface_label)
@@ -565,7 +768,7 @@ fn spawn_managed_tunnel_session(
                 if remove_tunnel_session_if_current(&monitor_sessions, &session_key, session_id) {
                     let _ = app_handle.emit(
                         "tunnel-status",
-                        tunnel_status(&target_id, &surface_id, "error", error),
+                        tunnel_status(&target_id, &surface_id, Some(local_url.clone()), "error", error),
                     );
                 }
                 break;
@@ -586,7 +789,7 @@ fn spawn_managed_tunnel_session(
                     let state = if success { "stopped" } else { "error" };
                     let _ = app_handle.emit(
                         "tunnel-status",
-                        tunnel_status(&target_id, &surface_id, state, message),
+                        tunnel_status(&target_id, &surface_id, Some(local_url.clone()), state, message),
                     );
                 }
                 break;

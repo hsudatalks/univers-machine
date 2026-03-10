@@ -10,7 +10,7 @@ use std::{
         mpsc, Arc, Mutex,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use russh::{
@@ -127,6 +127,15 @@ impl LocalForward {
                 let _ = sender.send(());
             }
         }
+    }
+
+    pub fn wait_stopped(&self, timeout: Duration) -> bool {
+        let deadline = Instant::now() + timeout;
+        while self.is_running() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+        }
+
+        !self.is_running()
     }
 }
 
