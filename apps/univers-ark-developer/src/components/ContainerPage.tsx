@@ -16,6 +16,7 @@ import { FolderOpen, Globe, LayoutDashboard, Rows4 } from "lucide-react";
 
 interface ContainerPageProps {
   activeTool: ContainerToolPanel;
+  allBrowserSurfaces: DeveloperSurface[];
   dashboardRefreshSeconds: number;
   browserFrame?: BrowserFrameInstance;
   browserFrames: BrowserFrameInstance[];
@@ -40,6 +41,7 @@ interface ContainerPageProps {
 
 export function ContainerPage({
   activeTool,
+  allBrowserSurfaces,
   dashboardRefreshSeconds,
   browserFrame,
   browserFrames,
@@ -263,10 +265,12 @@ export function ContainerPage({
               activeServiceId={browserSurface.id}
               isVisible={activeTool === browserPanel}
               onReload={onReloadBrowser}
-              onSelectService={onOpenBrowserService}
+              onRestart={onReloadBrowser}
+              onSelectSurface={(surfaceId) => onOpenBrowserService(surfaceId)}
               retainedFrames={browserFrames}
               services={browserServices}
               slotLabel={browserSurface.label}
+              surfaces={allBrowserSurfaces}
             />
           ) : null}
         </div>

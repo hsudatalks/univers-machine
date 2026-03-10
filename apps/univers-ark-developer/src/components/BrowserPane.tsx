@@ -24,10 +24,12 @@ interface BrowserPaneProps {
   activeServiceId: string | null;
   isVisible: boolean;
   onReload: () => void;
-  onSelectService: (serviceId: string) => void;
+  onRestart: () => void;
+  onSelectSurface: (surfaceId: string) => void;
   retainedFrames: BrowserFrameInstance[];
   services: Array<{ id: string; label: string }>;
   slotLabel: string;
+  surfaces: DeveloperSurface[];
 }
 
 const TUNNEL_STATUS_LABELS: Record<string, string> = {
@@ -43,10 +45,12 @@ export function BrowserPane({
   activeServiceId,
   isVisible,
   onReload,
-  onSelectService,
+  onRestart,
+  onSelectSurface,
   retainedFrames,
   services,
   slotLabel,
+  surfaces,
 }: BrowserPaneProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const ownerId = useMemo(() => Symbol("browser-pane"), []);
@@ -123,30 +127,23 @@ export function BrowserPane({
       className={`panel browser-panel tool-panel ${isVisible ? "" : "is-hidden"} ${isFullscreen ? "is-pane-fullscreen" : ""}`}
     >
       <header className="panel-header browser-header browser-header-compact tool-panel-header">
-        <div className="browser-heading browser-heading-compact">
+        {surfaces.length > 1 ? (
           <select
-            aria-label="Select web service"
-            className="browser-service-select"
-            disabled={services.length === 0}
-            onChange={(event) => {
-              if (event.target.value) {
-                onSelectService(event.target.value);
-              }
-            }}
-            value={activeServiceId ?? ""}
+            className="browser-url browser-url-compact browser-surface-select"
+            value={activeFrame?.surface.id ?? ""}
+            onChange={(e) => onSelectSurface(e.target.value)}
           >
-            {services.length === 0 ? <option value="">No web services</option> : null}
-            {services.map((service) => (
-              <option key={service.id} value={service.id}>
-                {service.label}
+            {surfaces.map((surface) => (
+              <option key={surface.id} value={surface.id}>
+                {surface.label} — {surface.localUrl}
               </option>
             ))}
           </select>
-
+        ) : (
           <code className="browser-url browser-url-compact">
             {activeLocalUrl ?? "No local browser URL"}
           </code>
-        </div>
+        )}
 
         <div className="browser-bar">
           <Button

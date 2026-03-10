@@ -20,6 +20,7 @@ import {
   browserSurfaceById,
   primaryBrowserSurface,
   resolveDefaultToolPanel,
+  webServices,
 } from "./lib/target-services";
 import { preloadBrowserFrames } from "./lib/browser-cache";
 import { registerTunnelRequests } from "./lib/tunnel-manager";
@@ -692,10 +693,17 @@ function App() {
             const activeTool = target
               ? (containerTools[target.id] ?? resolveDefaultToolPanel(target))
               : "dashboard";
+            const allBrowserSurfaces = target
+              ? webServices(target).map((s) => s.web)
+              : [];
             const primarySurface = target
               ? primaryBrowserSurface(target)
               : undefined;
             const activeBrowserSurfaceId = browserSurfaceIdFromPanel(activeTool);
+            const activeSurface =
+              (activeBrowserSurfaceId && target
+                ? browserSurfaceById(target, activeBrowserSurfaceId)
+                : null) ?? primarySurface;
             const browserSurface =
               activeBrowserSurfaceId && target
                 ? browserSurfaceById(target, activeBrowserSurfaceId)
@@ -738,9 +746,21 @@ function App() {
                   )
                 : undefined;
             const primaryBrowserStatus =
-              primarySurface && target
-                ? tunnelStatuses[surfaceKey(target.id, primarySurface.id)] ??
-                  fallbackTunnelStatus(target, primarySurface)
+              activeSurface && target
+                ? tunnelStatuses[surfaceKey(target.id, activeSurface.id)] ??
+                  fallbackTunnelStatus(target, activeSurface)
+                : undefined;
+            const primaryBrowserFrame: BrowserFrameInstance | undefined =
+              activeSurface && primaryBrowserStatus && target
+                ? {
+                    cacheKey: surfaceKey(target.id, activeSurface.id),
+                    frameVersion:
+                      browserFrameVersions[surfaceKey(target.id, activeSurface.id)] ?? 0,
+                    isActive: isVisible && activeTool === `browser:${activeSurface.id}`,
+                    status: primaryBrowserStatus,
+                    surface: activeSurface,
+                    target,
+                  }
                 : undefined;
             return (
               <section
@@ -750,6 +770,7 @@ function App() {
                 {target ? (
                   <ContainerPage
                     activeTool={activeTool}
+                    allBrowserSurfaces={allBrowserSurfaces}
                     browserFrame={browserFrame}
                     browserFrames={browserFrames}
                     browserPanel={browserPanel}
@@ -764,7 +785,7 @@ function App() {
                     browserSurface={browserSurface}
                     dashboardRefreshSeconds={appSettings.dashboardRefreshSeconds}
                     primaryBrowserStatus={primaryBrowserStatus}
-                    primaryBrowserSurface={primarySurface}
+                    primaryBrowserSurface={activeSurface}
                     isTerminalCollapsed={Boolean(containerTerminalCollapsed[target.id])}
                     onExecuteCommandService={(serviceId, action) =>
                       executeCommandService(target.id, serviceId, action)
