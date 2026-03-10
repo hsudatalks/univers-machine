@@ -1,6 +1,7 @@
 use crate::{
     config::{
         read_bootstrap_data, read_server_inventory, read_targets_config,
+        execute_target_command_via_russh,
         resolve_raw_target, restart_container as restart_remote_container,
         run_target_shell_command, scan_and_store_server_inventory,
         save_targets_config, targets_file_path,
@@ -91,6 +92,11 @@ fn execute_command_service_inner(
         }
     };
 
+    let is_local_target = matches!(
+        target.host.trim(),
+        "" | "localhost" | "127.0.0.1" | "::1"
+    );
+
     if let Some(app) = app {
         emit_command_service_status(
             app,
@@ -101,8 +107,19 @@ fn execute_command_service_inner(
         );
     }
 
-    let output = run_target_shell_command(target_id, command)?;
-    if output.status.success() {
+    let (exit_status, stdout, stderr) = if is_local_target {
+        let output = run_target_shell_command(target_id, command)?;
+        (
+            output.status.code().unwrap_or(if output.status.success() { 0 } else { 1 }) as u32,
+            output.stdout,
+            output.stderr,
+        )
+    } else {
+        let output = execute_target_command_via_russh(target_id, command)?;
+        (output.exit_status, output.stdout, output.stderr)
+    };
+
+    if exit_status == 0 {
         if let Some(app) = app {
             emit_command_service_status(
                 app,
@@ -115,8 +132,8 @@ fn execute_command_service_inner(
         return Ok(());
     }
 
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&stdout).trim().to_string();
 
     let error = if !stderr.is_empty() {
         stderr

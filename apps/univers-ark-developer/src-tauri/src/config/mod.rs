@@ -16,6 +16,10 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 use tauri::{path::BaseDirectory, AppHandle, Manager, Runtime};
+use univers_ark_russh::{
+    execute_chain, ClientOptions as RusshClientOptions, ExecOutput as RusshExecOutput,
+    ResolvedEndpoint, ResolvedEndpointChain, SshConfigResolver,
+};
 
 use self::{
     discovery::{cached_remote_server_inventory, discover_remote_server_inventory, scan_server_containers},
@@ -483,6 +487,72 @@ pub(crate) fn resolve_raw_target(target_id: &str) -> Result<DeveloperTarget, Str
 
     resolve_server_terminal_target(target_id)?
         .ok_or_else(|| format!("Unknown target: {}", target_id))
+}
+
+fn is_local_host(host: &str) -> bool {
+    matches!(host.trim(), "" | "localhost" | "127.0.0.1" | "::1")
+}
+
+pub(crate) fn resolve_target_ssh_chain(target_id: &str) -> Result<ResolvedEndpointChain, String> {
+    let target = resolve_raw_target(target_id)?;
+    let inventory = load_inventory(false)?;
+
+    if let Some(container) = inventory
+        .servers
+        .iter()
+        .flat_map(|server| server.containers.iter())
+        .find(|container| container.target_id == target_id)
+    {
+        let raw_targets_file = read_raw_targets_file()?;
+        let server = raw_targets_file
+            .remote_servers
+            .iter()
+            .find(|server| server.id == container.server_id)
+            .ok_or_else(|| format!("Unknown remote server for {}", target_id))?;
+        let resolver = SshConfigResolver::from_default_path()
+            .map_err(|error| format!("Failed to load SSH config: {}", error))?;
+        let mut chain = resolver
+            .resolve(&server.host)
+            .map_err(|error| format!("Failed to resolve SSH destination {}: {}", server.host, error))?;
+        chain.push(ResolvedEndpoint::new(
+            format!("{}::{}", server.host, container.name),
+            container.ipv4.clone(),
+            container.ssh_user.clone(),
+            22,
+            Vec::new(),
+        ));
+
+        return Ok(chain);
+    }
+
+    if is_local_host(&target.host) {
+        return Err(format!("Target {} uses local host", target_id));
+    }
+
+    let resolver = SshConfigResolver::from_default_path()
+        .map_err(|error| format!("Failed to load SSH config: {}", error))?;
+    resolver
+        .resolve(&target.host)
+        .map_err(|error| format!("Failed to resolve SSH destination {}: {}", target.host, error))
+}
+
+pub(crate) fn execute_target_command_via_russh(
+    target_id: &str,
+    command: &str,
+) -> Result<RusshExecOutput, String> {
+    let chain = resolve_target_ssh_chain(target_id)?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| format!("Failed to build russh runtime: {}", error))?;
+
+    runtime
+        .block_on(execute_chain(
+            &chain,
+            command,
+            &RusshClientOptions::default(),
+        ))
+        .map_err(|error| format!("russh exec failed for {}: {}", target_id, error))
 }
 
 pub(crate) fn run_target_shell_command(
