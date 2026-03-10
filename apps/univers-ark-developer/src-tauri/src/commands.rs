@@ -32,16 +32,17 @@ use crate::{
         emit_tunnel_service_status, sync_registered_web_services,
     },
     settings::{load_app_settings as read_app_settings, save_app_settings as write_app_settings},
-    terminal::{snapshot_for, spawn_terminal_session},
+    terminal::{
+        resize_terminal_session, snapshot_for, spawn_terminal_session, stop_terminal_session,
+        write_to_terminal_session,
+    },
     tunnel::{
         active_tunnel_status, direct_tunnel_status, reconcile_registered_tunnel,
         register_desired_tunnel, remove_tunnel_session_if_current, start_tunnel,
         stop_tunnel_session, sync_desired_tunnels, tunnel_session_is_alive,
     },
 };
-use portable_pty::PtySize;
 use serde::Deserialize;
-use std::io::Write;
 use tauri::{async_runtime, AppHandle, Emitter, State};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -274,8 +275,9 @@ pub(crate) async fn restart_terminal(
             .map_err(|_| String::from("Terminal session state is unavailable"))?
             .remove(&target_id);
 
-        // Drop the old session outside the lock so its reader thread can
-        // acquire the lock to clean up.
+        if let Some(session) = old_session.as_ref() {
+            stop_terminal_session(session);
+        }
         drop(old_session);
 
         let target = resolve_raw_target(&target_id)?;
@@ -429,19 +431,7 @@ pub(crate) fn write_terminal(
         .cloned()
         .ok_or_else(|| format!("No active terminal session for {}", target_id))?;
 
-    let mut writer = session
-        .writer
-        .lock()
-        .map_err(|_| format!("Terminal writer is locked for {}", target_id))?;
-
-    writer
-        .write_all(data.as_bytes())
-        .map_err(|error| format!("Failed to write to {}: {}", target_id, error))?;
-    writer
-        .flush()
-        .map_err(|error| format!("Failed to flush {}: {}", target_id, error))?;
-
-    Ok(())
+    write_to_terminal_session(&target_id, &session, &data)
 }
 
 #[tauri::command]
@@ -459,19 +449,7 @@ pub(crate) fn resize_terminal(
         .cloned()
         .ok_or_else(|| format!("No active terminal session for {}", target_id))?;
 
-    let master = session
-        .master
-        .lock()
-        .map_err(|_| format!("Terminal master is locked for {}", target_id))?;
-
-    master
-        .resize(PtySize {
-            rows: rows.max(12),
-            cols: cols.max(40),
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|error| format!("Failed to resize {}: {}", target_id, error))
+    resize_terminal_session(&target_id, &session, cols, rows)
 }
 
 #[tauri::command]

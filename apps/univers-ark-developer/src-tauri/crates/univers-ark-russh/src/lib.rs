@@ -21,7 +21,7 @@ use thiserror::Error;
 use tokio::{
     io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    sync::oneshot,
+    sync::{mpsc as tokio_mpsc, oneshot},
 };
 
 pub use ssh_config::{ResolvedEndpoint, ResolvedEndpointChain, SshConfigResolver};
@@ -59,6 +59,61 @@ pub struct PtyShellProbeOutput {
     pub marker_found: bool,
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub enum PtySessionEvent {
+    Output(Vec<u8>),
+    Exit(String),
+}
+
+#[derive(Debug)]
+enum PtySessionCommand {
+    Write(Vec<u8>),
+    Resize { cols: u16, rows: u16 },
+    Stop,
+}
+
+#[derive(Clone)]
+pub struct PtySession {
+    control_tx: tokio_mpsc::UnboundedSender<PtySessionCommand>,
+    running: Arc<AtomicBool>,
+    error: Arc<Mutex<Option<String>>>,
+}
+
+impl PtySession {
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::Acquire)
+    }
+
+    pub fn last_error(&self) -> Option<String> {
+        self.error.lock().ok().and_then(|error| error.clone())
+    }
+
+    pub fn write(&self, data: impl Into<Vec<u8>>) -> Result<(), RusshError> {
+        self.control_tx
+            .send(PtySessionCommand::Write(data.into()))
+            .map_err(|_| RusshError::ForwardTask(String::from("terminal session is not available")))
+    }
+
+    pub fn resize(&self, cols: u16, rows: u16) -> Result<(), RusshError> {
+        self.control_tx
+            .send(PtySessionCommand::Resize { cols, rows })
+            .map_err(|_| RusshError::ForwardTask(String::from("terminal session is not available")))
+    }
+
+    pub fn request_stop(&self) {
+        let _ = self.control_tx.send(PtySessionCommand::Stop);
+    }
+
+    pub fn wait_stopped(&self, timeout: Duration) -> bool {
+        let deadline = Instant::now() + timeout;
+        while self.is_running() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+        }
+
+        !self.is_running()
+    }
 }
 
 #[derive(Debug)]
@@ -206,6 +261,86 @@ pub async fn read_file_preview_alias(
         .resolve(destination)
         .map_err(|error| RusshError::ResolveDestination(error.to_string()))?;
     read_file_preview_chain(&chain, path, options).await
+}
+
+pub fn start_pty_session_alias(
+    resolver: &SshConfigResolver,
+    destination: &str,
+    startup_command: &str,
+    cols: u16,
+    rows: u16,
+    options: &ClientOptions,
+) -> Result<(PtySession, mpsc::Receiver<PtySessionEvent>), RusshError> {
+    let chain = resolver
+        .resolve(destination)
+        .map_err(|error| RusshError::ResolveDestination(error.to_string()))?;
+    start_pty_session_chain(&chain, startup_command, cols, rows, options)
+}
+
+pub fn start_pty_session_chain(
+    chain: &ResolvedEndpointChain,
+    startup_command: &str,
+    cols: u16,
+    rows: u16,
+    options: &ClientOptions,
+) -> Result<(PtySession, mpsc::Receiver<PtySessionEvent>), RusshError> {
+    let (control_tx, control_rx) = tokio_mpsc::unbounded_channel();
+    let (event_tx, event_rx) = mpsc::channel();
+    let running = Arc::new(AtomicBool::new(true));
+    let error = Arc::new(Mutex::new(None));
+
+    let session = PtySession {
+        control_tx,
+        running: running.clone(),
+        error: error.clone(),
+    };
+
+    let chain = chain.clone();
+    let startup_command = startup_command.trim().to_string();
+    let options = options.clone();
+
+    thread::spawn(move || {
+        let runtime = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(runtime) => runtime,
+            Err(source) => {
+                let message = format!("failed to build russh terminal runtime: {source}");
+                if let Ok(mut current_error) = error.lock() {
+                    *current_error = Some(message.clone());
+                }
+                running.store(false, Ordering::Release);
+                let _ = event_tx.send(PtySessionEvent::Exit(message));
+                return;
+            }
+        };
+
+        runtime.block_on(async move {
+            let result = run_pty_session(
+                &chain,
+                &startup_command,
+                cols,
+                rows,
+                &options,
+                control_rx,
+                event_tx.clone(),
+            )
+            .await;
+
+            if let Err(source) = result {
+                let message = source.to_string();
+                if let Ok(mut current_error) = error.lock() {
+                    *current_error = Some(message.clone());
+                }
+                let _ = event_tx.send(PtySessionEvent::Exit(message));
+            }
+
+            running.store(false, Ordering::Release);
+        });
+    });
+
+    Ok((session, event_rx))
 }
 
 pub async fn execute_chain(
@@ -631,6 +766,100 @@ async fn connect_via_handle(
     let mut nested = client::connect_stream(config, stream, ClientHandler).await?;
     authenticate_endpoint(&mut nested, endpoint).await?;
     Ok(nested)
+}
+
+async fn run_pty_session(
+    chain: &ResolvedEndpointChain,
+    startup_command: &str,
+    cols: u16,
+    rows: u16,
+    options: &ClientOptions,
+    mut control_rx: tokio_mpsc::UnboundedReceiver<PtySessionCommand>,
+    event_tx: mpsc::Sender<PtySessionEvent>,
+) -> Result<(), RusshError> {
+    let client = connect_chain(chain, options).await?;
+    let mut channel = client.handle.channel_open_session().await?;
+    channel
+        .request_pty(
+            true,
+            "xterm-256color",
+            cols.max(40).into(),
+            rows.max(12).into(),
+            0,
+            0,
+            &[],
+        )
+        .await?;
+    channel.request_shell(true).await?;
+    channel
+        .window_change(cols.max(40).into(), rows.max(12).into(), 0, 0)
+        .await?;
+
+    let mut writer = channel.make_writer();
+    if !startup_command.is_empty() {
+        let command = format!("{startup_command}\n");
+        writer.write_all(command.as_bytes()).await?;
+        writer.flush().await?;
+    }
+
+    let mut exit_reason = String::from("terminal session closed");
+
+    loop {
+        tokio::select! {
+            command = control_rx.recv() => {
+                match command {
+                    Some(PtySessionCommand::Write(data)) => {
+                        writer.write_all(&data).await?;
+                        writer.flush().await?;
+                    }
+                    Some(PtySessionCommand::Resize { cols, rows }) => {
+                        channel
+                            .window_change(cols.max(40).into(), rows.max(12).into(), 0, 0)
+                            .await?;
+                    }
+                    Some(PtySessionCommand::Stop) => {
+                        exit_reason = String::from("terminal session stopped");
+                        let _ = channel.eof().await;
+                        break;
+                    }
+                    None => {
+                        exit_reason = String::from("terminal control channel closed");
+                        let _ = channel.eof().await;
+                        break;
+                    }
+                }
+            }
+            message = channel.wait() => {
+                match message {
+                    Some(ChannelMsg::Data { data }) => {
+                        let _ = event_tx.send(PtySessionEvent::Output(data.to_vec()));
+                    }
+                    Some(ChannelMsg::ExtendedData { data, .. }) => {
+                        let _ = event_tx.send(PtySessionEvent::Output(data.to_vec()));
+                    }
+                    Some(ChannelMsg::ExitStatus { exit_status }) => {
+                        exit_reason = format!("terminal exited with status {exit_status}");
+                    }
+                    Some(ChannelMsg::Close) | Some(ChannelMsg::Eof) => {
+                        break;
+                    }
+                    Some(_) => {}
+                    None => {
+                        exit_reason = String::from("terminal channel closed");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    let _ = client
+        .handle
+        .disconnect(Disconnect::ByApplication, "", "English")
+        .await;
+    let _ = event_tx.send(PtySessionEvent::Exit(exit_reason));
+
+    Ok(())
 }
 
 async fn forward_connection(

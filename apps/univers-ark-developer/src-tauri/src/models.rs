@@ -10,7 +10,7 @@ use std::{
     },
     time::Instant,
 };
-use univers_ark_russh::LocalForward;
+use univers_ark_russh::{LocalForward, PtySession};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -117,6 +117,8 @@ pub(crate) struct DeveloperTarget {
     pub(crate) host: String,
     pub(crate) description: String,
     pub(crate) terminal_command: String,
+    #[serde(default)]
+    pub(crate) terminal_startup_command: String,
     #[serde(default)]
     pub(crate) notes: Vec<String>,
     #[serde(default)]
@@ -531,9 +533,20 @@ pub(crate) struct GithubPullRequestDetail {
 }
 
 #[derive(Clone)]
-pub(crate) struct TerminalSession {
+pub(crate) struct LocalTerminalSession {
     pub(crate) master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     pub(crate) writer: Arc<Mutex<Box<dyn Write + Send>>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct RusshTerminalSession {
+    pub(crate) session: PtySession,
+}
+
+#[derive(Clone)]
+pub(crate) struct TerminalSession {
+    pub(crate) local: Option<LocalTerminalSession>,
+    pub(crate) russh: Option<RusshTerminalSession>,
     pub(crate) output: Arc<Mutex<String>>,
 }
 

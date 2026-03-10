@@ -50,6 +50,7 @@ export interface DeveloperTarget {
   host: string;
   description: string;
   terminalCommand: string;
+  terminalStartupCommand?: string;
   notes: string[];
   workspace: ContainerWorkspace;
   services: DeveloperService[];

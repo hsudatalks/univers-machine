@@ -492,6 +492,9 @@ pub(super) fn build_target_from_container(
         host,
         description,
         terminal_command,
+        terminal_startup_command: String::from(
+            "tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l",
+        ),
         notes,
         workspace,
         services,

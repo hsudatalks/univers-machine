@@ -462,6 +462,7 @@ fn resolve_server_terminal_target(target_id: &str) -> Result<Option<DeveloperTar
         host: server.host.clone(),
         description: format!("Interactive shell on {}.", server.host),
         terminal_command: format!("ssh {}", server.host),
+        terminal_startup_command: String::new(),
         notes: vec![format!("Server shell for {}.", server.host)],
         workspace: ContainerWorkspace::default(),
         services: vec![],

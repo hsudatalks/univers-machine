@@ -239,6 +239,7 @@ mod tests {
             host: String::from("localhost"),
             description: String::new(),
             terminal_command: String::new(),
+            terminal_startup_command: String::new(),
             notes: vec![],
             workspace: ContainerWorkspace {
                 profile: String::from("ark-workbench"),
@@ -268,6 +269,7 @@ mod tests {
             host: String::from("localhost"),
             description: String::new(),
             terminal_command: String::new(),
+            terminal_startup_command: String::new(),
             notes: vec![],
             workspace: ContainerWorkspace::default(),
             services: vec![],
@@ -318,6 +320,7 @@ mod tests {
             host: String::from("localhost"),
             description: String::new(),
             terminal_command: String::new(),
+            terminal_startup_command: String::new(),
             notes: vec![],
             workspace: ContainerWorkspace {
                 profile: String::from("derived"),
