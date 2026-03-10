@@ -129,8 +129,8 @@ export function BrowserPane({
       <header className="panel-header browser-header browser-header-compact tool-panel-header">
         {surfaces.length > 1 ? (
           <select
-            className="browser-url browser-url-compact browser-surface-select"
-            value={activeFrame?.surface.id ?? ""}
+            className="browser-url browser-url-compact"
+            value={activeFrame?.surface.id ?? surfaces[0]?.id ?? ""}
             onChange={(e) => onSelectSurface(e.target.value)}
           >
             {surfaces.map((surface) => (
