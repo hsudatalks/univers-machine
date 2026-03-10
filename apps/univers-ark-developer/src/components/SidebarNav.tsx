@@ -11,7 +11,6 @@ import {
   SidebarMenuSub,
 } from "./ui/sidebar";
 import { ChevronRight, LayoutDashboard, LayoutGrid, Server, SquareTerminal } from "lucide-react";
-import { serverHostTargetId } from "../lib/server-targets";
 
 interface SidebarNavProps {
   activeServerId?: string;
@@ -119,17 +118,23 @@ export function SidebarNav({
         </SidebarGroup>
 
         <SidebarGroup className="sidebar-section">
-          <SidebarGroupLabel>Servers</SidebarGroupLabel>
+          <SidebarGroupLabel>Machines</SidebarGroupLabel>
 
           <SidebarMenu className="sidebar-tree">
             {bootstrap.servers.map((server) => {
               const isExpanded = expandedServerIds.includes(server.id);
               const isServerActive = activeServerId === server.id;
-              const hostTargetId = serverHostTargetId(server.id);
+              const hostContainer = server.containers.find(
+                (container) => container.kind === "host",
+              );
+              const hostTargetId = hostContainer?.targetId;
               const isHostActive = activeTargetId === hostTargetId;
               const branchHasActiveTarget = server.containers.some(
                 (container) => container.targetId === activeTargetId,
-              ) || isHostActive;
+              );
+              const managedContainers = server.containers.filter(
+                (container) => container.kind !== "host",
+              );
 
               return (
                 <SidebarMenuItem className="sidebar-branch" key={server.id}>
@@ -167,9 +172,13 @@ export function SidebarNav({
                     <SidebarMenuSub className="sidebar-children">
                       <SidebarMenuButton
                         className="sidebar-node-leaf"
-                        disabled={!availableTargetSet.has(hostTargetId)}
+                        disabled={!hostTargetId || !availableTargetSet.has(hostTargetId)}
                         isActive={isHostActive}
-                        onClick={() => onSelectContainer(hostTargetId)}
+                        onClick={() => {
+                          if (hostTargetId) {
+                            onSelectContainer(hostTargetId);
+                          }
+                        }}
                         type="button"
                       >
                         <span className="sidebar-node-copy">
@@ -178,12 +187,12 @@ export function SidebarNav({
                         </span>
 
                         <StatusBadge
-                          state={inventoryStateTone(server.state)}
-                          title={titleCase(server.state)}
+                          state={hostContainer?.sshReachable ? "success" : inventoryStateTone(server.state)}
+                          title={hostContainer?.sshState ?? titleCase(server.state)}
                         />
                       </SidebarMenuButton>
 
-                      {server.containers.map((container) => {
+                      {managedContainers.map((container) => {
                         const isActive = activeTargetId === container.targetId;
                         const isAvailable = availableTargetSet.has(container.targetId);
 

@@ -94,7 +94,7 @@ export function GlobalDashboardPage({
             <CardContent className="dashboard-summary-bar">
               <div className="dashboard-summary-copy">
                 <div className="dashboard-summary-item">
-                  <span className="dashboard-meta-label">Servers</span>
+                  <span className="dashboard-meta-label">Machines</span>
                   <span className="dashboard-meta-value">{servers.length}</span>
                 </div>
                 <div className="dashboard-summary-item">
@@ -126,7 +126,7 @@ export function GlobalDashboardPage({
             <CardHeader>
               <CardTitle className="dashboard-section-title">
                 <Server size={16} />
-                Servers
+                Machines
               </CardTitle>
             </CardHeader>
             <CardContent className="server-dashboard-list">
@@ -254,7 +254,7 @@ export function GlobalDashboardPage({
                 <li className="dashboard-action-item">
                   <span className="dashboard-action-title">Dashboard</span>
                   <p className="dashboard-copy">
-                    Software-wide operational view across servers and agent teams.
+                    Software-wide operational view across machines and agent teams.
                   </p>
                 </li>
                 <li className="dashboard-action-item">

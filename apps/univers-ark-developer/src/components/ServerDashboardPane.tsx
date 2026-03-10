@@ -49,7 +49,7 @@ export function ServerDashboardPane({
           <CardContent className="dashboard-summary-bar">
             <div className="dashboard-summary-copy">
               <div className="dashboard-summary-item">
-                <span className="dashboard-meta-label">Server host</span>
+                <span className="dashboard-meta-label">Machine host</span>
                 <span className="dashboard-meta-value">{server.host}</span>
               </div>
               <div className="dashboard-summary-item">
@@ -78,7 +78,7 @@ export function ServerDashboardPane({
           <CardHeader>
             <CardTitle className="dashboard-section-title">
               <Activity size={16} />
-              Server status
+              Machine status
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -94,7 +94,7 @@ export function ServerDashboardPane({
               </div>
               <div className="is-wide">
                 <dt>Mode</dt>
-                <dd>Direct server shell on the left, container terminals on the right.</dd>
+                <dd>Direct machine shell on the left, container terminals on the right.</dd>
               </div>
             </dl>
           </CardContent>
@@ -112,13 +112,13 @@ export function ServerDashboardPane({
               <li className="dashboard-action-item">
                 <span className="dashboard-action-title">Dashboard pane</span>
                 <p className="dashboard-copy">
-                  Server inventory, SSH reachability, and a quick read on container health.
+                  Machine inventory, SSH reachability, and a quick read on container health.
                 </p>
               </li>
               <li className="dashboard-action-item">
                 <span className="dashboard-action-title">Container terminals pane</span>
                 <p className="dashboard-copy">
-                  Live terminal cards for discovered containers, without leaving the server context.
+                  Live terminal cards for discovered containers, without leaving the machine context.
                 </p>
               </li>
             </ul>

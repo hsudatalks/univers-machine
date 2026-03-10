@@ -1,5 +1,5 @@
 import { LayoutDashboard, SquareTerminal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { DeveloperTarget, ManagedServer } from "../types";
 import { TerminalPane } from "./TerminalPane";
 import { Button } from "./ui/button";
@@ -15,29 +15,6 @@ interface ServerPageProps {
 
 type ServerToolPanel = "dashboard" | "terminals";
 
-const SERVER_TERMINAL_TARGET_PREFIX = "server-host::";
-
-function serverTerminalTarget(server: ManagedServer): DeveloperTarget {
-  return {
-    id: `${SERVER_TERMINAL_TARGET_PREFIX}${server.id}`,
-    label: `${server.label} host`,
-    host: server.host,
-    description: server.description,
-    terminalCommand: `ssh ${server.host}`,
-    notes: [],
-    workspace: {
-      profile: "",
-      defaultTool: "dashboard",
-      projectPath: "",
-      filesRoot: "",
-      primaryBrowserServiceId: "",
-      tmuxCommandServiceId: "",
-    },
-    services: [],
-    surfaces: [],
-  };
-}
-
 export function ServerPage({
   onOpenWorkspace,
   pageVisible,
@@ -48,26 +25,29 @@ export function ServerPage({
   const reachableContainers = server.containers.filter(
     (container) => container.sshReachable,
   ).length;
-  const terminalTarget = useMemo(() => serverTerminalTarget(server), [server]);
+  const hostContainer = server.containers.find((container) => container.kind === "host");
+  const terminalTarget = hostContainer
+    ? resolveTarget(hostContainer.targetId)
+    : undefined;
 
   return (
     <>
       <header className="content-header">
         <div className="content-header-copy">
-          <span className="panel-title">Server</span>
+          <span className="panel-title">Machine</span>
           <h1 className="content-title content-title-container">{server.label}</h1>
           <p className="panel-description">{server.description}</p>
         </div>
 
         <div className="content-header-tools">
           <Button
-            aria-label="Server dashboard"
+            aria-label="Machine dashboard"
             isActive={activeTool === "dashboard"}
             onClick={() => {
               setActiveTool("dashboard");
             }}
             size="icon"
-            title="Server dashboard"
+            title="Machine dashboard"
             variant={activeTool === "dashboard" ? "default" : "ghost"}
           >
             <LayoutDashboard size={16} />
@@ -96,11 +76,20 @@ export function ServerPage({
       <section className="page-section">
         <div className="server-workspace">
           <article className="panel terminal-panel">
-            <TerminalPane
-              active={pageVisible}
-              target={terminalTarget}
-              title={`${server.label} server`}
-            />
+            {terminalTarget ? (
+              <TerminalPane
+                active={pageVisible}
+                target={terminalTarget}
+                title={`${server.label} host`}
+              />
+            ) : (
+              <section className="state-panel">
+                <span className="state-label">Host unavailable</span>
+                <p className="state-copy">
+                  The Host workspace for this machine is not available in the current inventory.
+                </p>
+              </section>
+            )}
           </article>
 
           <div className={`server-pane-slot ${activeTool === "dashboard" ? "" : "is-hidden"}`}>

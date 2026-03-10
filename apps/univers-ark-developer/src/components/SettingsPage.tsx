@@ -92,7 +92,7 @@ export function SettingsPage({
         <div className="settings-header-copy">
           <span className="panel-title">Settings</span>
           <p className="panel-description settings-description">
-            Application configuration and server inventory
+            Application configuration and machine inventory
           </p>
         </div>
       </header>
@@ -108,7 +108,7 @@ export function SettingsPage({
               ["appearance", "Appearance"],
               ["configuration", "Configuration"],
               ["profiles", "Profiles"],
-              ["servers", "Servers"],
+              ["servers", "Machines"],
             ] as Array<[SettingsTab, string]>
           ).map(([tab, label]) => (
             <TabsTrigger className="settings-tab" key={tab} value={tab}>
@@ -198,15 +198,15 @@ export function SettingsPage({
             <section className="settings-section">
             <div className="settings-section-heading">
               <h3 className="settings-section-title">
-                Servers
+                Machines
                 <span className="settings-count">{servers.length}</span>
               </h3>
               <Button onClick={() => setIsCreatingServer(true)} size="sm" variant="outline">
-                Add server
+                Add machine
               </Button>
             </div>
             {servers.length === 0 ? (
-              <p className="settings-empty">No servers configured.</p>
+              <p className="settings-empty">No machines configured.</p>
             ) : (
               <div className="settings-server-list">
                 {servers.map((server) => (

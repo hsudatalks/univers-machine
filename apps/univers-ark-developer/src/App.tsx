@@ -46,7 +46,6 @@ import {
   isBrowserToolPanel,
   type ActiveView,
 } from "./lib/view-types";
-import { isServerHostTargetId } from "./lib/server-targets";
 const DEFAULT_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TOOL_PANEL_WIDTH_REM = 22;
@@ -169,7 +168,6 @@ function App() {
   const {
     activeContainerServer,
     activeContainerTarget,
-    hostTargets,
     overviewContainers,
     overviewTerminalTargets,
     reachableContainerCount,
@@ -263,16 +261,9 @@ function App() {
           return undefined;
         }
 
-        return bootstrap.servers.find((server) => {
-          const hostTarget = hostTargets.find((target) => target.id === targetId);
-          if (hostTarget) {
-            return server.id === hostTarget.id.replace(/^server-host::/, "");
-          }
-
-          return server.containers.some(
-            (container) => container.targetId === targetId,
-          );
-        });
+        return bootstrap.servers.find((server) =>
+          server.containers.some((container) => container.targetId === targetId),
+        );
       };
 
       setActiveView((current) => {
@@ -305,7 +296,7 @@ function App() {
     return () => {
       unlistenParentView?.();
     };
-  }, [bootstrap, hostTargets, setExpandedServerIds]);
+  }, [bootstrap, setExpandedServerIds]);
 
   if (error) {
     return <ShellState label="Error" message={error} />;
@@ -325,7 +316,7 @@ function App() {
         : activeView.kind === "settings"
           ? "Settings"
           : activeView.kind === "server"
-            ? `Server ${visitedServers.find((server) => server.id === activeView.serverId)?.label ?? activeView.serverId}`
+            ? `Machine ${visitedServers.find((server) => server.id === activeView.serverId)?.label ?? activeView.serverId}`
             : `Container ${activeContainerTarget?.label ?? activeView.targetId}`;
 
   return (
@@ -343,7 +334,7 @@ function App() {
                   : undefined
             }
             activeTargetId={activeView.kind === "container" ? activeView.targetId : undefined}
-            availableTargetIds={[...bootstrap.targets, ...hostTargets].map((target) => target.id)}
+            availableTargetIds={bootstrap.targets.map((target) => target.id)}
           bootstrap={bootstrap}
           expandedServerIds={expandedServerIds}
           isDashboardActive={activeView.kind === "dashboard"}
@@ -524,10 +515,9 @@ function App() {
                       }
                     }}
                     onRestartContainer={
-                      target.id.includes("::") && !isServerHostTargetId(target.id)
+                      target.containerKind === "managed"
                         ? async () => {
-                            const [serverId, containerName] = target.id.split("::", 2);
-                            await restartContainer(serverId, containerName);
+                            await restartContainer(target.machineId, target.containerId);
                           }
                         : undefined
                     }
