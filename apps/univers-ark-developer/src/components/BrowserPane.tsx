@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import { releaseBrowserFrames, syncBrowserFrames } from "../lib/browser-cache";
 import { openExternalLink } from "../lib/tauri";
 import { Button } from "./ui/button";
@@ -20,10 +21,12 @@ export interface BrowserFrameInstance {
 
 interface BrowserPaneProps {
   activeFrame?: BrowserFrameInstance;
+  activeServiceId: string | null;
   isVisible: boolean;
   onReload: () => void;
-  onRestart: () => void;
+  onSelectService: (serviceId: string) => void;
   retainedFrames: BrowserFrameInstance[];
+  services: Array<{ id: string; label: string }>;
   slotLabel: string;
 }
 
@@ -37,14 +40,17 @@ const TUNNEL_STATUS_LABELS: Record<string, string> = {
 
 export function BrowserPane({
   activeFrame,
+  activeServiceId,
   isVisible,
   onReload,
-  onRestart,
+  onSelectService,
   retainedFrames,
+  services,
   slotLabel,
 }: BrowserPaneProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const ownerId = useMemo(() => Symbol(slotLabel), [slotLabel]);
+  const ownerId = useMemo(() => Symbol("browser-pane"), []);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const tunnelStatusLabel = activeFrame
     ? TUNNEL_STATUS_LABELS[activeFrame.status.state] ?? activeFrame.status.state
     : "Unavailable";
@@ -87,14 +93,74 @@ export function BrowserPane({
     };
   }, [ownerId]);
 
+  useEffect(() => {
+    if (!isFullscreen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setIsFullscreen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    if (!isVisible) {
+      setIsFullscreen(false);
+    }
+  }, [isVisible]);
+
   return (
-    <article className={`panel browser-panel tool-panel ${isVisible ? "" : "is-hidden"}`}>
+    <article
+      className={`panel browser-panel tool-panel ${isVisible ? "" : "is-hidden"} ${isFullscreen ? "is-pane-fullscreen" : ""}`}
+    >
       <header className="panel-header browser-header browser-header-compact tool-panel-header">
-        <code className="browser-url browser-url-compact">
-          {activeLocalUrl ?? "No local browser URL"}
-        </code>
+        <div className="browser-heading browser-heading-compact">
+          <select
+            aria-label="Select web service"
+            className="browser-service-select"
+            disabled={services.length === 0}
+            onChange={(event) => {
+              if (event.target.value) {
+                onSelectService(event.target.value);
+              }
+            }}
+            value={activeServiceId ?? ""}
+          >
+            {services.length === 0 ? <option value="">No web services</option> : null}
+            {services.map((service) => (
+              <option key={service.id} value={service.id}>
+                {service.label}
+              </option>
+            ))}
+          </select>
+
+          <code className="browser-url browser-url-compact">
+            {activeLocalUrl ?? "No local browser URL"}
+          </code>
+        </div>
 
         <div className="browser-bar">
+          <Button
+            aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen browser"}
+            isActive={isFullscreen}
+            onClick={() => {
+              setIsFullscreen((current) => !current);
+            }}
+            size="icon"
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen browser"}
+            variant={isFullscreen ? "default" : "ghost"}
+          >
+            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </Button>
           {compactStatus ? (
             <span
               aria-label={tunnelStatusLabel}
@@ -106,14 +172,6 @@ export function BrowserPane({
               {tunnelStatusLabel}
             </Badge>
           )}
-          <Button
-            disabled={!activeFrame?.surface.tunnelCommand}
-            onClick={onRestart}
-            size="sm"
-            variant="outline"
-          >
-            Restart Tunnel
-          </Button>
           <Button
             disabled={!activeFrame}
             onClick={onReload}

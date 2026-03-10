@@ -18,7 +18,9 @@ interface ContainerPageProps {
   activeTool: ContainerToolPanel;
   dashboardRefreshSeconds: number;
   browserFrame?: BrowserFrameInstance;
+  browserFrames: BrowserFrameInstance[];
   browserPanel: ContainerToolPanel | null;
+  browserServices: Array<{ id: string; label: string }>;
   browserSurface?: DeveloperSurface;
   primaryBrowserStatus?: TunnelStatus;
   primaryBrowserSurface?: DeveloperSurface;
@@ -26,8 +28,6 @@ interface ContainerPageProps {
   onExecuteCommandService: (serviceId: string, action: "restart") => Promise<void>;
   onOpenBrowserService: (serviceId: string) => void;
   onReloadBrowser: () => void;
-  onRestartBrowser: () => void;
-  onRestartBrowserService: (serviceId: string) => void;
   onRestartContainer?: () => Promise<void>;
   onSelectTool: (panel: ContainerToolPanel) => void;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -42,7 +42,9 @@ export function ContainerPage({
   activeTool,
   dashboardRefreshSeconds,
   browserFrame,
+  browserFrames,
   browserPanel,
+  browserServices,
   browserSurface,
   primaryBrowserStatus,
   primaryBrowserSurface,
@@ -50,8 +52,6 @@ export function ContainerPage({
   onExecuteCommandService,
   onOpenBrowserService,
   onReloadBrowser,
-  onRestartBrowser,
-  onRestartBrowserService,
   onRestartContainer,
   onSelectTool,
   onStartResize,
@@ -247,7 +247,6 @@ export function ContainerPage({
             <ServicesPane
               activeBrowserServiceId={browserSurface?.id ?? null}
               onOpenBrowserService={onOpenBrowserService}
-              onRestartBrowserService={onRestartBrowserService}
               onRunCommandService={onExecuteCommandService}
               serviceStatuses={serviceStatuses}
               target={target}
@@ -261,10 +260,12 @@ export function ContainerPage({
           {browserSurface ? (
             <BrowserPane
               activeFrame={browserFrame}
+              activeServiceId={browserSurface.id}
               isVisible={activeTool === browserPanel}
               onReload={onReloadBrowser}
-              onRestart={onRestartBrowser}
-              retainedFrames={browserFrame ? [browserFrame] : []}
+              onSelectService={onOpenBrowserService}
+              retainedFrames={browserFrames}
+              services={browserServices}
               slotLabel={browserSurface.label}
             />
           ) : null}

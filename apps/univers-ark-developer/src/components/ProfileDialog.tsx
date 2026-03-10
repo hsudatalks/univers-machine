@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
 import {
   createDefaultCommandService,
@@ -90,6 +90,7 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const shouldCloseFromBackdropRef = useRef(false);
 
   const isCreateMode = !profileId;
 
@@ -241,11 +242,29 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
   };
 
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
+    <div
+      className="dialog-backdrop"
+      onClick={(event) => {
+        if (
+          shouldCloseFromBackdropRef.current &&
+          event.target === event.currentTarget
+        ) {
+          onClose();
+        }
+        shouldCloseFromBackdropRef.current = false;
+      }}
+      onPointerDown={(event) => {
+        shouldCloseFromBackdropRef.current =
+          event.target === event.currentTarget;
+      }}
+    >
       <div
         aria-label={isCreateMode ? "Create profile" : `${currentProfileId} profile settings`}
         className="dialog-panel"
         onClick={(event) => event.stopPropagation()}
+        onPointerDown={() => {
+          shouldCloseFromBackdropRef.current = false;
+        }}
         role="dialog"
       >
         <header className="dialog-header">

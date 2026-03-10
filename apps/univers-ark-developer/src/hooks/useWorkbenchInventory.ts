@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import type { AppBootstrap, DeveloperTarget, ManagedServer } from "../types";
 import type { ActiveView } from "../lib/view-types";
+import {
+  serverHostTarget,
+  serverIdFromHostTargetId,
+} from "../lib/server-targets";
 
 type OverviewContainerEntry = {
   container: ManagedServer["containers"][number];
@@ -12,6 +16,11 @@ function serverForTargetId(
   servers: ManagedServer[],
   targetId: string,
 ): ManagedServer | undefined {
+  const hostServerId = serverIdFromHostTargetId(targetId);
+  if (hostServerId) {
+    return servers.find((server) => server.id === hostServerId);
+  }
+
   return servers.find((server) =>
     server.containers.some((container) => container.targetId === targetId),
   );
@@ -22,9 +31,20 @@ export function useWorkbenchInventory(
   activeView: ActiveView,
   visitedServerIds: string[],
 ) {
-  const targetById = useMemo(
-    () => new Map(bootstrap?.targets.map((target) => [target.id, target]) ?? []),
+  const hostTargets = useMemo(
+    () => bootstrap?.servers.map((server) => serverHostTarget(server)) ?? [],
     [bootstrap],
+  );
+
+  const targetById = useMemo(
+    () =>
+      new Map(
+        [...(bootstrap?.targets ?? []), ...hostTargets].map((target) => [
+          target.id,
+          target,
+        ]),
+      ),
+    [bootstrap, hostTargets],
   );
 
   const managedTargetIds = useMemo(
@@ -74,12 +94,12 @@ export function useWorkbenchInventory(
   );
 
   const activeContainerTarget = useMemo(() => {
-    if (!bootstrap || activeView.kind !== "container") {
+    if (activeView.kind !== "container") {
       return undefined;
     }
 
-    return bootstrap.targets.find((target) => target.id === activeView.targetId);
-  }, [activeView, bootstrap]);
+    return targetById.get(activeView.targetId);
+  }, [activeView, targetById]);
 
   const activeContainerServer = useMemo(
     () =>
@@ -101,6 +121,7 @@ export function useWorkbenchInventory(
     overviewContainers,
     overviewTerminalTargets,
     reachableContainerCount,
+    hostTargets,
     standaloneTargets,
     targetById,
     visitedServers,

@@ -12,6 +12,7 @@ import {
   browserSurfaceById,
   primaryBrowserSurface,
   resolveDefaultToolPanel,
+  webServices,
 } from "./lib/target-services";
 import "./App.css";
 import { useAppearance } from "./hooks/useAppearance";
@@ -40,6 +41,7 @@ import {
   isBrowserToolPanel,
   type ActiveView,
 } from "./lib/view-types";
+import { isServerHostTargetId } from "./lib/server-targets";
 const DEFAULT_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TOOL_PANEL_WIDTH_REM = 22;
@@ -162,6 +164,7 @@ function App() {
   const {
     activeContainerServer,
     activeContainerTarget,
+    hostTargets,
     overviewContainers,
     overviewTerminalTargets,
     reachableContainerCount,
@@ -201,7 +204,6 @@ function App() {
     containerTools,
     prepareContainerView,
     reloadBrowserFrame,
-    restartBrowserTunnel,
     selectContainerTool,
     startContainerResize,
     toggleTerminalCollapsed,
@@ -214,6 +216,7 @@ function App() {
     onSetOverviewFocus: setOverviewFocusedTargetId,
     onTunnelStatus: setTunnelStatus,
     orderedTargetIds: overviewTerminalTargets.map((target) => target.id),
+    serviceStatuses,
     tunnelStatuses,
     targetById,
   });
@@ -271,7 +274,7 @@ function App() {
                   : undefined
             }
             activeTargetId={activeView.kind === "container" ? activeView.targetId : undefined}
-            availableTargetIds={bootstrap.targets.map((target) => target.id)}
+            availableTargetIds={[...bootstrap.targets, ...hostTargets].map((target) => target.id)}
           bootstrap={bootstrap}
           expandedServerIds={expandedServerIds}
           isOverviewActive={activeView.kind === "overview"}
@@ -362,25 +365,40 @@ function App() {
                 : undefined;
             const browserPanel = browserSurface
               ? (`browser:${browserSurface.id}` as const)
-              : isBrowserToolPanel(activeTool)
-                ? activeTool
-                : null;
+              : primarySurface
+                ? (`browser:${primarySurface.id}` as const)
+                : isBrowserToolPanel(activeTool)
+                  ? activeTool
+                  : null;
             const browserStatus =
               browserSurface && target
                 ? tunnelStatuses[surfaceKey(target.id, browserSurface.id)] ??
                   fallbackTunnelStatus(target.id, browserSurface)
                 : undefined;
+            const browserFrames: BrowserFrameInstance[] = target
+              ? webServices(target).map((service) => {
+                  const surface = service.web;
+                  const panel = `browser:${surface.id}` as const;
+                  const status =
+                    tunnelStatuses[surfaceKey(target.id, surface.id)] ??
+                    fallbackTunnelStatus(target.id, surface);
+
+                  return {
+                    cacheKey: surfaceKey(target.id, surface.id),
+                    frameVersion:
+                      browserFrameVersions[surfaceKey(target.id, surface.id)] ?? 0,
+                    isActive: isVisible && activeTool === panel,
+                    status,
+                    surface,
+                    target,
+                  };
+                })
+              : [];
             const browserFrame: BrowserFrameInstance | undefined =
               browserSurface && browserStatus && target
-                ? {
-                    cacheKey: surfaceKey(target.id, browserSurface.id),
-                    frameVersion:
-                      browserFrameVersions[surfaceKey(target.id, browserSurface.id)] ?? 0,
-                    isActive: isVisible && activeTool === browserPanel,
-                    status: browserStatus,
-                    surface: browserSurface,
-                    target,
-                  }
+                ? browserFrames.find(
+                    (frame) => frame.surface.id === browserSurface.id,
+                  )
                 : undefined;
             const primaryBrowserStatus =
               primarySurface && target
@@ -396,7 +414,16 @@ function App() {
                   <ContainerPage
                     activeTool={activeTool}
                     browserFrame={browserFrame}
+                    browserFrames={browserFrames}
                     browserPanel={browserPanel}
+                    browserServices={
+                      target
+                        ? webServices(target).map((service) => ({
+                            id: service.id,
+                            label: service.label,
+                          }))
+                        : []
+                    }
                     browserSurface={browserSurface}
                     dashboardRefreshSeconds={appSettings.dashboardRefreshSeconds}
                     primaryBrowserStatus={primaryBrowserStatus}
@@ -413,16 +440,8 @@ function App() {
                         reloadBrowserFrame(target.id, browserSurface.id);
                       }
                     }}
-                    onRestartBrowser={() => {
-                      if (browserSurface) {
-                        restartBrowserTunnel(target.id, browserSurface.id);
-                      }
-                    }}
-                    onRestartBrowserService={(serviceId) => {
-                      restartBrowserTunnel(target.id, serviceId);
-                    }}
                     onRestartContainer={
-                      target.id.includes("::")
+                      target.id.includes("::") && !isServerHostTargetId(target.id)
                         ? async () => {
                             const [serverId, containerName] = target.id.split("::", 2);
                             await restartContainer(serverId, containerName);

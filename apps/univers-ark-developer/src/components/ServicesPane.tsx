@@ -1,4 +1,4 @@
-import { Globe, PlugZap, RotateCw, SquareTerminal } from "lucide-react";
+import { Globe, PlugZap, SquareTerminal } from "lucide-react";
 import { openExternalLink } from "../lib/tauri";
 import {
   commandServices,
@@ -17,7 +17,6 @@ import { Separator } from "./ui/separator";
 interface ServicesPaneProps {
   activeBrowserServiceId: string | null;
   onOpenBrowserService: (serviceId: string) => void;
-  onRestartBrowserService: (serviceId: string) => void;
   onRunCommandService: (serviceId: string, action: "restart") => Promise<void>;
   serviceStatuses: Record<string, ServiceStatus>;
   target: DeveloperTarget;
@@ -55,13 +54,11 @@ function statusVariant(
 function WebServiceRow({
   activeBrowserServiceId,
   onOpenBrowserService,
-  onRestartBrowserService,
   service,
   status,
 }: {
   activeBrowserServiceId: string | null;
   onOpenBrowserService: (serviceId: string) => void;
-  onRestartBrowserService: (serviceId: string) => void;
   service: WebDeveloperService;
   status?: ServiceStatus;
 }) {
@@ -102,16 +99,6 @@ function WebServiceRow({
           variant="outline"
         >
           Open
-        </Button>
-        <Button
-          onClick={() => {
-            onRestartBrowserService(service.id);
-          }}
-          size="icon"
-          title="Restart service tunnel"
-          variant="ghost"
-        >
-          <RotateCw size={14} />
         </Button>
       </div>
     </div>
@@ -187,7 +174,6 @@ function CommandServiceRow({
 export function ServicesPane({
   activeBrowserServiceId,
   onOpenBrowserService,
-  onRestartBrowserService,
   onRunCommandService,
   serviceStatuses,
   target,
@@ -217,7 +203,6 @@ export function ServicesPane({
                     activeBrowserServiceId={activeBrowserServiceId}
                     key={service.id}
                     onOpenBrowserService={onOpenBrowserService}
-                    onRestartBrowserService={onRestartBrowserService}
                     service={service}
                     status={serviceStatuses[serviceKey(target.id, service.id)]}
                   />

@@ -11,6 +11,7 @@ import {
   SidebarMenuSub,
 } from "./ui/sidebar";
 import { ChevronRight, LayoutGrid, Server, SquareTerminal } from "lucide-react";
+import { serverHostTargetId } from "../lib/server-targets";
 
 interface SidebarNavProps {
   activeServerId?: string;
@@ -107,9 +108,11 @@ export function SidebarNav({
             {bootstrap.servers.map((server) => {
               const isExpanded = expandedServerIds.includes(server.id);
               const isServerActive = activeServerId === server.id;
+              const hostTargetId = serverHostTargetId(server.id);
+              const isHostActive = activeTargetId === hostTargetId;
               const branchHasActiveTarget = server.containers.some(
                 (container) => container.targetId === activeTargetId,
-              );
+              ) || isHostActive;
 
               return (
                 <SidebarMenuItem className="sidebar-branch" key={server.id}>
@@ -145,6 +148,24 @@ export function SidebarNav({
 
                   {isExpanded ? (
                     <SidebarMenuSub className="sidebar-children">
+                      <SidebarMenuButton
+                        className="sidebar-node-leaf"
+                        disabled={!availableTargetSet.has(hostTargetId)}
+                        isActive={isHostActive}
+                        onClick={() => onSelectContainer(hostTargetId)}
+                        type="button"
+                      >
+                        <span className="sidebar-node-copy">
+                          <Server size={14} />
+                          <span className="sidebar-node-label">Host</span>
+                        </span>
+
+                        <StatusBadge
+                          state={inventoryStateTone(server.state)}
+                          title={titleCase(server.state)}
+                        />
+                      </SidebarMenuButton>
+
                       {server.containers.map((container) => {
                         const isActive = activeTargetId === container.targetId;
                         const isAvailable = availableTargetSet.has(container.targetId);

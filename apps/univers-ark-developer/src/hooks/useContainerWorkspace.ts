@@ -8,7 +8,6 @@ import {
 import {
   listenNextContainerRequested,
   listenPreviousContainerRequested,
-  restartTunnel,
 } from "../lib/tauri";
 import { warmTargetTunnels } from "../lib/tunnel-manager";
 import {
@@ -20,9 +19,10 @@ import {
 import {
   browserSurfaceById,
   primaryBrowserSurface,
+  webServices,
   resolveDefaultToolPanel,
 } from "../lib/target-services";
-import type { DeveloperTarget, TunnelStatus } from "../types";
+import type { DeveloperTarget, ServiceStatus, TunnelStatus } from "../types";
 
 const IS_MAC = navigator.platform.toUpperCase().includes("MAC");
 
@@ -46,6 +46,7 @@ interface UseContainerWorkspaceOptions {
   onSetOverviewFocus: (targetId: string) => void;
   onTunnelStatus: (status: TunnelStatus) => void;
   orderedTargetIds: string[];
+  serviceStatuses: Record<string, ServiceStatus>;
   tunnelStatuses: Record<string, TunnelStatus>;
   targetById: Map<string, DeveloperTarget>;
 }
@@ -58,6 +59,16 @@ function isReadyTunnelState(state: string | undefined): boolean {
   return state === "direct" || state === "running";
 }
 
+function isReadyServiceState(state: string | undefined): boolean {
+  return (
+    state === "running" ||
+    state === "ready" ||
+    state === "healthy" ||
+    state === "loaded" ||
+    state === "direct"
+  );
+}
+
 export function useContainerWorkspace({
   activeView,
   clampTerminalPanelWidth,
@@ -67,6 +78,7 @@ export function useContainerWorkspace({
   onSetOverviewFocus,
   onTunnelStatus,
   orderedTargetIds,
+  serviceStatuses,
   tunnelStatuses,
   targetById,
 }: UseContainerWorkspaceOptions) {
@@ -84,6 +96,7 @@ export function useContainerWorkspace({
   >({});
   const [activeResize, setActiveResize] = useState<ResizeSession | null>(null);
   const previousTunnelStatesRef = useRef<Record<string, string | undefined>>({});
+  const previousServiceStatesRef = useRef<Record<string, string | undefined>>({});
 
   useEffect(() => {
     const previousStates = previousTunnelStatesRef.current;
@@ -116,6 +129,41 @@ export function useContainerWorkspace({
       });
     }
   }, [tunnelStatuses]);
+
+  useEffect(() => {
+    const previousStates = previousServiceStatesRef.current;
+    const surfacesToReload = new Set<string>();
+
+    for (const target of targetById.values()) {
+      for (const service of webServices(target)) {
+        const key = surfaceKey(target.id, service.id);
+        const nextState = serviceStatuses[key]?.state;
+        const previousState = previousStates[key];
+
+        if (!isReadyServiceState(previousState) && isReadyServiceState(nextState)) {
+          surfacesToReload.add(key);
+        }
+
+        previousStates[key] = nextState;
+      }
+    }
+
+    if (surfacesToReload.size > 0) {
+      const keysToReload = [...surfacesToReload];
+
+      queueMicrotask(() => {
+        setBrowserFrameVersions((current) => {
+          const next = { ...current };
+
+          for (const key of keysToReload) {
+            next[key] = (next[key] ?? 0) + 1;
+          }
+
+          return next;
+        });
+      });
+    }
+  }, [serviceStatuses, targetById]);
 
   useEffect(() => {
     if (!activeResize) {
@@ -366,26 +414,6 @@ export function useContainerWorkspace({
     }));
   }
 
-  function restartBrowserTunnel(targetId: string, surfaceId: string) {
-    void restartTunnel(targetId, surfaceId)
-      .then((status) => {
-        onTunnelStatus(status);
-      })
-      .catch((restartError) => {
-        onTunnelStatus({
-          targetId,
-          serviceId: surfaceId,
-          surfaceId,
-          localUrl: null,
-          state: "error",
-          message:
-            restartError instanceof Error
-              ? restartError.message
-              : "Failed to restart browser tunnel.",
-        });
-      });
-  }
-
   return {
     browserFrameVersions,
     containerTerminalCollapsed,
@@ -393,7 +421,6 @@ export function useContainerWorkspace({
     containerTools,
     prepareContainerView,
     reloadBrowserFrame,
-    restartBrowserTunnel,
     selectContainerTool,
     startContainerResize,
     toggleTerminalCollapsed,

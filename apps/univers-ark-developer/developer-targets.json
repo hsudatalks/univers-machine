@@ -1,8 +1,20 @@
 {
   "selectedTargetId": "local",
-  "defaultProfile": "ark-workbench",
+  "defaultProfile": "ark-default",
   "profiles": {
+    "ark-default": {
+      "workspace": {
+        "profile": "ark-default",
+        "defaultTool": "dashboard",
+        "projectPath": "",
+        "filesRoot": "~/repos",
+        "primaryWebServiceId": "",
+        "tmuxCommandServiceId": ""
+      },
+      "services": []
+    },
     "ark-workbench": {
+      "extends": "ark-default",
       "workspace": {
         "profile": "ark-workbench",
         "defaultTool": "dashboard",

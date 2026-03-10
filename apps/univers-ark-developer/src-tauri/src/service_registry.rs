@@ -23,6 +23,19 @@ fn upsert_service_status<R: Runtime>(app: &AppHandle<R>, status: ServiceStatus) 
     let _ = app.emit(SERVICE_STATUS_EVENT, status);
 }
 
+fn existing_service_status<R: Runtime>(
+    app: &AppHandle<R>,
+    target_id: &str,
+    service_id: &str,
+) -> Option<ServiceStatus> {
+    let statuses = app
+        .try_state::<ServiceState>()
+        .map(|service_state| service_state.statuses.clone())?;
+    let statuses = statuses.lock().ok()?;
+
+    statuses.get(&service_key(target_id, service_id)).cloned()
+}
+
 fn register_service<R: Runtime>(
     app: &AppHandle<R>,
     target_id: &str,
@@ -133,6 +146,7 @@ pub(crate) fn emit_dashboard_service_statuses<R: Runtime>(
             .unwrap_or(DeveloperServiceKind::Endpoint);
 
         register_service(app, target_id, &service.id, kind);
+        let existing_status = existing_service_status(app, target_id, &service.id);
         upsert_service_status(
             app,
             ServiceStatus {
@@ -141,7 +155,11 @@ pub(crate) fn emit_dashboard_service_statuses<R: Runtime>(
                 kind,
                 state: service.status.clone(),
                 message: service.detail.clone(),
-                local_url: service.url.clone(),
+                local_url: if kind == DeveloperServiceKind::Web {
+                    existing_status.and_then(|status| status.local_url)
+                } else {
+                    service.url.clone()
+                },
             },
         );
     }
