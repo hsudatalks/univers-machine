@@ -4,25 +4,25 @@ import { primaryBrowserService } from "./target-services";
 
 const desiredRegistrations = new Map<
   string,
-  { targetId: string; surfaceId: string }
+  { targetId: string; serviceId: string }
 >();
 let inflightSync: Promise<TunnelStatus[] | undefined> | null = null;
 
-function tunnelKey(targetId: string, surfaceId: string): string {
-  return `${targetId}::${surfaceId}`;
+function tunnelKey(targetId: string, serviceId: string): string {
+  return `${targetId}::${serviceId}`;
 }
 
-function defaultWarmSurfaceIds(target: DeveloperTarget): string[] {
+function defaultWarmServiceIds(target: DeveloperTarget): string[] {
   const primaryService = primaryBrowserService(target);
   return primaryService ? [primaryService.id] : [];
 }
 
 export function registerTunnelRequests(
-  requests: Array<{ targetId: string; surfaceId: string }>,
+  requests: Array<{ targetId: string; serviceId: string }>,
   onStatus?: (status: TunnelStatus) => void,
 ) {
   for (const request of requests) {
-    desiredRegistrations.set(tunnelKey(request.targetId, request.surfaceId), request);
+    desiredRegistrations.set(tunnelKey(request.targetId, request.serviceId), request);
   }
 
   if (inflightSync) {
@@ -51,11 +51,11 @@ export function registerTunnelRequests(
 
 export function warmTargetTunnels(
   target: DeveloperTarget,
-  surfaceIds: string[] = defaultWarmSurfaceIds(target),
+  serviceIds: string[] = defaultWarmServiceIds(target),
   onStatus?: (status: TunnelStatus) => void,
 ) {
   void registerTunnelRequests(
-    surfaceIds.map((surfaceId) => ({ targetId: target.id, surfaceId })),
+    serviceIds.map((serviceId) => ({ targetId: target.id, serviceId })),
     onStatus,
   );
 }

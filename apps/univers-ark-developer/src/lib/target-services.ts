@@ -82,7 +82,9 @@ export function webSurfaceById(
 }
 
 export function primaryWebService(target: DeveloperTarget): WebDeveloperService | undefined {
-  const preferredId = target.workspace?.primaryBrowserServiceId?.trim();
+  const preferredId =
+    target.workspace?.primaryWebServiceId?.trim() ||
+    target.workspace?.primaryBrowserServiceId?.trim();
 
   if (preferredId) {
     const preferred = webServiceById(target, preferredId);

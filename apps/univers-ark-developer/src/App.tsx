@@ -87,6 +87,7 @@ function fallbackTunnelStatus(
   if (!surface.tunnelCommand.trim()) {
     return {
       targetId,
+      serviceId: surface.id,
       surfaceId: surface.id,
       localUrl: surface.localUrl,
       state: "direct",
@@ -96,6 +97,7 @@ function fallbackTunnelStatus(
 
   return {
     targetId,
+    serviceId: surface.id,
     surfaceId: surface.id,
     localUrl: surface.localUrl,
     state: "starting",

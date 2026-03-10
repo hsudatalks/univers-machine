@@ -39,6 +39,7 @@ export interface ContainerWorkspace {
   defaultTool: string;
   projectPath: string;
   filesRoot: string;
+  primaryWebServiceId?: string;
   primaryBrowserServiceId: string;
   tmuxCommandServiceId: string;
 }
@@ -209,6 +210,7 @@ export interface TerminalExitEvent {
 
 export interface TunnelStatus {
   targetId: string;
+  serviceId: string;
   surfaceId: string;
   localUrl: string | null;
   state: string;

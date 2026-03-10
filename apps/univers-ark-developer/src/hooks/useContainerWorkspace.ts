@@ -371,6 +371,7 @@ export function useContainerWorkspace({
       .catch((restartError) => {
         onTunnelStatus({
           targetId,
+          serviceId: surfaceId,
           surfaceId,
           localUrl: null,
           state: "error",

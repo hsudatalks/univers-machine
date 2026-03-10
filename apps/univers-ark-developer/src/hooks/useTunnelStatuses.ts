@@ -2,8 +2,12 @@ import { useEffect, useState } from "react";
 import { listenTunnelStatus } from "../lib/tauri";
 import type { TunnelStatus } from "../types";
 
-function surfaceKey(targetId: string, surfaceId: string): string {
-  return `${targetId}::${surfaceId}`;
+function serviceKey(targetId: string, serviceId: string): string {
+  return `${targetId}::${serviceId}`;
+}
+
+function tunnelKey(status: TunnelStatus): string {
+  return serviceKey(status.targetId, status.serviceId || status.surfaceId);
 }
 
 export function useTunnelStatuses() {
@@ -22,7 +26,7 @@ export function useTunnelStatuses() {
 
       setTunnelStatuses((current) => ({
         ...current,
-        [surfaceKey(status.targetId, status.surfaceId)]: status,
+        [tunnelKey(status)]: status,
       }));
     }).then((nextUnlisten) => {
       if (cancelled) {
@@ -42,7 +46,7 @@ export function useTunnelStatuses() {
   const setTunnelStatus = (status: TunnelStatus) => {
     setTunnelStatuses((current) => ({
       ...current,
-      [surfaceKey(status.targetId, status.surfaceId)]: status,
+      [tunnelKey(status)]: status,
     }));
   };
 

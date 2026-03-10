@@ -48,6 +48,7 @@ const fallbackBootstrapSeed: AppBootstrap = {
         defaultTool: "dashboard",
         projectPath: "~/repos/hvac-workbench",
         filesRoot: "~/repos/hvac-workbench",
+        primaryWebServiceId: "development",
         primaryBrowserServiceId: "development",
         tmuxCommandServiceId: "tmux-developer",
       },
@@ -281,6 +282,7 @@ function resolveFallbackTarget(target: DeveloperTarget): DeveloperTarget {
         defaultTool: "dashboard",
         projectPath: "",
         filesRoot: "",
+        primaryWebServiceId: "",
         primaryBrowserServiceId: "",
         tmuxCommandServiceId: "",
       },
@@ -317,24 +319,26 @@ function fallbackSurface(
 
 function fallbackTunnelStatus(
   targetId: string,
-  surfaceId: string,
+  serviceId: string,
 ): TunnelStatus {
-  const surface = fallbackSurface(targetId, surfaceId);
+  const surface = fallbackSurface(targetId, serviceId);
 
   if (!surface) {
     return {
       targetId,
-      surfaceId,
+      serviceId,
+      surfaceId: serviceId,
       localUrl: null,
       state: "error",
-      message: `Unknown browser surface: ${surfaceId}`,
+      message: `Unknown web service: ${serviceId}`,
     };
   }
 
   if (!surface.tunnelCommand) {
     return {
       targetId,
-      surfaceId,
+      serviceId,
+      surfaceId: serviceId,
       localUrl: surface.localUrl,
       state: "direct",
       message: `${surface.label} is using the local URL directly in browser mode.`,
@@ -343,7 +347,8 @@ function fallbackTunnelStatus(
 
   return {
     targetId,
-    surfaceId,
+    serviceId,
+    surfaceId: serviceId,
     localUrl: surface.localUrl,
     state: "running",
     message: `Browser mode assumes the ${surface.label.toLowerCase()} tunnel is managed outside the app.`,
@@ -533,21 +538,21 @@ export async function listenTerminalExit(
 
 export async function ensureTunnel(
   targetId: string,
-  surfaceId: string,
+  serviceId: string,
 ): Promise<TunnelStatus> {
   if (!isTauri()) {
-    return fallbackTunnelStatus(targetId, surfaceId);
+    return fallbackTunnelStatus(targetId, serviceId);
   }
 
-  return invoke<TunnelStatus>("ensure_tunnel", { targetId, surfaceId });
+  return invoke<TunnelStatus>("ensure_tunnel", { targetId, serviceId });
 }
 
 export async function syncTunnelRegistrations(
-  requests: Array<{ targetId: string; surfaceId: string }>,
+  requests: Array<{ targetId: string; serviceId: string }>,
 ): Promise<TunnelStatus[]> {
   if (!isTauri()) {
-    return requests.map(({ targetId, surfaceId }) =>
-      fallbackTunnelStatus(targetId, surfaceId),
+    return requests.map(({ targetId, serviceId }) =>
+      fallbackTunnelStatus(targetId, serviceId),
     );
   }
 
@@ -556,21 +561,21 @@ export async function syncTunnelRegistrations(
 
 export async function restartTunnel(
   targetId: string,
-  surfaceId: string,
+  serviceId: string,
 ): Promise<TunnelStatus> {
   if (!isTauri()) {
-    return fallbackTunnelStatus(targetId, surfaceId);
+    return fallbackTunnelStatus(targetId, serviceId);
   }
 
-  return invoke<TunnelStatus>("restart_tunnel", { targetId, surfaceId });
+  return invoke<TunnelStatus>("restart_tunnel", { targetId, serviceId });
 }
 
 export async function restartAllTunnels(
-  requests: Array<{ targetId: string; surfaceId: string }>,
+  requests: Array<{ targetId: string; serviceId: string }>,
 ): Promise<TunnelStatus[]> {
   if (!isTauri()) {
-    return requests.map(({ targetId, surfaceId }) =>
-      fallbackTunnelStatus(targetId, surfaceId),
+    return requests.map(({ targetId, serviceId }) =>
+      fallbackTunnelStatus(targetId, serviceId),
     );
   }
 
