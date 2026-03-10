@@ -4,8 +4,8 @@ import type {
   ManagedServer,
   ThemeMode,
 } from "../types";
-import { loadTargetsConfig } from "../lib/tauri";
-import { parseTargetsConfig } from "../lib/targets-config";
+import { loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
+import { parseTargetsConfig, stringifyTargetsConfig } from "../lib/targets-config";
 import { ProfileDialog } from "./ProfileDialog";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -55,11 +55,31 @@ export function SettingsPage({
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [profileIds, setProfileIds] = useState<string[]>([]);
+  const [defaultProfileId, setDefaultProfileId] = useState<string | null>(null);
 
   const refreshProfiles = () => {
     void loadTargetsConfig()
-      .then((raw) => setProfileIds(Object.keys(parseTargetsConfig(raw).profiles).sort()))
-      .catch(() => setProfileIds([]));
+      .then((raw) => {
+        const parsed = parseTargetsConfig(raw);
+        setProfileIds(Object.keys(parsed.profiles).sort());
+        setDefaultProfileId(parsed.defaultProfile ?? null);
+      })
+      .catch(() => {
+        setProfileIds([]);
+        setDefaultProfileId(null);
+      });
+  };
+
+  const updateDefaultProfile = (profileId: string | null) => {
+    void loadTargetsConfig()
+      .then(async (raw) => {
+        const parsed = parseTargetsConfig(raw);
+        parsed.defaultProfile = profileId;
+        await updateTargetsConfig(stringifyTargetsConfig(parsed));
+        setDefaultProfileId(profileId);
+        onConfigSaved();
+      })
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -238,6 +258,23 @@ export function SettingsPage({
                 <p className="settings-empty">No profiles configured.</p>
               ) : (
                 <div className="settings-server-list">
+                  <div className="settings-field">
+                    <label className="settings-label">Default profile</label>
+                    <div className="settings-option-group">
+                      <span className="settings-value settings-value-mono">
+                        {defaultProfileId || "None"}
+                      </span>
+                      {defaultProfileId ? (
+                        <Button
+                          onClick={() => updateDefaultProfile(null)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          Clear
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
                   {profileIds.map((profileId) => (
                     <button
                       className="settings-server-card"
@@ -247,7 +284,23 @@ export function SettingsPage({
                     >
                       <div className="settings-server-header">
                         <span className="settings-server-label">{profileId}</span>
-                        <Badge variant="neutral">Profile</Badge>
+                        <div className="settings-option-group">
+                          {defaultProfileId === profileId ? (
+                            <Badge variant="success">Default</Badge>
+                          ) : (
+                            <Button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                updateDefaultProfile(profileId);
+                              }}
+                              size="sm"
+                              variant="outline"
+                            >
+                              Set default
+                            </Button>
+                          )}
+                          <Badge variant="neutral">Profile</Badge>
+                        </div>
                       </div>
                       <div className="settings-server-meta">
                         <span className="settings-server-host">Workspace and services defaults</span>
@@ -273,7 +326,7 @@ export function SettingsPage({
       ) : null}
       {isCreatingServer ? (
         <ServerDialog
-          defaultProfileId={profileIds[0] ?? ""}
+          defaultProfileId={defaultProfileId ?? profileIds[0] ?? ""}
           onClose={() => setIsCreatingServer(false)}
           onSaved={() => {
             setIsCreatingServer(false);

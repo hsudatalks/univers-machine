@@ -1064,6 +1064,13 @@
   padding: 0 1.25rem;
 }
 
+.dialog-tabs-root {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .dialog-tab {
   background: none;
   border: none;
@@ -1087,15 +1094,29 @@
 }
 
 .dialog-body {
+  display: flex;
   flex: 1;
-  overflow-y: auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   padding: 1rem 1.25rem;
+}
+
+.dialog-tab-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 0;
+  overflow-y: auto;
+  padding-right: 0.15rem;
 }
 
 .dialog-tab-content {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-height: 0;
 }
 
 .dialog-section-actions {
@@ -1251,6 +1272,11 @@
   border-color: var(--ring);
 }
 
+.dialog-input-readonly {
+  color: var(--muted-foreground);
+  cursor: default;
+}
+
 .dialog-input-mono {
   font-family: "Iosevka", "SFMono-Regular", "Consolas", monospace;
   font-size: 0.8rem;
@@ -1261,6 +1287,31 @@
   min-height: 3rem;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.dialog-card-advanced {
+  border-top: 1px dashed var(--border);
+  margin-top: 0.25rem;
+  padding-top: 0.6rem;
+}
+
+.dialog-card-advanced-summary {
+  color: var(--muted-foreground);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 500;
+  list-style: none;
+}
+
+.dialog-card-advanced-summary::-webkit-details-marker {
+  display: none;
+}
+
+.dialog-card-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.7rem;
 }
 
 .dialog-footer {

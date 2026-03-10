@@ -27,6 +27,7 @@ export interface EditableDeveloperService extends Omit<DeveloperService, "web" |
 }
 
 export interface ContainerProfileConfig {
+  extends?: string;
   workspace: ContainerWorkspace;
   services: EditableDeveloperService[];
   surfaces?: DeveloperSurface[];
@@ -68,6 +69,7 @@ export interface RemoteServerConfig {
 
 export interface TargetsConfigDocument {
   selectedTargetId?: string | null;
+  defaultProfile?: string | null;
   profiles: Record<string, ContainerProfileConfig>;
   targets: Array<Record<string, unknown>>;
   remoteServers: RemoteServerConfig[];
@@ -89,6 +91,7 @@ function normalizeProfile(
   return {
     ...createEmptyProfile(profileId),
     ...profile,
+    extends: profile?.extends ?? "",
     workspace: normalizeWorkspace(profile?.workspace),
     services: profile?.services ?? [],
     surfaces: profile?.surfaces ?? [],
@@ -131,6 +134,7 @@ export function parseTargetsConfig(raw: string): TargetsConfigDocument {
 
   return {
     selectedTargetId: parsed.selectedTargetId ?? null,
+    defaultProfile: parsed.defaultProfile ?? null,
     profiles,
     targets: parsed.targets ?? [],
     remoteServers: (parsed.remoteServers ?? []).map(normalizeServer),
@@ -155,6 +159,7 @@ export function createEmptyWorkspace(profile = ""): ContainerWorkspace {
 
 export function createEmptyProfile(profileId = ""): ContainerProfileConfig {
   return {
+    extends: "",
     workspace: createEmptyWorkspace(profileId),
     services: [],
     surfaces: [],
@@ -182,6 +187,45 @@ export function createDefaultWebService(
     },
     endpoint: null,
     command: null,
+  };
+}
+
+export function createDefaultEndpointService(
+  id: string,
+  label: string,
+  probeType: EndpointProbeType = "http",
+): EditableDeveloperService {
+  return {
+    id,
+    label,
+    kind: "endpoint",
+    description: "",
+    web: null,
+    endpoint: {
+      probeType,
+      host: "127.0.0.1",
+      port: 0,
+      path: "",
+      url: "",
+    },
+    command: null,
+  };
+}
+
+export function createDefaultCommandService(
+  id: string,
+  label: string,
+): EditableDeveloperService {
+  return {
+    id,
+    label,
+    kind: "command",
+    description: "",
+    web: null,
+    endpoint: null,
+    command: {
+      restart: "",
+    },
   };
 }
 

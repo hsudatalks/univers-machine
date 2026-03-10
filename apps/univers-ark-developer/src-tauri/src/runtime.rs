@@ -326,6 +326,7 @@ pub(crate) fn read_runtime_targets_file(tunnel_state: &TunnelState) -> Result<Ta
 
     Ok(TargetsFile {
         selected_target_id: targets_file.selected_target_id,
+        default_profile: targets_file.default_profile,
         targets,
     })
 }

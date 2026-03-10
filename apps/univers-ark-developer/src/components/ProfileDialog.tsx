@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
 import {
+  createDefaultCommandService,
+  createDefaultEndpointService,
+  createDefaultWebService,
   createEmptyProfile,
   parseTargetsConfig,
   stringifyTargetsConfig,
   type ContainerProfileConfig,
+  type EditableDeveloperService,
   type TargetsConfigDocument,
 } from "../lib/targets-config";
 import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 type ProfileDialogTab = "workspace" | "services";
+type ServiceKind = EditableDeveloperService["kind"];
 
 interface ProfileDialogProps {
   onClose: () => void;
@@ -18,8 +23,62 @@ interface ProfileDialogProps {
   profileId?: string | null;
 }
 
-function serializeServices(profile: ContainerProfileConfig): string {
-  return JSON.stringify(profile.services ?? [], null, 2);
+function createServiceForKind(kind: ServiceKind): EditableDeveloperService {
+  switch (kind) {
+    case "endpoint":
+      return createDefaultEndpointService("endpoint", "Endpoint");
+    case "command":
+      return createDefaultCommandService("command", "Command");
+    case "web":
+    default:
+      return createDefaultWebService("web", "Web", "http");
+  }
+}
+
+function switchServiceKind(
+  service: EditableDeveloperService,
+  kind: ServiceKind,
+): EditableDeveloperService {
+  const next = createServiceForKind(kind);
+  return {
+    ...next,
+    id: service.id,
+    label: service.label,
+    description: service.description,
+  };
+}
+
+function parseWebUrl(url: string): { host: string; path: string; port: string } {
+  try {
+    const parsed = new URL(url);
+    return {
+      host: parsed.hostname,
+      path: `${parsed.pathname}${parsed.search}` || "/",
+      port:
+        parsed.port ||
+        (parsed.protocol === "https:" ? "443" : parsed.protocol === "http:" ? "80" : ""),
+    };
+  } catch {
+    return {
+      host: "127.0.0.1",
+      path: "/",
+      port: "",
+    };
+  }
+}
+
+function buildRemoteUrl(
+  host: string,
+  port: string,
+  path: string,
+): string {
+  const normalizedHost = host.trim() || "127.0.0.1";
+  const normalizedPort = port.trim();
+  const normalizedPath = path.trim()
+    ? path.startsWith("/") ? path : `/${path}`
+    : "/";
+
+  return `http://${normalizedHost}${normalizedPort ? `:${normalizedPort}` : ""}${normalizedPath}`;
 }
 
 export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProps) {
@@ -27,7 +86,6 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
   const [config, setConfig] = useState<TargetsConfigDocument | null>(null);
   const [currentProfileId, setCurrentProfileId] = useState(profileId ?? "");
   const [form, setForm] = useState<ContainerProfileConfig>(createEmptyProfile(profileId ?? ""));
-  const [servicesJson, setServicesJson] = useState<string>(serializeServices(createEmptyProfile(profileId ?? "")));
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,11 +104,8 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
           const next = parsed.profiles[profileId];
           setCurrentProfileId(profileId);
           setForm(next);
-          setServicesJson(serializeServices(next));
         } else {
-          const next = createEmptyProfile(profileId ?? "");
-          setForm(next);
-          setServicesJson(serializeServices(next));
+          setForm(createEmptyProfile(profileId ?? ""));
         }
       } catch (loadError) {
         setError(String(loadError));
@@ -67,13 +122,74 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
     return trimmed !== profileId && Boolean(config.profiles[trimmed]);
   }, [config, currentProfileId, profileId]);
 
-  const updateWorkspaceField = (field: keyof ContainerProfileConfig["workspace"], value: string) => {
+  const updateWorkspaceField = (
+    field: keyof ContainerProfileConfig["workspace"],
+    value: string,
+  ) => {
     setForm((prev) => ({
       ...prev,
       workspace: {
         ...prev.workspace,
         [field]: value,
       },
+    }));
+    setError(null);
+    setSaveMessage(null);
+  };
+
+  const updateService = (
+    index: number,
+    updater: (service: EditableDeveloperService) => EditableDeveloperService,
+  ) => {
+    setForm((prev) => ({
+      ...prev,
+      services: prev.services.map((service, serviceIndex) =>
+        serviceIndex === index ? updater(service) : service,
+      ),
+    }));
+    setError(null);
+    setSaveMessage(null);
+  };
+
+  const addService = (kind: ServiceKind) => {
+    setForm((prev) => ({
+      ...prev,
+      services: [
+        ...prev.services,
+        createServiceForKind(kind),
+      ],
+    }));
+    setError(null);
+    setSaveMessage(null);
+  };
+
+  const updateWebServiceUrlPart = (
+    index: number,
+    field: "host" | "port" | "path",
+    value: string,
+  ) => {
+    updateService(index, (current) => {
+      if (!current.web) {
+        return current;
+      }
+
+      const parts = parseWebUrl(current.web.remoteUrl);
+      const nextParts = { ...parts, [field]: value };
+
+      return {
+        ...current,
+        web: {
+          ...current.web,
+          remoteUrl: buildRemoteUrl(nextParts.host, nextParts.port, nextParts.path),
+        },
+      };
+    });
+  };
+
+  const removeService = (index: number) => {
+    setForm((prev) => ({
+      ...prev,
+      services: prev.services.filter((_, serviceIndex) => serviceIndex !== index),
     }));
     setError(null);
     setSaveMessage(null);
@@ -92,17 +208,6 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
       return;
     }
 
-    let parsedServices;
-    try {
-      parsedServices = JSON.parse(servicesJson);
-      if (!Array.isArray(parsedServices)) {
-        throw new Error("Services must be a JSON array.");
-      }
-    } catch (parseError) {
-      setError(`Invalid services JSON: ${String(parseError)}`);
-      return;
-    }
-
     setIsSaving(true);
     setError(null);
     setSaveMessage(null);
@@ -115,18 +220,17 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
 
       nextConfig.profiles[nextProfileId] = {
         ...form,
+        extends: form.extends?.trim() ?? "",
         workspace: {
           ...form.workspace,
           profile: nextProfileId,
         },
-        services: parsedServices,
       };
 
       await updateTargetsConfig(stringifyTargetsConfig(nextConfig));
       setConfig(nextConfig);
       setCurrentProfileId(nextProfileId);
       setForm(nextConfig.profiles[nextProfileId]);
-      setServicesJson(JSON.stringify(parsedServices, null, 2));
       setSaveMessage("Saved successfully.");
       onSaved();
     } catch (saveError) {
@@ -162,7 +266,11 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
           </Button>
         </header>
 
-        <Tabs onValueChange={(value) => setActiveTab(value as ProfileDialogTab)} value={activeTab}>
+        <Tabs
+          className="dialog-tabs-root"
+          onValueChange={(value) => setActiveTab(value as ProfileDialogTab)}
+          value={activeTab}
+        >
           <TabsList className="dialog-tabs" aria-label="Profile settings sections">
             <TabsTrigger className="dialog-tab" value="workspace">Workspace</TabsTrigger>
             <TabsTrigger className="dialog-tab" value="services">Services</TabsTrigger>
@@ -173,9 +281,20 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
               <p className="dialog-empty">Loading configuration…</p>
             ) : (
               <>
-                <TabsContent value="workspace">
+                <TabsContent className="dialog-tab-panel" value="workspace">
                   <div className="dialog-tab-content">
                     <EditField label="Profile ID" mono onChange={setCurrentProfileId} value={currentProfileId} />
+                    <EditField
+                      label="Extends"
+                      mono
+                      onChange={(value) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          extends: value,
+                        }))
+                      }
+                      value={form.extends ?? ""}
+                    />
                     <EditField
                       label="Default Tool"
                       onChange={(value) => updateWorkspaceField("defaultTool", value)}
@@ -207,15 +326,284 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
                     />
                   </div>
                 </TabsContent>
-                <TabsContent value="services">
+                <TabsContent className="dialog-tab-panel" value="services">
                   <div className="dialog-tab-content">
-                    <EditField
-                      label="Services JSON"
-                      mono
-                      multiline
-                      onChange={setServicesJson}
-                      value={servicesJson}
-                    />
+                    <div className="dialog-section-actions">
+                      <span className="dialog-field-label">Declared services</span>
+                      <div className="settings-option-group">
+                        <Button onClick={() => addService("web")} size="sm" variant="outline">
+                          Add web
+                        </Button>
+                        <Button onClick={() => addService("endpoint")} size="sm" variant="outline">
+                          Add endpoint
+                        </Button>
+                        <Button onClick={() => addService("command")} size="sm" variant="outline">
+                          Add command
+                        </Button>
+                      </div>
+                    </div>
+                    {form.services.length === 0 ? (
+                      <p className="dialog-empty">No services declared.</p>
+                    ) : (
+                      <div className="dialog-list">
+                        {form.services.map((service, index) => (
+                          <div className="dialog-card" key={`${service.id || "service"}-${index}`}>
+                            <div className="dialog-card-header">
+                              <span className="dialog-card-title">
+                                {service.label || service.id || `Service ${index + 1}`}
+                              </span>
+                              <Button
+                                onClick={() => removeService(index)}
+                                size="sm"
+                                variant="outline"
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                            <div className="dialog-tab-content">
+                              <EditField
+                                label="ID"
+                                mono
+                                onChange={(value) =>
+                                  updateService(index, (current) => ({ ...current, id: value }))
+                                }
+                                value={service.id}
+                              />
+                              <EditField
+                                label="Label"
+                                onChange={(value) =>
+                                  updateService(index, (current) => ({ ...current, label: value }))
+                                }
+                                value={service.label}
+                              />
+                              <SelectField
+                                label="Kind"
+                                onChange={(value) =>
+                                  updateService(index, (current) =>
+                                    switchServiceKind(current, value as ServiceKind),
+                                  )
+                                }
+                                options={[
+                                  ["web", "Web"],
+                                  ["endpoint", "Endpoint"],
+                                  ["command", "Command"],
+                                ]}
+                                value={service.kind}
+                              />
+                              <EditField
+                                label="Description"
+                                onChange={(value) =>
+                                  updateService(index, (current) => ({
+                                    ...current,
+                                    description: value,
+                                  }))
+                                }
+                                value={service.description ?? ""}
+                              />
+
+                              {service.kind === "web" && service.web ? (
+                                <>
+                                  {(() => {
+                                    const remoteParts = parseWebUrl(service.web.remoteUrl);
+                                    return (
+                                      <>
+                                        <EditField
+                                          label="Host"
+                                          mono
+                                          onChange={(value) =>
+                                            updateWebServiceUrlPart(index, "host", value)
+                                          }
+                                          value={remoteParts.host}
+                                        />
+                                        <EditField
+                                          label="Port"
+                                          mono
+                                          onChange={(value) =>
+                                            updateWebServiceUrlPart(index, "port", value)
+                                          }
+                                          value={remoteParts.port}
+                                        />
+                                        <EditField
+                                          label="Path"
+                                          mono
+                                          onChange={(value) =>
+                                            updateWebServiceUrlPart(index, "path", value)
+                                          }
+                                          value={remoteParts.path}
+                                        />
+                                      </>
+                                    );
+                                  })()}
+                                  <SelectField
+                                    label="Web Type"
+                                    onChange={(value) =>
+                                      updateService(index, (current) => ({
+                                        ...current,
+                                        web: current.web
+                                          ? { ...current.web, serviceType: value as "http" | "vite" }
+                                          : current.web,
+                                      }))
+                                    }
+                                    options={[
+                                      ["http", "HTTP"],
+                                      ["vite", "Vite"],
+                                    ]}
+                                    value={service.web.serviceType}
+                                  />
+                                  <ReadOnlyField
+                                    label="Resolved Remote URL"
+                                    mono
+                                    value={service.web.remoteUrl}
+                                  />
+                                  <details className="dialog-card-advanced">
+                                    <summary className="dialog-card-advanced-summary">
+                                      Advanced
+                                    </summary>
+                                    <div className="dialog-card-advanced-body">
+                                      <EditField
+                                        label="Local URL Template"
+                                        mono
+                                        onChange={(value) =>
+                                          updateService(index, (current) => ({
+                                            ...current,
+                                            web: current.web ? { ...current.web, localUrl: value } : current.web,
+                                          }))
+                                        }
+                                        value={service.web.localUrl}
+                                      />
+                                      <EditField
+                                        label="Tunnel Command"
+                                        mono
+                                        onChange={(value) =>
+                                          updateService(index, (current) => ({
+                                            ...current,
+                                            web: current.web
+                                              ? { ...current.web, tunnelCommand: value }
+                                              : current.web,
+                                          }))
+                                        }
+                                        value={service.web.tunnelCommand}
+                                      />
+                                      {service.web.serviceType === "vite" ? (
+                                        <EditField
+                                          label="Vite HMR Tunnel Command"
+                                          mono
+                                          onChange={(value) =>
+                                            updateService(index, (current) => ({
+                                              ...current,
+                                              web: current.web
+                                                ? { ...current.web, viteHmrTunnelCommand: value }
+                                                : current.web,
+                                            }))
+                                          }
+                                          value={service.web.viteHmrTunnelCommand ?? ""}
+                                        />
+                                      ) : null}
+                                    </div>
+                                  </details>
+                                </>
+                              ) : null}
+
+                              {service.kind === "endpoint" && service.endpoint ? (
+                                <>
+                                  <SelectField
+                                    label="Probe Type"
+                                    onChange={(value) =>
+                                      updateService(index, (current) => ({
+                                        ...current,
+                                        endpoint: current.endpoint
+                                          ? {
+                                              ...current.endpoint,
+                                              probeType: value as "http" | "tcp",
+                                            }
+                                          : current.endpoint,
+                                      }))
+                                    }
+                                    options={[
+                                      ["http", "HTTP"],
+                                      ["tcp", "TCP"],
+                                    ]}
+                                    value={service.endpoint.probeType}
+                                  />
+                                  <EditField
+                                    label="Host"
+                                    mono
+                                    onChange={(value) =>
+                                      updateService(index, (current) => ({
+                                        ...current,
+                                        endpoint: current.endpoint
+                                          ? { ...current.endpoint, host: value }
+                                          : current.endpoint,
+                                      }))
+                                    }
+                                    value={service.endpoint.host}
+                                  />
+                                  <EditField
+                                    label="Port"
+                                    mono
+                                    onChange={(value) =>
+                                      updateService(index, (current) => ({
+                                        ...current,
+                                        endpoint: current.endpoint
+                                          ? {
+                                              ...current.endpoint,
+                                              port: Number.parseInt(value, 10) || 0,
+                                            }
+                                          : current.endpoint,
+                                      }))
+                                    }
+                                    value={String(service.endpoint.port ?? 0)}
+                                  />
+                                  <EditField
+                                    label="Path"
+                                    mono
+                                    onChange={(value) =>
+                                      updateService(index, (current) => ({
+                                        ...current,
+                                        endpoint: current.endpoint
+                                          ? { ...current.endpoint, path: value }
+                                          : current.endpoint,
+                                      }))
+                                    }
+                                    value={service.endpoint.path}
+                                  />
+                                  <EditField
+                                    label="URL"
+                                    mono
+                                    onChange={(value) =>
+                                      updateService(index, (current) => ({
+                                        ...current,
+                                        endpoint: current.endpoint
+                                          ? { ...current.endpoint, url: value }
+                                          : current.endpoint,
+                                      }))
+                                    }
+                                    value={service.endpoint.url}
+                                  />
+                                </>
+                              ) : null}
+
+                              {service.kind === "command" && service.command ? (
+                                <EditField
+                                  label="Restart Command"
+                                  mono
+                                  multiline
+                                  onChange={(value) =>
+                                    updateService(index, (current) => ({
+                                      ...current,
+                                      command: current.command
+                                        ? { ...current.command, restart: value }
+                                        : current.command,
+                                    }))
+                                  }
+                                  value={service.command.restart}
+                                />
+                              ) : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
               </>
@@ -260,7 +648,7 @@ function EditField({
         <textarea
           className={`${className} dialog-input-multiline`}
           onChange={(event) => onChange(event.target.value)}
-          rows={14}
+          rows={6}
           spellCheck={false}
           value={value}
         />
@@ -273,6 +661,60 @@ function EditField({
           value={value}
         />
       )}
+    </div>
+  );
+}
+
+function ReadOnlyField({
+  label,
+  mono,
+  value,
+}: {
+  label: string;
+  mono?: boolean;
+  value: string;
+}) {
+  const className = `dialog-input ${mono ? "dialog-input-mono" : ""}`;
+
+  return (
+    <div className="dialog-field">
+      <label className="dialog-field-label">{label}</label>
+      <input
+        className={`${className} dialog-input-readonly`}
+        readOnly
+        spellCheck={false}
+        type="text"
+        value={value}
+      />
+    </div>
+  );
+}
+
+function SelectField({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  options: Array<[string, string]>;
+  value: string;
+}) {
+  return (
+    <div className="dialog-field">
+      <label className="dialog-field-label">{label}</label>
+      <select
+        className="dialog-input"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        {options.map(([optionValue, optionLabel]) => (
+          <option key={optionValue} value={optionValue}>
+            {optionLabel}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

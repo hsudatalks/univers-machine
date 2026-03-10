@@ -1,5 +1,6 @@
 {
   "selectedTargetId": "local",
+  "defaultProfile": "ark-workbench",
   "profiles": {
     "ark-workbench": {
       "workspace": {

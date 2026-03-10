@@ -91,6 +91,7 @@ pub(crate) struct ContainerWorkspace {
     #[serde(default)]
     #[serde(alias = "primaryBrowserServiceId")]
     pub(crate) primary_web_service_id: String,
+    #[serde(default)]
     pub(crate) tmux_command_service_id: String,
 }
 
@@ -195,17 +196,17 @@ pub(crate) fn command_service<'a>(
 }
 
 pub(crate) fn sync_target_services(target: &mut DeveloperTarget) {
-    if target.services.is_empty() && !target.surfaces.is_empty() {
-        target.services = target.surfaces.iter().map(web_service).collect();
-        return;
-    }
-
-    if target.surfaces.is_empty() && !target.services.is_empty() {
+    if !target.services.is_empty() {
         target.surfaces = target
             .services
             .iter()
             .filter_map(|service| service.web.clone())
             .collect();
+        return;
+    }
+
+    if !target.surfaces.is_empty() {
+        target.services = target.surfaces.iter().map(web_service).collect();
     }
 }
 
@@ -213,6 +214,7 @@ pub(crate) fn sync_target_services(target: &mut DeveloperTarget) {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TargetsFile {
     pub(crate) selected_target_id: Option<String>,
+    pub(crate) default_profile: Option<String>,
     pub(crate) targets: Vec<DeveloperTarget>,
 }
 
