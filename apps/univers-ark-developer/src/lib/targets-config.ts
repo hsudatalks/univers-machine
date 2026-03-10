@@ -56,6 +56,8 @@ export interface MachineContainerConfig {
   kind: MachineContainerKind;
   enabled: boolean;
   source: MachineContainerSource;
+  sshUser: string;
+  sshUserCandidates: string[];
   label: string;
   description: string;
   ipv4: string;
@@ -76,6 +78,7 @@ export interface MachineConfig {
   discoveryMode: ContainerDiscoveryMode;
   discoveryCommand: string;
   sshUser: string;
+  containerSshUser: string;
   identityFiles: string[];
   jumpChain: SshJumpConfig[];
   knownHostsPath: string;
@@ -131,6 +134,15 @@ function normalizeProfile(
 function normalizeMachineContainer(
   container: Partial<MachineContainerConfig> | undefined,
 ): MachineContainerConfig {
+  const sshUser = container?.sshUser ?? "";
+  const sshUserCandidates = Array.from(
+    new Set(
+      [sshUser, ...(container?.sshUserCandidates ?? [])].filter(
+        (candidate): candidate is string => Boolean(candidate?.trim()),
+      ),
+    ),
+  );
+
   return {
     ...createEmptyMachineContainer(),
     ...container,
@@ -141,6 +153,8 @@ function normalizeMachineContainer(
         : container?.ipv4?.trim()
           ? "unknown"
           : "manual"),
+    sshUser,
+    sshUserCandidates,
     workspace: normalizeWorkspace(container?.workspace),
     services: container?.services ?? [],
     surfaces: container?.surfaces ?? [],
@@ -153,6 +167,8 @@ function normalizeMachine(
   return {
     ...createEmptyMachine(machine?.workspace?.profile ?? ""),
     ...machine,
+    containerSshUser:
+      machine?.containerSshUser ?? machine?.sshUser ?? "ubuntu",
     workspace: normalizeWorkspace(machine?.workspace),
     services: machine?.services ?? [],
     surfaces: machine?.surfaces ?? [],
@@ -287,6 +303,8 @@ export function createHostContainer(profileId = ""): MachineContainerConfig {
     kind: "host",
     enabled: true,
     source: "host",
+    sshUser: "",
+    sshUserCandidates: [],
     label: "Host",
     description: "",
     ipv4: "",
@@ -304,6 +322,8 @@ export function createEmptyMachineContainer(): MachineContainerConfig {
     kind: "managed",
     enabled: true,
     source: "manual",
+    sshUser: "",
+    sshUserCandidates: [],
     label: "",
     description: "",
     ipv4: "",
@@ -326,6 +346,7 @@ export function createEmptyMachine(profileId = ""): MachineConfig {
     discoveryMode: "auto",
     discoveryCommand: "",
     sshUser: "ubuntu",
+    containerSshUser: "ubuntu",
     identityFiles: [],
     jumpChain: [],
     knownHostsPath: "~/.univers/known_hosts",

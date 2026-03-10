@@ -3,6 +3,14 @@ use std::{fs, path::PathBuf};
 
 use super::{ContainerManagerType, RemoteContainerContext, RemoteContainerServer};
 
+pub(super) fn managed_container_ssh_user(server: &RemoteContainerServer) -> &str {
+    if server.container_ssh_user.trim().is_empty() {
+        &server.ssh_user
+    } else {
+        &server.container_ssh_user
+    }
+}
+
 pub(super) fn managed_known_hosts_file() -> String {
     let home = if cfg!(windows) {
         std::env::var("USERPROFILE").ok()
@@ -132,8 +140,8 @@ pub(super) fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
-pub(super) fn ssh_destination(server: &RemoteContainerServer, container_ip: &str) -> String {
-    format!("{}@{}", server.ssh_user, container_ip)
+pub(super) fn ssh_destination(container_ip: &str, ssh_user: &str) -> String {
+    format!("{}@{}", ssh_user, container_ip)
 }
 
 fn default_container_terminal_remote_command() -> String {
@@ -146,6 +154,7 @@ pub(super) fn build_ssh_command(
     server: &RemoteContainerServer,
     container_ip: &str,
     container_name: &str,
+    ssh_user: &str,
     extra_options: &[&str],
     remote_command: Option<&str>,
 ) -> String {
@@ -166,7 +175,7 @@ pub(super) fn build_ssh_command(
     command.push_str(&proxy_jump_for_container(server));
     command.push(' ');
     command.push_str("-p 22 ");
-    command.push_str(&ssh_destination(server, container_ip));
+    command.push_str(&ssh_destination(container_ip, ssh_user));
 
     if let Some(remote_command) = remote_command {
         command.push(' ');
@@ -224,6 +233,7 @@ pub(super) fn terminal_command_for_server(
             server,
             context.container_ip,
             context.container_name,
+            context.ssh_user,
             &["-tt"],
             Some(&shell_single_quote(&remote_command)),
         )
@@ -234,11 +244,13 @@ fn ssh_probe_command_for_server(
     server: &RemoteContainerServer,
     container_ip: &str,
     container_name: &str,
+    ssh_user: &str,
 ) -> String {
     build_ssh_command(
         server,
         container_ip,
         container_name,
+        ssh_user,
         &[
             "-o BatchMode=yes",
             "-o ConnectTimeout=4",
@@ -264,8 +276,9 @@ pub(super) fn probe_container_ssh(
     server: &RemoteContainerServer,
     container_ip: &str,
     container_name: &str,
+    ssh_user: &str,
 ) -> (bool, String, String) {
-    let command = ssh_probe_command_for_server(server, container_ip, container_name);
+    let command = ssh_probe_command_for_server(server, container_ip, container_name, ssh_user);
     let output = shell::shell_command(&command).output();
 
     match output {
@@ -353,9 +366,10 @@ fn deploy_key_command(
     server: &RemoteContainerServer,
     manager_type: ContainerManagerType,
     container_name: &str,
+    ssh_user: &str,
     public_key: &str,
 ) -> String {
-    let user_home = format!("/home/{}", server.ssh_user);
+    let user_home = format!("/home/{}", ssh_user);
     let inject_script = format!(
         "mkdir -p {home}/.ssh && chmod 700 {home}/.ssh && echo {key} >> {home}/.ssh/authorized_keys && chmod 600 {home}/.ssh/authorized_keys",
         home = user_home,
@@ -369,7 +383,7 @@ fn deploy_key_command(
             "{} \"orb run -m {} -u {} bash -c {}\"",
             build_host_ssh_command(server, &[], None),
             container_name,
-            server.ssh_user,
+            ssh_user,
             shell_single_quote(&inject_script),
         )
     } else {
@@ -393,10 +407,15 @@ fn deploy_key_managers(server: &RemoteContainerServer) -> Vec<ContainerManagerTy
     }
 }
 
-fn auto_deploy_public_key(server: &RemoteContainerServer, container_name: &str) -> Option<String> {
+fn auto_deploy_public_key(
+    server: &RemoteContainerServer,
+    container_name: &str,
+    ssh_user: &str,
+) -> Option<String> {
     let public_key = local_public_key()?;
     for manager_type in deploy_key_managers(server) {
-        let command = deploy_key_command(server, manager_type, container_name, &public_key);
+        let command =
+            deploy_key_command(server, manager_type, container_name, ssh_user, &public_key);
         let Ok(output) = shell::shell_command(&command).output() else {
             continue;
         };
@@ -416,14 +435,15 @@ pub(super) fn probe_managed_container_ssh(
     server: &RemoteContainerServer,
     container_ip: &str,
     container_name: &str,
+    ssh_user: &str,
 ) -> (bool, String, String) {
     let (mut ssh_reachable, mut ssh_state, mut ssh_message) =
-        probe_container_ssh(server, container_ip, container_name);
+        probe_container_ssh(server, container_ip, container_name, ssh_user);
 
     if !ssh_reachable && ssh_message.contains("Permission denied") {
-        if let Some(deploy_message) = auto_deploy_public_key(server, container_name) {
+        if let Some(deploy_message) = auto_deploy_public_key(server, container_name, ssh_user) {
             let (retry_reachable, retry_state, retry_message) =
-                probe_container_ssh(server, container_ip, container_name);
+                probe_container_ssh(server, container_ip, container_name, ssh_user);
 
             if retry_reachable {
                 ssh_reachable = true;

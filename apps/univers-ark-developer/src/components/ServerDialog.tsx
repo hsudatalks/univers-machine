@@ -315,6 +315,12 @@ export function ServerDialog({
                       value={form.sshUser}
                     />
                     <EditField
+                      label="Container SSH User"
+                      mono
+                      onChange={(value) => updateField("containerSshUser", value)}
+                      value={form.containerSshUser}
+                    />
+                    <EditField
                       label="Port"
                       mono
                       onChange={(value) => updateField("port", Number(value) || 22)}
@@ -436,6 +442,7 @@ export function ServerDialog({
                                 <EditField label="Name" mono onChange={(value) => updateContainerField(index, "name", value)} value={container.name} />
                                 <EditField label="Label" onChange={(value) => updateContainerField(index, "label", value)} value={container.label} />
                                 <EditField label="IPv4" mono onChange={(value) => updateContainerField(index, "ipv4", value)} value={container.ipv4} />
+                                <EditField label="SSH User" mono onChange={(value) => updateContainerField(index, "sshUser", value)} value={container.sshUser} />
                                 <EditField label="Status" mono onChange={(value) => updateContainerField(index, "status", value)} value={container.status} />
                                 <ToggleField
                                   checked={container.enabled}
@@ -453,6 +460,7 @@ export function ServerDialog({
                       containers={form.containers}
                       isScanning={isScanning}
                       onScan={() => void handleScan()}
+                      onSshUserChange={(index, sshUser) => updateContainerField(index, "sshUser", sshUser)}
                       onToggleEnabled={(index, enabled) => updateContainerField(index, "enabled", enabled)}
                     />
                   ) : (
@@ -485,11 +493,13 @@ function ContainersTable({
   containers,
   isScanning,
   onScan,
+  onSshUserChange,
   onToggleEnabled,
 }: {
   containers: MachineConfig["containers"];
   isScanning: boolean;
   onScan: () => void;
+  onSshUserChange: (index: number, sshUser: string) => void;
   onToggleEnabled: (index: number, enabled: boolean) => void;
 }) {
   const managedContainers = containers
@@ -524,6 +534,7 @@ function ContainersTable({
             <th>Name</th>
             <th>Status</th>
             <th>IPv4</th>
+            <th>SSH User</th>
           </tr>
         </thead>
         <tbody>
@@ -544,11 +555,56 @@ function ContainersTable({
                 </Badge>
               </td>
               <td className="dialog-table-mono">{container.ipv4 || "—"}</td>
+              <td>
+                <SshUserInput
+                  inputId={`container-ssh-user-${container.id || container.name || index}`}
+                  onChange={(sshUser) => onSshUserChange(index, sshUser)}
+                  options={container.sshUserCandidates}
+                  value={container.sshUser}
+                />
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function SshUserInput({
+  inputId,
+  onChange,
+  options,
+  value,
+}: {
+  inputId: string;
+  onChange: (value: string) => void;
+  options: string[];
+  value: string;
+}) {
+  const resolvedOptions = Array.from(
+    new Set([value, ...options].filter((candidate) => candidate.trim().length > 0)),
+  );
+  const listId = `${inputId}-options`;
+
+  return (
+    <>
+      <input
+        className="dialog-input dialog-input-mono"
+        list={resolvedOptions.length > 0 ? listId : undefined}
+        onChange={(event) => onChange(event.target.value)}
+        spellCheck={false}
+        type="text"
+        value={value}
+      />
+      {resolvedOptions.length > 0 ? (
+        <datalist id={listId}>
+          {resolvedOptions.map((candidate) => (
+            <option key={candidate} value={candidate} />
+          ))}
+        </datalist>
+      ) : null}
+    </>
   );
 }
 

@@ -212,6 +212,7 @@ mod tests {
             discovery_mode: ContainerDiscoveryMode::HostOnly,
             discovery_command: String::new(),
             ssh_user: String::new(),
+            container_ssh_user: String::new(),
             identity_files: vec![],
             jump_chain: vec![],
             known_hosts_path: String::new(),

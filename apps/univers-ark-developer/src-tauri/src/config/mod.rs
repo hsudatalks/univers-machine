@@ -79,6 +79,10 @@ pub(super) struct MachineContainerConfig {
     #[serde(default = "default_container_source")]
     pub(super) source: String,
     #[serde(default)]
+    pub(super) ssh_user: String,
+    #[serde(default)]
+    pub(super) ssh_user_candidates: Vec<String>,
+    #[serde(default)]
     pub(super) label: String,
     #[serde(default)]
     pub(super) description: String,
@@ -124,6 +128,8 @@ pub(super) struct RemoteContainerServer {
     pub(super) discovery_command: String,
     #[serde(default = "default_ssh_user")]
     pub(super) ssh_user: String,
+    #[serde(default = "default_container_ssh_user")]
+    pub(super) container_ssh_user: String,
     #[serde(default)]
     pub(super) identity_files: Vec<String>,
     #[serde(default)]
@@ -162,6 +168,8 @@ pub(super) struct DiscoveredContainer {
     pub(super) kind: ManagedContainerKind,
     pub(super) name: String,
     pub(super) source: String,
+    pub(super) ssh_user: String,
+    pub(super) ssh_user_candidates: Vec<String>,
     pub(super) status: String,
     pub(super) ipv4: String,
     pub(super) label: Option<String>,
@@ -175,6 +183,7 @@ pub(super) struct RemoteContainerContext<'a> {
     pub(super) container_ip: &'a str,
     pub(super) container_label: &'a str,
     pub(super) container_name: &'a str,
+    pub(super) ssh_user: &'a str,
     pub(super) server: &'a RemoteContainerServer,
 }
 
@@ -200,6 +209,10 @@ fn default_ssh_port() -> u16 {
 
 fn default_ssh_user() -> String {
     String::from("ubuntu")
+}
+
+fn default_container_ssh_user() -> String {
+    String::new()
 }
 
 fn default_container_name_suffix() -> String {
@@ -477,6 +490,36 @@ fn discovered_container_to_manual_value(
     let surfaces = existing
         .map(|item| serde_json::to_value(&item.surfaces).unwrap_or_else(|_| json!([])))
         .unwrap_or_else(|| json!([]));
+    let ssh_user = if matches!(container.kind, ManagedContainerKind::Host) {
+        server.ssh_user.clone()
+    } else if !container.ssh_user.trim().is_empty() {
+        container.ssh_user.clone()
+    } else if let Some(existing) = existing {
+        if !existing.ssh_user.trim().is_empty() {
+            existing.ssh_user.clone()
+        } else if !server.container_ssh_user.trim().is_empty() {
+            server.container_ssh_user.clone()
+        } else {
+            server.ssh_user.clone()
+        }
+    } else if !server.container_ssh_user.trim().is_empty() {
+        server.container_ssh_user.clone()
+    } else {
+        server.ssh_user.clone()
+    };
+    let mut ssh_user_candidates = Vec::new();
+    if !ssh_user.trim().is_empty() {
+        ssh_user_candidates.push(ssh_user.clone());
+    }
+    ssh_user_candidates.extend(container.ssh_user_candidates.iter().cloned());
+    if let Some(existing) = existing {
+        ssh_user_candidates.extend(existing.ssh_user_candidates.iter().cloned());
+    }
+    let mut seen_ssh_users = std::collections::HashSet::new();
+    ssh_user_candidates.retain(|candidate| {
+        let candidate = candidate.trim();
+        !candidate.is_empty() && seen_ssh_users.insert(candidate.to_string())
+    });
 
     json!({
         "id": id,
@@ -484,6 +527,8 @@ fn discovered_container_to_manual_value(
         "kind": container.kind,
         "enabled": enabled,
         "source": source,
+        "sshUser": ssh_user,
+        "sshUserCandidates": ssh_user_candidates,
         "label": label,
         "description": description,
         "ipv4": container.ipv4,
@@ -691,6 +736,7 @@ pub(crate) fn run_target_shell_command(
                 server,
                 &container.ipv4,
                 &container.name,
+                &container.ssh_user,
                 &[],
                 Some(&quoted_remote_command),
             )
@@ -847,7 +893,8 @@ mod tests {
             manager_type: ContainerManagerType::Lxd,
             discovery_mode: ContainerDiscoveryMode::Auto,
             discovery_command: String::new(),
-            ssh_user: String::from("ubuntu"),
+            ssh_user: String::from("david"),
+            container_ssh_user: String::from("ubuntu"),
             identity_files: vec![],
             jump_chain: vec![],
             known_hosts_path: String::new(),
@@ -920,6 +967,8 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
             kind: ManagedContainerKind::Managed,
             name: String::from("workflow-dev"),
             source: String::from("lxd"),
+            ssh_user: String::from("ubuntu"),
+            ssh_user_candidates: vec![String::from("ubuntu"), String::from("root")],
             status: String::from("RUNNING"),
             ipv4: String::from("10.211.82.202"),
             label: None,
@@ -941,7 +990,7 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
         };
         let expected_known_hosts_file = format!("{}/.ssh/univers-ark-developer-known_hosts", home);
         let expected_terminal_command = format!(
-            "ssh -o UserKnownHostsFile={kh} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -o StrictHostKeyChecking=no -tt -J ubuntu@mechanism-dev -p 22 ubuntu@10.211.82.202 'tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l'",
+            "ssh -o UserKnownHostsFile={kh} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -o StrictHostKeyChecking=no -tt -J david@mechanism-dev -p 22 ubuntu@10.211.82.202 'tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l'",
             kh = expected_known_hosts_file
         );
         assert_eq!(target.terminal_command, expected_terminal_command);
@@ -951,6 +1000,61 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
                 "ssh -o UserKnownHostsFile={} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -o StrictHostKeyChecking=no -NT -L {{localPort}}:127.0.0.1:3432 -J mechanism-dev ubuntu@10.211.82.202",
                 expected_known_hosts_file
             )
+        );
+    }
+
+    #[test]
+    fn scan_prefers_detected_container_user_over_stale_saved_user() {
+        let server = fixture_server();
+        let discovered = DiscoveredContainer {
+            id: String::from("automation-dev"),
+            kind: ManagedContainerKind::Managed,
+            name: String::from("automation-dev"),
+            source: String::from("lxd"),
+            ssh_user: String::from("ubuntu"),
+            ssh_user_candidates: vec![String::from("ubuntu"), String::from("root")],
+            status: String::from("RUNNING"),
+            ipv4: String::from("10.211.82.78"),
+            label: None,
+            description: None,
+            workspace: None,
+            services: vec![],
+            surfaces: vec![],
+        };
+        let existing = MachineContainerConfig {
+            id: String::from("automation-dev"),
+            name: String::from("automation-dev"),
+            kind: ManagedContainerKind::Managed,
+            enabled: true,
+            source: String::from("lxd"),
+            ssh_user: String::from("david"),
+            ssh_user_candidates: vec![String::from("david"), String::from("ubuntu")],
+            label: String::new(),
+            description: String::new(),
+            ipv4: String::from("10.211.82.78"),
+            status: String::from("RUNNING"),
+            workspace: ContainerWorkspace::default(),
+            services: vec![],
+            surfaces: vec![],
+        };
+
+        let value = discovered_container_to_manual_value(&server, &discovered, Some(&existing));
+
+        assert_eq!(value.get("sshUser").and_then(Value::as_str), Some("ubuntu"));
+        assert_eq!(
+            value.get("sshUserCandidates")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items.iter()
+                        .filter_map(Value::as_str)
+                        .map(ToOwned::to_owned)
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec![
+                String::from("ubuntu"),
+                String::from("root"),
+                String::from("david"),
+            ])
         );
     }
 
@@ -1003,7 +1107,6 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
 
     #[test]
     fn computes_ssh_destination() {
-        let server = fixture_server();
-        assert_eq!(ssh_destination(&server, "10.1.2.3"), "ubuntu@10.1.2.3");
+        assert_eq!(ssh_destination("10.1.2.3", "ubuntu"), "ubuntu@10.1.2.3");
     }
 }
