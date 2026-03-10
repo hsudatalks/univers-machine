@@ -23,14 +23,12 @@ function defaultWarmSurfaceIds(target: DeveloperTarget): string[] {
       : [];
 }
 
-export function warmTargetTunnels(
-  target: DeveloperTarget,
-  surfaceIds: string[] = defaultWarmSurfaceIds(target),
+export function registerTunnelRequests(
+  requests: Array<{ targetId: string; surfaceId: string }>,
   onStatus?: (status: TunnelStatus) => void,
 ) {
-  for (const surfaceId of surfaceIds) {
-    const key = tunnelKey(target.id, surfaceId);
-    desiredRegistrations.set(key, { targetId: target.id, surfaceId });
+  for (const request of requests) {
+    desiredRegistrations.set(tunnelKey(request.targetId, request.surfaceId), request);
   }
 
   if (inflightSync) {
@@ -39,7 +37,7 @@ export function warmTargetTunnels(
         onStatus?.(status);
       });
     });
-    return;
+    return inflightSync;
   }
 
   inflightSync = syncTunnelRegistrations([...desiredRegistrations.values()])
@@ -53,4 +51,17 @@ export function warmTargetTunnels(
     .finally(() => {
       inflightSync = null;
     });
+
+  return inflightSync;
+}
+
+export function warmTargetTunnels(
+  target: DeveloperTarget,
+  surfaceIds: string[] = defaultWarmSurfaceIds(target),
+  onStatus?: (status: TunnelStatus) => void,
+) {
+  void registerTunnelRequests(
+    surfaceIds.map((surfaceId) => ({ targetId: target.id, surfaceId })),
+    onStatus,
+  );
 }

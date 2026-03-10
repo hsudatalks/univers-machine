@@ -4,6 +4,7 @@ import {
   preloadBrowserFrames,
 } from "../lib/browser-cache";
 import { ensureTunnel, restartAllTunnels, restartTunnel } from "../lib/tauri";
+import { registerTunnelRequests } from "../lib/tunnel-manager";
 import type {
   AppSettings,
   DeveloperTarget,
@@ -182,6 +183,13 @@ export function SettingsPage({
 
     setIsPreloadingIframes(true);
     setPreloadSummary(`Loading 0 / ${developmentSurfaces.length} iframe(s)…`);
+
+    await registerTunnelRequests(
+      developmentSurfaces.map(({ target, surface }) => ({
+        targetId: target.id,
+        surfaceId: surface.id,
+      })),
+    );
 
     let loadedCount = 0;
     let failedCount = 0;
