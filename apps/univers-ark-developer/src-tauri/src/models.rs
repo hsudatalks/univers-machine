@@ -453,6 +453,7 @@ pub(crate) struct TerminalExitEvent {
     pub(crate) reason: String,
 }
 
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TunnelStatus {

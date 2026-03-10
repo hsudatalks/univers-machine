@@ -723,6 +723,7 @@ pub(crate) fn write_terminal(
     write_to_terminal_session(&target_id, &session, &data)
 }
 
+
 #[tauri::command]
 pub(crate) fn resize_terminal(
     terminal_state: State<TerminalState>,

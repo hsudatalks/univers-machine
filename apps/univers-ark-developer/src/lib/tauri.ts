@@ -603,6 +603,7 @@ export async function scanLocalContainers(): Promise<LocalDockerContainer[]> {
   return invoke<LocalDockerContainer[]>("scan_local_containers");
 }
 
+
 export async function getDockerStats(name: string): Promise<DockerContainerStats> {
   if (!isTauri()) {
     return { name, status: "unknown", cpuPercent: "--", memUsage: "--", memPercent: "--", netIo: "--", blockIo: "--", pids: "--" };

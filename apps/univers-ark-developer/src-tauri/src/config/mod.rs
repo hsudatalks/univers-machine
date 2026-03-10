@@ -4,7 +4,7 @@ mod ssh;
 
 use crate::models::{
     BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget, MachineTransport,
-    ManagedContainerKind, ManagedServer, TargetsFile,
+    ManagedContainer, ManagedContainerKind, ManagedServer, TargetsFile,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -629,6 +629,15 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
         servers.push(inventory.server);
     }
 
+    // Build a virtual server for Docker targets (id starts with "docker-")
+    let docker_targets: Vec<&DeveloperTarget> = targets
+        .iter()
+        .filter(|t| t.id.starts_with("docker-"))
+        .collect();
+    if let Some(docker_server) = build_docker_virtual_server(&docker_targets) {
+        servers.push(docker_server);
+    }
+
     let inventory = ResolvedInventory {
         targets_file: TargetsFile {
             selected_target_id: raw_targets_file.selected_target_id,
@@ -1103,6 +1112,83 @@ pub(crate) fn read_bootstrap_data(
 ) -> Result<(TargetsFile, Vec<ManagedServer>), String> {
     let inventory = load_inventory(force_refresh)?;
     Ok((inventory.targets_file, inventory.servers))
+}
+
+fn fetch_docker_status_map() -> HashMap<String, String> {
+    let Ok(output) = std::process::Command::new("docker")
+        .args(["ps", "-a", "--format", "{{.Names}}\t{{.State}}"])
+        .output()
+    else {
+        return HashMap::new();
+    };
+    if !output.status.success() {
+        return HashMap::new();
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(2, '\t');
+            let name = parts.next()?.to_string();
+            let state = parts.next()?.to_string();
+            Some((name, state))
+        })
+        .collect()
+}
+
+fn build_docker_virtual_server(docker_targets: &[&DeveloperTarget]) -> Option<ManagedServer> {
+    if docker_targets.is_empty() {
+        return None;
+    }
+    let status_map = fetch_docker_status_map();
+    let containers: Vec<ManagedContainer> = docker_targets
+        .iter()
+        .map(|target| {
+            let container_name = target
+                .id
+                .strip_prefix("docker-")
+                .unwrap_or(&target.label)
+                .to_string();
+            let status = status_map
+                .get(&container_name)
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
+            let running = status == "running";
+            ManagedContainer {
+                server_id: "docker-local".to_string(),
+                server_label: "Docker (local)".to_string(),
+                target_id: target.id.clone(),
+                name: container_name,
+                label: target.label.clone(),
+                status: status.clone(),
+                ipv4: "localhost".to_string(),
+                ssh_user: String::new(),
+                ssh_destination: String::new(),
+                ssh_command: target.terminal_command.clone(),
+                ssh_state: status,
+                ssh_message: String::new(),
+                ssh_reachable: running,
+            }
+        })
+        .collect();
+    let running = containers.iter().filter(|c| c.ssh_reachable).count();
+    let (state, message) = if containers.is_empty() {
+        ("empty".to_string(), "No containers.".to_string())
+    } else if running == containers.len() {
+        ("ready".to_string(), format!("{}/{} container(s) running.", running, containers.len()))
+    } else if running > 0 {
+        ("degraded".to_string(), format!("{}/{} container(s) running.", running, containers.len()))
+    } else {
+        ("stopped".to_string(), format!("0/{} container(s) running.", containers.len()))
+    };
+    Some(ManagedServer {
+        id: "docker-local".to_string(),
+        label: "Docker (local)".to_string(),
+        host: "localhost".to_string(),
+        description: format!("{} Docker Desktop container(s).", containers.len()),
+        state,
+        message,
+        containers,
+    })
 }
 
 #[cfg(test)]
