@@ -9,19 +9,21 @@ import {
 } from "lucide-react";
 import {
   listenContainerDashboardUpdates,
+  executeCommandService,
   restartTmux,
   refreshContainerDashboard,
   startDashboardMonitor,
   stopDashboardMonitor,
 } from "../lib/tauri";
+import { useServiceStatuses } from "../hooks/useServiceStatuses";
 import type {
   ContainerDashboard,
   ContainerDashboardUpdate,
   ContainerTmuxSessionInfo,
-  ContainerServiceInfo,
   DeveloperTarget,
   TunnelStatus,
 } from "../types";
+import { tmuxCommandService } from "../lib/target-services";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import {
@@ -156,6 +158,7 @@ export function DashboardPane({
   const [isRestartingTmux, setIsRestartingTmux] = useState(false);
   const [tmuxActionError, setTmuxActionError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const { serviceStatuses } = useServiceStatuses();
 
   const applyUpdate = useCallback(
     (payload: ContainerDashboardUpdate) => {
@@ -199,9 +202,9 @@ export function DashboardPane({
 
   const project = dashboard?.project;
   const runtime = dashboard?.runtime;
-  const services = dashboard?.services ?? [];
   const agent = dashboard?.agent;
   const tmux = dashboard?.tmux;
+  const declaredTmuxService = tmuxCommandService(target);
   const diskPercent = formatPercent(
     runtime?.diskUsedBytes ?? 0,
     runtime?.diskTotalBytes ?? 0,
@@ -236,14 +239,38 @@ export function DashboardPane({
     },
   ] as const;
 
-  const serviceSignals: Array<
-    ContainerServiceInfo & {
-      variant: "neutral" | "success" | "warning" | "destructive";
-    }
-  > = services.map((service) => ({
-    ...service,
-    variant: serviceBadgeVariant(service.status),
-  }));
+  const serviceSignals = target.services
+    .filter((service) => service.kind !== "command")
+    .map((service) => {
+      const key = `${target.id}::${service.id}`;
+      const registryStatus = serviceStatuses[key];
+      const dashboardStatus = dashboard?.services.find(
+        (candidate) => candidate.id === service.id,
+      );
+      const fallbackUrl =
+        service.web?.localUrl ||
+        service.web?.remoteUrl ||
+        service.endpoint?.url ||
+        (service.endpoint
+          ? `tcp://${service.endpoint.host || "127.0.0.1"}:${service.endpoint.port}`
+          : null);
+      const status = registryStatus?.state ?? dashboardStatus?.status ?? "unknown";
+      const detail =
+        registryStatus?.message ??
+        dashboardStatus?.detail ??
+        (service.description || "No runtime status yet.");
+      const url =
+        registryStatus?.localUrl ?? dashboardStatus?.url ?? fallbackUrl ?? null;
+
+      return {
+        id: service.id,
+        label: service.label,
+        status,
+        detail,
+        url,
+        variant: serviceBadgeVariant(status),
+      };
+    });
 
   const tmuxSessionRows: ContainerTmuxSessionInfo[] = tmux?.sessions ?? [];
   const defaultTmuxSessions = tmuxSessionRows.filter(
@@ -353,9 +380,9 @@ export function DashboardPane({
           </CardHeader>
           <Separator />
           <CardContent className="pt-4">
-            {isLoading ? (
+            {serviceSignals.length === 0 && isLoading ? (
               <p className="dashboard-copy">Loading service state…</p>
-            ) : error ? (
+            ) : serviceSignals.length === 0 && error ? (
               <p className="dashboard-copy">{error}</p>
             ) : serviceSignals.length === 0 ? (
               <p className="dashboard-copy">No runtime services detected.</p>
@@ -497,7 +524,11 @@ export function DashboardPane({
                 onClick={() => {
                   setTmuxActionError(null);
                   setIsRestartingTmux(true);
-                  void restartTmux(target.id)
+                  const restartPromise = declaredTmuxService
+                    ? executeCommandService(target.id, declaredTmuxService.id, "restart")
+                    : restartTmux(target.id);
+
+                  void restartPromise
                     .then(() => refreshContainerDashboard(target.id))
                     .catch((error: unknown) => {
                       setTmuxActionError(

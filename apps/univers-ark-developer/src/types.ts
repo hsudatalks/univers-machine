@@ -217,6 +217,15 @@ export interface TunnelStatus {
   message: string;
 }
 
+export interface ServiceStatus {
+  targetId: string;
+  serviceId: string;
+  kind: DeveloperServiceKind;
+  state: string;
+  message: string;
+  localUrl: string | null;
+}
+
 export interface GithubPullRequestSummary {
   number: number;
   title: string;

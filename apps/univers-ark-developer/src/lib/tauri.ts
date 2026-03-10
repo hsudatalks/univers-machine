@@ -14,6 +14,7 @@ import type {
   ManagedServer,
   RemoteDirectoryListing,
   RemoteFilePreview,
+  ServiceStatus,
   TerminalExitEvent,
   TerminalOutputEvent,
   TerminalSnapshot,
@@ -26,6 +27,7 @@ const SURFACE_PORT_END = import.meta.env.DEV ? 43999 : 45999;
 const SURFACE_HOST = "127.0.0.1";
 const SIDEBAR_TOGGLE_REQUESTED_EVENT = "toggle-sidebar-requested";
 const DASHBOARD_UPDATED_EVENT = "container-dashboard-updated";
+const SERVICE_STATUS_EVENT = "service-status";
 const PREVIOUS_CONTAINER_REQUESTED_EVENT = "previous-container-requested";
 const NEXT_CONTAINER_REQUESTED_EVENT = "next-container-requested";
 
@@ -429,6 +431,20 @@ export async function restartTmux(targetId: string): Promise<void> {
   return invoke<void>("restart_tmux", { targetId });
 }
 
+export async function executeCommandService(
+  targetId: string,
+  serviceId: string,
+  action: "restart",
+): Promise<void> {
+  if (!isTauri()) {
+    return;
+  }
+
+  return invoke<void>("execute_command_service", {
+    spec: { targetId, serviceId, action },
+  });
+}
+
 export async function clipboardWrite(text: string): Promise<void> {
   if (!isTauri()) {
     return;
@@ -590,6 +606,18 @@ export async function listenTunnelStatus(
   }
 
   return listen<TunnelStatus>("tunnel-status", (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function listenServiceStatus(
+  handler: (payload: ServiceStatus) => void,
+): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => undefined;
+  }
+
+  return listen<ServiceStatus>(SERVICE_STATUS_EVENT, (event) => {
     handler(event.payload);
   });
 }
