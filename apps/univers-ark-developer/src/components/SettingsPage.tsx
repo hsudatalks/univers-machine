@@ -202,10 +202,7 @@ export function SettingsPage({
                   <button
                     className="settings-server-card"
                     key={machine.id}
-                    onClick={() => {
-                      if (!machine.id.endsWith("-local")) setSelectedMachine(machine);
-                    }}
-                    style={machine.id.endsWith("-local") ? { cursor: "default" } : undefined}
+                    onClick={() => setSelectedMachine(machine)}
                     type="button"
                     >
                       <div className="settings-server-header">
