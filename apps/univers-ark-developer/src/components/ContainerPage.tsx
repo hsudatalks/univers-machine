@@ -2,27 +2,38 @@ import { useState, type CSSProperties, type PointerEvent as ReactPointerEvent } 
 import { BrowserPane, type BrowserFrameInstance } from "./BrowserPane";
 import { DashboardPane } from "./DashboardPane";
 import { FilesPane } from "./FilesPane";
+import { ServicesPane } from "./ServicesPane";
 import { TerminalPane } from "./TerminalPane";
 import { Button } from "./ui/button";
 import type { ContainerToolPanel } from "../lib/view-types";
-import type { DeveloperSurface, DeveloperTarget, TunnelStatus } from "../types";
-import { FolderOpen, Globe, LayoutDashboard } from "lucide-react";
+import type {
+  DeveloperSurface,
+  DeveloperTarget,
+  ServiceStatus,
+  TunnelStatus,
+} from "../types";
+import { FolderOpen, Globe, LayoutDashboard, Rows4 } from "lucide-react";
 
 interface ContainerPageProps {
   activeTool: ContainerToolPanel;
   dashboardRefreshSeconds: number;
-  primaryBrowserFrame?: BrowserFrameInstance;
-  primaryBrowserPanel: ContainerToolPanel | null;
+  browserFrame?: BrowserFrameInstance;
+  browserPanel: ContainerToolPanel | null;
+  browserSurface?: DeveloperSurface;
   primaryBrowserStatus?: TunnelStatus;
   primaryBrowserSurface?: DeveloperSurface;
   isTerminalCollapsed: boolean;
+  onExecuteCommandService: (serviceId: string, action: "restart") => Promise<void>;
+  onOpenBrowserService: (serviceId: string) => void;
   onReloadBrowser: () => void;
   onRestartBrowser: () => void;
+  onRestartBrowserService: (serviceId: string) => void;
   onRestartContainer?: () => Promise<void>;
   onSelectTool: (panel: ContainerToolPanel) => void;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleTerminalCollapsed: () => void;
   pageVisible: boolean;
+  serviceStatuses: Record<string, ServiceStatus>;
   target: DeveloperTarget;
   workspaceStyle: CSSProperties;
 }
@@ -30,18 +41,23 @@ interface ContainerPageProps {
 export function ContainerPage({
   activeTool,
   dashboardRefreshSeconds,
-  primaryBrowserFrame,
-  primaryBrowserPanel,
+  browserFrame,
+  browserPanel,
+  browserSurface,
   primaryBrowserStatus,
   primaryBrowserSurface,
   isTerminalCollapsed,
+  onExecuteCommandService,
+  onOpenBrowserService,
   onReloadBrowser,
   onRestartBrowser,
+  onRestartBrowserService,
   onRestartContainer,
   onSelectTool,
   onStartResize,
   onToggleTerminalCollapsed,
   pageVisible,
+  serviceStatuses,
   target,
   workspaceStyle,
 }: ContainerPageProps) {
@@ -118,6 +134,18 @@ export function ContainerPage({
             <LayoutDashboard size={16} />
           </Button>
           <Button
+            aria-label="Services"
+            isActive={activeTool === "services"}
+            onClick={() => {
+              onSelectTool("services");
+            }}
+            size="icon"
+            title="Services"
+            variant={activeTool === "services" ? "default" : "ghost"}
+          >
+            <Rows4 size={16} />
+          </Button>
+          <Button
             aria-label="Files"
             isActive={activeTool === "files"}
             onClick={() => {
@@ -132,15 +160,15 @@ export function ContainerPage({
           <Button
             aria-label={primaryBrowserSurface?.label ?? "Primary browser"}
             disabled={!primaryBrowserSurface}
-            isActive={activeTool === primaryBrowserPanel}
+            isActive={activeTool === browserPanel}
             onClick={() => {
-              if (primaryBrowserPanel) {
-                onSelectTool(primaryBrowserPanel);
+              if (browserPanel) {
+                onSelectTool(browserPanel);
               }
             }}
             size="icon"
             title={primaryBrowserSurface?.label ?? "Primary browser"}
-            variant={activeTool === primaryBrowserPanel ? "default" : "ghost"}
+            variant={activeTool === browserPanel ? "default" : "ghost"}
           >
             <Globe size={16} />
           </Button>
@@ -188,7 +216,7 @@ export function ContainerPage({
 
       <section className="page-section">
         <div
-          className={`container-workspace ${activeTool === "dashboard" ? "tool-dashboard" : activeTool === "files" ? "tool-files" : "tool-browser"} ${isTerminalCollapsed ? "is-terminal-collapsed" : ""}`}
+          className={`container-workspace ${activeTool === "dashboard" ? "tool-dashboard" : activeTool === "services" ? "tool-services" : activeTool === "files" ? "tool-files" : "tool-browser"} ${isTerminalCollapsed ? "is-terminal-collapsed" : ""}`}
           style={workspaceStyle}
         >
           <article className={`panel terminal-panel ${isTerminalCollapsed ? "is-collapsed" : ""}`}>
@@ -210,6 +238,18 @@ export function ContainerPage({
               primaryBrowserLabel={primaryBrowserSurface?.label}
               primaryBrowserStatus={primaryBrowserStatus}
               primaryBrowserUrl={primaryBrowserStatus?.localUrl ?? primaryBrowserSurface?.localUrl}
+              serviceStatuses={serviceStatuses}
+              target={target}
+            />
+          </div>
+
+          <div className={`services-pane-slot ${activeTool === "services" ? "" : "is-hidden"}`}>
+            <ServicesPane
+              activeBrowserServiceId={browserSurface?.id ?? null}
+              onOpenBrowserService={onOpenBrowserService}
+              onRestartBrowserService={onRestartBrowserService}
+              onRunCommandService={onExecuteCommandService}
+              serviceStatuses={serviceStatuses}
               target={target}
             />
           </div>
@@ -218,14 +258,14 @@ export function ContainerPage({
             <FilesPane active={pageVisible} target={target} />
           </div>
 
-          {primaryBrowserSurface ? (
+          {browserSurface ? (
             <BrowserPane
-              activeFrame={primaryBrowserFrame}
-              isVisible={activeTool === primaryBrowserPanel}
+              activeFrame={browserFrame}
+              isVisible={activeTool === browserPanel}
               onReload={onReloadBrowser}
               onRestart={onRestartBrowser}
-              retainedFrames={primaryBrowserFrame ? [primaryBrowserFrame] : []}
-              slotLabel={primaryBrowserSurface.label}
+              retainedFrames={browserFrame ? [browserFrame] : []}
+              slotLabel={browserSurface.label}
             />
           ) : null}
         </div>

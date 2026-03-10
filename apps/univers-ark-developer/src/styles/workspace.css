@@ -102,6 +102,7 @@
 }
 
 .container-workspace > .files-pane-slot,
+.container-workspace > .services-pane-slot,
 .container-workspace > .browser-panel {
   grid-column: 3;
   min-height: 0;

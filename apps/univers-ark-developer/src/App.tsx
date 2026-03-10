@@ -7,7 +7,7 @@ import { ShellState } from "./components/ShellState";
 import { ServerPage } from "./components/ServerPage";
 import { SidebarNav } from "./components/SidebarNav";
 import { StatusBar } from "./components/StatusBar";
-import { restartContainer } from "./lib/tauri";
+import { executeCommandService, restartContainer } from "./lib/tauri";
 import {
   browserSurfaceById,
   primaryBrowserSurface,
@@ -24,6 +24,7 @@ import {
   OVERVIEW_ZOOM_STEP,
   useOverviewZoom,
 } from "./hooks/useOverviewZoom";
+import { useServiceStatuses } from "./hooks/useServiceStatuses";
 import { useSidebarState } from "./hooks/useSidebarState";
 import { useTunnelStatuses } from "./hooks/useTunnelStatuses";
 import { useWorkbenchBootstrap } from "./hooks/useWorkbenchBootstrap";
@@ -36,6 +37,7 @@ import type {
 } from "./types";
 import {
   browserSurfaceIdFromPanel,
+  isBrowserToolPanel,
   type ActiveView,
 } from "./lib/view-types";
 const DEFAULT_TERMINAL_PANEL_WIDTH_REM = 35;
@@ -156,6 +158,7 @@ function App() {
   const { overviewZoom, setOverviewZoom, clampOverviewZoom, roundOverviewZoom } =
     useOverviewZoom();
   const { tunnelStatuses, setTunnelStatus } = useTunnelStatuses();
+  const { serviceStatuses } = useServiceStatuses();
   const {
     activeContainerServer,
     activeContainerTarget,
@@ -352,30 +355,37 @@ function App() {
             const primarySurface = target
               ? primaryBrowserSurface(target)
               : undefined;
-            const primaryBrowserPanel = primarySurface
-              ? (`browser:${primarySurface.id}` as const)
-              : null;
             const activeBrowserSurfaceId = browserSurfaceIdFromPanel(activeTool);
             const browserSurface =
               activeBrowserSurfaceId && target
                 ? browserSurfaceById(target, activeBrowserSurfaceId)
                 : undefined;
+            const browserPanel = browserSurface
+              ? (`browser:${browserSurface.id}` as const)
+              : isBrowserToolPanel(activeTool)
+                ? activeTool
+                : null;
+            const browserStatus =
+              browserSurface && target
+                ? tunnelStatuses[surfaceKey(target.id, browserSurface.id)] ??
+                  fallbackTunnelStatus(target.id, browserSurface)
+                : undefined;
+            const browserFrame: BrowserFrameInstance | undefined =
+              browserSurface && browserStatus && target
+                ? {
+                    cacheKey: surfaceKey(target.id, browserSurface.id),
+                    frameVersion:
+                      browserFrameVersions[surfaceKey(target.id, browserSurface.id)] ?? 0,
+                    isActive: isVisible && activeTool === browserPanel,
+                    status: browserStatus,
+                    surface: browserSurface,
+                    target,
+                  }
+                : undefined;
             const primaryBrowserStatus =
               primarySurface && target
                 ? tunnelStatuses[surfaceKey(target.id, primarySurface.id)] ??
                   fallbackTunnelStatus(target.id, primarySurface)
-                : undefined;
-            const primaryBrowserFrame: BrowserFrameInstance | undefined =
-              primarySurface && primaryBrowserStatus && target
-                ? {
-                    cacheKey: surfaceKey(target.id, primarySurface.id),
-                    frameVersion:
-                      browserFrameVersions[surfaceKey(target.id, primarySurface.id)] ?? 0,
-                    isActive: isVisible && activeTool === primaryBrowserPanel,
-                    status: primaryBrowserStatus,
-                    surface: primarySurface,
-                    target,
-                  }
                 : undefined;
             return (
               <section
@@ -385,12 +395,19 @@ function App() {
                 {target ? (
                   <ContainerPage
                     activeTool={activeTool}
+                    browserFrame={browserFrame}
+                    browserPanel={browserPanel}
+                    browserSurface={browserSurface}
                     dashboardRefreshSeconds={appSettings.dashboardRefreshSeconds}
-                    primaryBrowserFrame={primaryBrowserFrame}
-                    primaryBrowserPanel={primaryBrowserPanel}
                     primaryBrowserStatus={primaryBrowserStatus}
                     primaryBrowserSurface={primarySurface}
                     isTerminalCollapsed={Boolean(containerTerminalCollapsed[target.id])}
+                    onExecuteCommandService={(serviceId, action) =>
+                      executeCommandService(target.id, serviceId, action)
+                    }
+                    onOpenBrowserService={(serviceId) => {
+                      selectContainerTool(target, `browser:${serviceId}`);
+                    }}
                     onReloadBrowser={() => {
                       if (browserSurface) {
                         reloadBrowserFrame(target.id, browserSurface.id);
@@ -400,6 +417,9 @@ function App() {
                       if (browserSurface) {
                         restartBrowserTunnel(target.id, browserSurface.id);
                       }
+                    }}
+                    onRestartBrowserService={(serviceId) => {
+                      restartBrowserTunnel(target.id, serviceId);
                     }}
                     onRestartContainer={
                       target.id.includes("::")
@@ -419,6 +439,7 @@ function App() {
                       toggleTerminalCollapsed(target.id);
                     }}
                     pageVisible={isVisible}
+                    serviceStatuses={serviceStatuses}
                     target={target}
                     workspaceStyle={{
                       "--container-terminal-width": `${containerTerminalWidths[target.id] ?? defaultTerminalPanelWidthPx()}px`,

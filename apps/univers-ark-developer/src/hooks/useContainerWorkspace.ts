@@ -274,9 +274,12 @@ export function useContainerWorkspace({
           nextPanel = "dashboard";
           break;
         case "2":
-          nextPanel = "files";
+          nextPanel = "services";
           break;
         case "3":
+          nextPanel = "files";
+          break;
+        case "4":
           nextPanel = primaryPanel;
           break;
         default:

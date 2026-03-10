@@ -120,7 +120,11 @@ export function tmuxCommandService(
 export function resolveDefaultToolPanel(target: DeveloperTarget): ContainerToolPanel {
   const defaultTool = target.workspace?.defaultTool?.trim();
 
-  if (defaultTool === "files" || defaultTool === "dashboard") {
+  if (
+    defaultTool === "files" ||
+    defaultTool === "dashboard" ||
+    defaultTool === "services"
+  ) {
     return defaultTool;
   }
 

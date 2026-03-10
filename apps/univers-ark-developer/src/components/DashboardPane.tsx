@@ -15,12 +15,12 @@ import {
   startDashboardMonitor,
   stopDashboardMonitor,
 } from "../lib/tauri";
-import { useServiceStatuses } from "../hooks/useServiceStatuses";
 import type {
   ContainerDashboard,
   ContainerDashboardUpdate,
   ContainerTmuxSessionInfo,
   DeveloperTarget,
+  ServiceStatus,
   TunnelStatus,
 } from "../types";
 import { tmuxCommandService } from "../lib/target-services";
@@ -39,6 +39,7 @@ interface DashboardPaneProps {
   primaryBrowserLabel?: string;
   primaryBrowserStatus?: TunnelStatus;
   primaryBrowserUrl?: string;
+  serviceStatuses: Record<string, ServiceStatus>;
   target: DeveloperTarget;
 }
 
@@ -149,6 +150,7 @@ export function DashboardPane({
   primaryBrowserLabel,
   primaryBrowserStatus,
   primaryBrowserUrl,
+  serviceStatuses,
   target,
 }: DashboardPaneProps) {
   const [dashboard, setDashboard] = useState<ContainerDashboard | null>(null);
@@ -158,8 +160,6 @@ export function DashboardPane({
   const [isRestartingTmux, setIsRestartingTmux] = useState(false);
   const [tmuxActionError, setTmuxActionError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
-  const { serviceStatuses } = useServiceStatuses();
-
   const applyUpdate = useCallback(
     (payload: ContainerDashboardUpdate) => {
       if (payload.targetId !== target.id) {
