@@ -1,84 +1,21 @@
-use crate::models::{
-    BrowserServiceType, BrowserSurface, CommandService, ContainerWorkspace, DeveloperService,
-    DeveloperServiceKind, DeveloperTarget, sync_target_services,
-};
+use crate::models::{BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget, sync_target_services};
+use serde::Deserialize;
+use std::collections::HashMap;
 
 use super::RemoteContainerServer;
 
-#[derive(Clone)]
-struct ContainerProfileDefaults {
-    workspace: ContainerWorkspace,
-    services: Vec<DeveloperService>,
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ContainerProfileConfig {
+    #[serde(default)]
+    pub(super) workspace: ContainerWorkspace,
+    #[serde(default)]
+    pub(super) services: Vec<DeveloperService>,
+    #[serde(default)]
+    pub(super) surfaces: Vec<BrowserSurface>,
 }
 
-fn ark_workbench_profile_defaults() -> ContainerProfileDefaults {
-    ContainerProfileDefaults {
-        workspace: ContainerWorkspace {
-            profile: String::from("ark-workbench"),
-            default_tool: String::from("dashboard"),
-            project_path: String::from("~/repos/hvac-workbench"),
-            files_root: String::from("~/repos/hvac-workbench"),
-            primary_web_service_id: String::from("development"),
-            tmux_command_service_id: String::from("tmux-developer"),
-        },
-        services: vec![
-            DeveloperService {
-                id: String::from("development"),
-                label: String::from("Development"),
-                kind: DeveloperServiceKind::Web,
-                description: String::from("Primary Vite development surface."),
-                web: Some(BrowserSurface {
-                    id: String::from("development"),
-                    label: String::from("Development"),
-                    service_type: BrowserServiceType::Vite,
-                    tunnel_command: String::new(),
-                    local_url: String::from("http://127.0.0.1:3432/"),
-                    remote_url: String::from("http://127.0.0.1:3432/"),
-                    vite_hmr_tunnel_command: String::new(),
-                }),
-                endpoint: None,
-                command: None,
-            },
-            DeveloperService {
-                id: String::from("preview"),
-                label: String::from("Preview"),
-                kind: DeveloperServiceKind::Web,
-                description: String::from("Preview surface."),
-                web: Some(BrowserSurface {
-                    id: String::from("preview"),
-                    label: String::from("Preview"),
-                    service_type: BrowserServiceType::Http,
-                    tunnel_command: String::new(),
-                    local_url: String::from("http://127.0.0.1:4173/"),
-                    remote_url: String::from("http://127.0.0.1:4173/"),
-                    vite_hmr_tunnel_command: String::new(),
-                }),
-                endpoint: None,
-                command: None,
-            },
-            DeveloperService {
-                id: String::from("tmux-developer"),
-                label: String::from("Developer Tmux"),
-                kind: DeveloperServiceKind::Command,
-                description: String::from("Restart the developer tmux server."),
-                web: None,
-                endpoint: None,
-                command: Some(CommandService {
-                    restart: String::from(
-                        "cd ~/repos/univers-container && ./.claude/skills/container-manage/bin/cm dev restart developer",
-                    ),
-                }),
-            },
-        ],
-    }
-}
-
-fn profile_defaults(profile: &str) -> Option<ContainerProfileDefaults> {
-    match profile.trim() {
-        "ark-workbench" => Some(ark_workbench_profile_defaults()),
-        _ => None,
-    }
-}
+pub(super) type ContainerProfiles = HashMap<String, ContainerProfileConfig>;
 
 fn fill_string(target: &mut String, fallback: &str) {
     if target.trim().is_empty() && !fallback.trim().is_empty() {
@@ -104,9 +41,12 @@ fn merge_workspace_defaults(
     );
 }
 
-pub(super) fn apply_profile_defaults_to_target(target: &mut DeveloperTarget) {
+pub(super) fn apply_profile_defaults_to_target(
+    target: &mut DeveloperTarget,
+    profile_defaults: &ContainerProfiles,
+) {
     let profile_name = target.workspace.profile.trim().to_string();
-    let Some(defaults) = profile_defaults(&profile_name) else {
+    let Some(defaults) = profile_defaults.get(&profile_name) else {
         sync_target_services(target);
         return;
     };
@@ -114,28 +54,81 @@ pub(super) fn apply_profile_defaults_to_target(target: &mut DeveloperTarget) {
     merge_workspace_defaults(&mut target.workspace, &defaults.workspace);
 
     if target.services.is_empty() && target.surfaces.is_empty() {
-        target.services = defaults.services;
+        target.services = defaults.services.clone();
+        target.surfaces = defaults.surfaces.clone();
     }
 
     sync_target_services(target);
 }
 
-pub(super) fn apply_profile_defaults_to_remote_server(server: &mut RemoteContainerServer) {
+pub(super) fn apply_profile_defaults_to_remote_server(
+    server: &mut RemoteContainerServer,
+    profile_defaults: &ContainerProfiles,
+) {
     let profile_name = server.workspace.profile.trim().to_string();
-    let Some(defaults) = profile_defaults(&profile_name) else {
+    let Some(defaults) = profile_defaults.get(&profile_name) else {
         return;
     };
 
     merge_workspace_defaults(&mut server.workspace, &defaults.workspace);
 
     if server.services.is_empty() && server.surfaces.is_empty() {
-        server.services = defaults.services;
+        server.services = defaults.services.clone();
+        server.surfaces = defaults.surfaces.clone();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{BrowserServiceType, CommandService, DeveloperServiceKind};
+
+    fn fixture_profiles() -> ContainerProfiles {
+        HashMap::from([(
+            String::from("ark-workbench"),
+            ContainerProfileConfig {
+                workspace: ContainerWorkspace {
+                    profile: String::from("ark-workbench"),
+                    default_tool: String::from("dashboard"),
+                    project_path: String::from("~/repos/hvac-workbench"),
+                    files_root: String::from("~/repos/hvac-workbench"),
+                    primary_web_service_id: String::from("development"),
+                    tmux_command_service_id: String::from("tmux-developer"),
+                },
+                services: vec![
+                    DeveloperService {
+                        id: String::from("development"),
+                        label: String::from("Development"),
+                        kind: DeveloperServiceKind::Web,
+                        description: String::from("Primary Vite development surface."),
+                        web: Some(BrowserSurface {
+                            id: String::from("development"),
+                            label: String::from("Development"),
+                            service_type: BrowserServiceType::Vite,
+                            tunnel_command: String::new(),
+                            local_url: String::from("http://127.0.0.1:3432/"),
+                            remote_url: String::from("http://127.0.0.1:3432/"),
+                            vite_hmr_tunnel_command: String::new(),
+                        }),
+                        endpoint: None,
+                        command: None,
+                    },
+                    DeveloperService {
+                        id: String::from("tmux-developer"),
+                        label: String::from("Developer Tmux"),
+                        kind: DeveloperServiceKind::Command,
+                        description: String::from("Restart the developer tmux server."),
+                        web: None,
+                        endpoint: None,
+                        command: Some(CommandService {
+                            restart: String::from("cm dev restart developer"),
+                        }),
+                    },
+                ],
+                surfaces: vec![],
+            },
+        )])
+    }
 
     #[test]
     fn applies_ark_workbench_defaults_to_target() {
@@ -154,12 +147,12 @@ mod tests {
             surfaces: vec![],
         };
 
-        apply_profile_defaults_to_target(&mut target);
+        apply_profile_defaults_to_target(&mut target, &fixture_profiles());
 
         assert_eq!(target.workspace.default_tool, "dashboard");
         assert_eq!(target.workspace.primary_web_service_id, "development");
-        assert_eq!(target.services.len(), 3);
-        assert_eq!(target.surfaces.len(), 2);
+        assert_eq!(target.services.len(), 2);
+        assert_eq!(target.surfaces.len(), 1);
         assert!(target
             .services
             .iter()

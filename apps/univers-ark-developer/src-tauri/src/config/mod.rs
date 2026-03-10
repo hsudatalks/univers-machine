@@ -8,6 +8,7 @@ use crate::models::{
 };
 use serde::Deserialize;
 use std::{
+    collections::HashMap,
     fs,
     path::PathBuf,
     process::Output,
@@ -17,7 +18,10 @@ use tauri::{path::BaseDirectory, AppHandle, Manager, Runtime};
 
 use self::{
     discovery::discover_remote_server_inventory,
-    profiles::{apply_profile_defaults_to_remote_server, apply_profile_defaults_to_target},
+    profiles::{
+        ContainerProfileConfig, ContainerProfiles, apply_profile_defaults_to_remote_server,
+        apply_profile_defaults_to_target,
+    },
     ssh::{build_ssh_command, run_target_shell_command_internal, shell_single_quote},
 };
 
@@ -25,6 +29,8 @@ use self::{
 #[serde(rename_all = "camelCase")]
 struct RawTargetsFile {
     selected_target_id: Option<String>,
+    #[serde(default)]
+    profiles: HashMap<String, ContainerProfileConfig>,
     #[serde(default)]
     targets: Vec<DeveloperTarget>,
     #[serde(default)]
@@ -103,8 +109,24 @@ fn default_container_name_suffix() -> String {
     String::from("-dev")
 }
 
-const TARGETS_FILE_NAME: &str = "developer-targets.json";
+const BUNDLED_TARGETS_TEMPLATE_NAME: &str = "developer-targets.json";
 const SERVER_TERMINAL_TARGET_PREFIX: &str = "server-host::";
+
+fn targets_file_name() -> &'static str {
+    if cfg!(debug_assertions) {
+        "univers-ark-developer.dev.json"
+    } else {
+        "univers-ark-developer.json"
+    }
+}
+
+pub(crate) fn univers_config_dir() -> Result<PathBuf, String> {
+    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .map(PathBuf::from)
+        .ok_or_else(|| String::from("Failed to resolve user home directory"))?;
+
+    Ok(home.join(".univers"))
+}
 
 fn configured_targets_path() -> &'static OnceLock<PathBuf> {
     static CONFIGURED_TARGETS_PATH: OnceLock<PathBuf> = OnceLock::new();
@@ -119,41 +141,52 @@ pub(crate) fn targets_file_path() -> PathBuf {
     configured_targets_path()
         .get()
         .cloned()
-        .unwrap_or_else(|| app_root().join(TARGETS_FILE_NAME))
+        .unwrap_or_else(|| {
+            univers_config_dir()
+                .map(|dir| dir.join(targets_file_name()))
+                .unwrap_or_else(|_| app_root().join(targets_file_name()))
+        })
 }
 
 fn bundled_targets_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> PathBuf {
     app_handle
         .path()
-        .resolve(TARGETS_FILE_NAME, BaseDirectory::Resource)
-        .unwrap_or_else(|_| app_root().join(TARGETS_FILE_NAME))
+        .resolve(BUNDLED_TARGETS_TEMPLATE_NAME, BaseDirectory::Resource)
+        .unwrap_or_else(|_| app_root().join(BUNDLED_TARGETS_TEMPLATE_NAME))
+}
+
+fn legacy_targets_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> Option<PathBuf> {
+    app_handle
+        .path()
+        .app_config_dir()
+        .ok()
+        .map(|dir| dir.join(BUNDLED_TARGETS_TEMPLATE_NAME))
+        .filter(|path| path.exists())
 }
 
 pub(crate) fn initialize_targets_file_path<R: Runtime>(
     app_handle: &AppHandle<R>,
 ) -> Result<PathBuf, String> {
-    let app_config_dir = app_handle
-        .path()
-        .app_config_dir()
-        .map_err(|error| format!("Failed to resolve app config directory: {}", error))?;
+    let app_config_dir = univers_config_dir()?;
 
     fs::create_dir_all(&app_config_dir).map_err(|error| {
         format!(
-            "Failed to create app config directory {}: {}",
+            "Failed to create config directory {}: {}",
             app_config_dir.display(),
             error
         )
     })?;
 
-    let writable_targets_path = app_config_dir.join(TARGETS_FILE_NAME);
+    let writable_targets_path = app_config_dir.join(targets_file_name());
 
     if !writable_targets_path.exists() {
-        let bundled_path = bundled_targets_file_path(app_handle);
+        let source_path = legacy_targets_file_path(app_handle)
+            .unwrap_or_else(|| bundled_targets_file_path(app_handle));
 
-        fs::copy(&bundled_path, &writable_targets_path).map_err(|error| {
+        fs::copy(&source_path, &writable_targets_path).map_err(|error| {
             format!(
-                "Failed to copy bundled targets file from {} to {}: {}",
-                bundled_path.display(),
+                "Failed to initialize targets file from {} to {}: {}",
+                source_path.display(),
                 writable_targets_path.display(),
                 error
             )
@@ -190,16 +223,17 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
     }
 
     let mut raw_targets_file = read_raw_targets_file()?;
+    let profiles: ContainerProfiles = raw_targets_file.profiles.clone();
     let mut targets = raw_targets_file.targets;
     targets
         .iter_mut()
-        .for_each(apply_profile_defaults_to_target);
+        .for_each(|target| apply_profile_defaults_to_target(target, &profiles));
     let mut servers = Vec::new();
 
     raw_targets_file
         .remote_servers
         .iter_mut()
-        .for_each(apply_profile_defaults_to_remote_server);
+        .for_each(|server| apply_profile_defaults_to_remote_server(server, &profiles));
 
     let discovered: Vec<_> = std::thread::scope(|scope| {
         let handles: Vec<_> = raw_targets_file

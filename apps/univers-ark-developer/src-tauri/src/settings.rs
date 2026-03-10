@@ -1,9 +1,24 @@
-use crate::models::AppSettings;
+use crate::{config::univers_config_dir, models::AppSettings};
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, Runtime};
 
-const SETTINGS_FILE_NAME: &str = "settings.json";
+fn settings_file_name() -> &'static str {
+    if cfg!(debug_assertions) {
+        "univers-ark-developer.dev.settings.json"
+    } else {
+        "univers-ark-developer.settings.json"
+    }
+}
+
+fn legacy_settings_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> Option<PathBuf> {
+    app_handle
+        .path()
+        .app_config_dir()
+        .ok()
+        .map(|dir| dir.join("settings.json"))
+        .filter(|path| path.exists())
+}
 
 fn sanitize_theme_mode(theme_mode: &str) -> String {
     match theme_mode {
@@ -29,27 +44,41 @@ fn sanitize_settings(settings: AppSettings) -> AppSettings {
 }
 
 fn settings_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> Result<PathBuf, String> {
-    let app_config_dir = app_handle
-        .path()
-        .app_config_dir()
-        .map_err(|error| format!("Failed to resolve app config directory: {}", error))?;
+    let _ = app_handle;
+    let app_config_dir = univers_config_dir()?;
 
     fs::create_dir_all(&app_config_dir).map_err(|error| {
         format!(
-            "Failed to create app config directory {}: {}",
+            "Failed to create config directory {}: {}",
             app_config_dir.display(),
             error
         )
     })?;
 
-    Ok(app_config_dir.join(SETTINGS_FILE_NAME))
+    Ok(app_config_dir.join(settings_file_name()))
 }
 
 pub(crate) fn load_app_settings<R: Runtime>(app_handle: &AppHandle<R>) -> Result<AppSettings, String> {
     let path = settings_file_path(app_handle)?;
 
     if !path.exists() {
-        return Ok(AppSettings::default());
+        if let Some(legacy_path) = legacy_settings_file_path(app_handle) {
+            fs::copy(&legacy_path, &path).map_err(|error| {
+                format!(
+                    "Failed to migrate settings from {} to {}: {}",
+                    legacy_path.display(),
+                    path.display(),
+                    error
+                )
+            })?;
+        } else {
+            let defaults = AppSettings::default();
+            let content = serde_json::to_string_pretty(&defaults)
+                .map_err(|error| format!("Failed to serialize default app settings: {}", error))?;
+            fs::write(&path, content)
+                .map_err(|error| format!("Failed to write {}: {}", path.display(), error))?;
+            return Ok(defaults);
+        }
     }
 
     let content = fs::read_to_string(&path)

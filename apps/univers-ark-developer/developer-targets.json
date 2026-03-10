@@ -1,19 +1,13 @@
 {
   "selectedTargetId": "local",
-  "targets": [
-    {
-      "id": "local",
-      "label": "Local",
-      "host": "localhost",
-      "description": "Local shell with direct development and preview surfaces on ports 3432 and 4173.",
-      "terminalCommand": "exec /bin/zsh -l",
-      "notes": [],
+  "profiles": {
+    "ark-workbench": {
       "workspace": {
         "profile": "ark-workbench",
         "defaultTool": "dashboard",
         "projectPath": "~/repos/hvac-workbench",
         "filesRoot": "~/repos/hvac-workbench",
-        "primaryBrowserServiceId": "development",
+        "primaryWebServiceId": "development",
         "tmuxCommandServiceId": "tmux-developer"
       },
       "services": [
@@ -21,6 +15,7 @@
           "id": "development",
           "label": "Development",
           "kind": "web",
+          "description": "Primary Vite development surface.",
           "web": {
             "id": "development",
             "label": "Development",
@@ -34,6 +29,7 @@
           "id": "preview",
           "label": "Preview",
           "kind": "web",
+          "description": "Preview surface.",
           "web": {
             "id": "preview",
             "label": "Preview",
@@ -47,29 +43,26 @@
           "id": "tmux-developer",
           "label": "Developer Tmux",
           "kind": "command",
+          "description": "Restart the developer tmux server.",
           "command": {
             "restart": "cd ~/repos/univers-container && ./.claude/skills/container-manage/bin/cm dev restart developer"
           }
         }
-      ],
-      "surfaces": [
-        {
-          "id": "development",
-          "label": "Development",
-          "serviceType": "vite",
-          "tunnelCommand": "",
-          "localUrl": "http://127.0.0.1:3432/",
-          "remoteUrl": "http://127.0.0.1:3432/"
-        },
-        {
-          "id": "preview",
-          "label": "Preview",
-          "serviceType": "http",
-          "tunnelCommand": "",
-          "localUrl": "http://127.0.0.1:4173/",
-          "remoteUrl": "http://127.0.0.1:4173/"
-        }
       ]
+    }
+  },
+  "targets": [
+    {
+      "id": "local",
+      "label": "Local",
+      "host": "localhost",
+      "description": "Local shell with direct development and preview surfaces on ports 3432 and 4173.",
+      "terminalCommand": "exec /bin/zsh -l",
+      "notes": [],
+      "workspace": {
+        "profile": "ark-workbench"
+      },
+      "services": []
     }
   ],
   "remoteServers": []
