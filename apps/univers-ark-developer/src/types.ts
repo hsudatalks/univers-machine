@@ -1,6 +1,9 @@
+export type BrowserServiceType = "http" | "vite";
+
 export interface DeveloperSurface {
   id: string;
   label: string;
+  serviceType: BrowserServiceType;
   tunnelCommand: string;
   localUrl: string;
   remoteUrl: string;

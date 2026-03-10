@@ -2,8 +2,8 @@ use crate::{
     constants::{TUNNEL_PROBE_INTERVAL, TUNNEL_PROBE_MESSAGE_DELAY, TUNNEL_PROBE_TIMEOUT},
     config::read_server_inventory,
     models::{
-        BrowserSurface, RusshTunnelForward, TunnelProcess, TunnelRegistration, TunnelSession,
-        TunnelState, TunnelStatus,
+        BrowserServiceType, BrowserSurface, RusshTunnelForward, TunnelProcess,
+        TunnelRegistration, TunnelSession, TunnelState, TunnelStatus,
     },
     proxy::{proxy_error_message, start_vite_proxy},
     runtime::{
@@ -882,6 +882,11 @@ fn spawn_vite_proxy_session(
     ))
 }
 
+fn uses_vite_forwarding(surface: &BrowserSurface) -> bool {
+    matches!(surface.service_type, BrowserServiceType::Vite)
+        || !surface.vite_hmr_tunnel_command.trim().is_empty()
+}
+
 pub(crate) fn start_tunnel(
     app: &AppHandle,
     tunnel_state: &TunnelState,
@@ -891,7 +896,7 @@ pub(crate) fn start_tunnel(
     let session_id = tunnel_state
         .next_session_id
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let session = if !surface.vite_hmr_tunnel_command.trim().is_empty() {
+    let session = if uses_vite_forwarding(surface) {
         spawn_vite_proxy_session(
             app,
             tunnel_state.sessions.clone(),

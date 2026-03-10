@@ -12,11 +12,21 @@ use std::{
 };
 use univers_ark_russh::LocalForward;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum BrowserServiceType {
+    #[default]
+    Http,
+    Vite,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BrowserSurface {
     pub(crate) id: String,
     pub(crate) label: String,
+    #[serde(default)]
+    pub(crate) service_type: BrowserServiceType,
     pub(crate) tunnel_command: String,
     pub(crate) local_url: String,
     pub(crate) remote_url: String,

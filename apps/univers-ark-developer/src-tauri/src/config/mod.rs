@@ -400,6 +400,7 @@ mod tests {
             surfaces: vec![BrowserSurface {
                 id: String::from("development"),
                 label: String::from("Development"),
+                service_type: BrowserServiceType::Vite,
                 tunnel_command: String::from(
                     "ssh {sshOptions} -NT -L {localPort}:127.0.0.1:3432 -J {serverHost} {sshUser}@{containerIp}",
                 ),

@@ -1,4 +1,6 @@
-use crate::models::{BrowserSurface, DeveloperTarget, ManagedContainer, ManagedServer};
+use crate::models::{
+    BrowserServiceType, BrowserSurface, DeveloperTarget, ManagedContainer, ManagedServer,
+};
 use csv::ReaderBuilder;
 
 use super::{
@@ -128,9 +130,18 @@ fn render_surface(
     surface: &BrowserSurface,
     context: &RemoteContainerContext<'_>,
 ) -> BrowserSurface {
+    let service_type = if matches!(surface.service_type, BrowserServiceType::Http)
+        && !surface.vite_hmr_tunnel_command.trim().is_empty()
+    {
+        BrowserServiceType::Vite
+    } else {
+        surface.service_type
+    };
+
     BrowserSurface {
         id: surface.id.clone(),
         label: replace_remote_placeholders(&surface.label, context),
+        service_type,
         tunnel_command: replace_remote_placeholders(&surface.tunnel_command, context),
         local_url: replace_remote_placeholders(&surface.local_url, context),
         remote_url: replace_remote_placeholders(&surface.remote_url, context),

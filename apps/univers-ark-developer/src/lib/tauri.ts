@@ -45,6 +45,7 @@ const fallbackBootstrapSeed: AppBootstrap = {
         {
           id: "development",
           label: "Development",
+          serviceType: "vite",
           tunnelCommand: "",
           localUrl: "http://127.0.0.1:3432/",
           remoteUrl: "http://127.0.0.1:3432/",
@@ -52,6 +53,7 @@ const fallbackBootstrapSeed: AppBootstrap = {
         {
           id: "preview",
           label: "Preview",
+          serviceType: "http",
           tunnelCommand: "",
           localUrl: "http://127.0.0.1:4173/",
           remoteUrl: "http://127.0.0.1:4173/",
