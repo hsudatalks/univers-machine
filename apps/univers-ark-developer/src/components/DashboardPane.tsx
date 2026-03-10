@@ -34,11 +34,9 @@ import { Separator } from "./ui/separator";
 
 interface DashboardPaneProps {
   dashboardRefreshSeconds: number;
-  developmentSurfaceLocalUrl?: string;
-  developmentStatus?: TunnelStatus;
-  onOpenDev: () => void;
-  onOpenFiles: () => void;
-  onRestartTerminal?: () => void;
+  primaryBrowserLabel?: string;
+  primaryBrowserStatus?: TunnelStatus;
+  primaryBrowserUrl?: string;
   target: DeveloperTarget;
 }
 
@@ -146,8 +144,9 @@ function formatRefreshLabel(seconds: number): string {
 
 export function DashboardPane({
   dashboardRefreshSeconds,
-  developmentSurfaceLocalUrl,
-  developmentStatus,
+  primaryBrowserLabel,
+  primaryBrowserStatus,
+  primaryBrowserUrl,
   target,
 }: DashboardPaneProps) {
   const [dashboard, setDashboard] = useState<ContainerDashboard | null>(null);
@@ -217,7 +216,11 @@ export function DashboardPane({
       label: "Repo",
       value: project?.repoFound ? "ready" : "missing",
       variant: project?.repoFound ? "success" : "warning",
-      detail: project?.projectPath ?? "~/repos/hvac-workbench",
+      detail:
+        project?.projectPath ??
+        target.workspace.projectPath ??
+        target.workspace.filesRoot ??
+        "Unavailable",
     },
     {
       label: "Branch",
@@ -259,13 +262,18 @@ export function DashboardPane({
               <div className="dashboard-summary-item">
                 <span className="dashboard-meta-label">Project root</span>
                 <span className="dashboard-meta-value">
-                  {project?.projectPath ?? "~/repos/hvac-workbench"}
+                  {project?.projectPath ??
+                    target.workspace.projectPath ??
+                    target.workspace.filesRoot ??
+                    "Unavailable"}
                 </span>
               </div>
               <div className="dashboard-summary-item">
-                <span className="dashboard-meta-label">Dev URL</span>
+                <span className="dashboard-meta-label">
+                  {primaryBrowserLabel ? `${primaryBrowserLabel} URL` : "Primary URL"}
+                </span>
                 <span className="dashboard-meta-value">
-                  {developmentSurfaceLocalUrl ?? "Unavailable"}
+                  {primaryBrowserUrl ?? "Unavailable"}
                 </span>
               </div>
               <div className="dashboard-summary-item">
@@ -282,8 +290,8 @@ export function DashboardPane({
               </div>
             </div>
             <div className="dashboard-summary-actions">
-              <Badge variant={tunnelBadgeVariant(developmentStatus?.state)}>
-                {developmentStatus?.state ?? "idle"}
+              <Badge variant={tunnelBadgeVariant(primaryBrowserStatus?.state)}>
+                {primaryBrowserStatus?.state ?? "idle"}
               </Badge>
               <Button
                 aria-label={isRefreshing ? "Refreshing dashboard" : "Refresh dashboard now"}

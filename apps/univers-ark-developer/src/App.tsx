@@ -8,6 +8,11 @@ import { ServerPage } from "./components/ServerPage";
 import { SidebarNav } from "./components/SidebarNav";
 import { StatusBar } from "./components/StatusBar";
 import { restartContainer } from "./lib/tauri";
+import {
+  browserSurfaceById,
+  primaryBrowserSurface,
+  resolveDefaultToolPanel,
+} from "./lib/target-services";
 import "./App.css";
 import { useAppearance } from "./hooks/useAppearance";
 import { useContainerWorkspace } from "./hooks/useContainerWorkspace";
@@ -342,33 +347,33 @@ function App() {
             const target = targetById.get(targetId);
             const isVisible = activeView.kind === "container" && activeView.targetId === targetId;
             const activeTool = target
-              ? (containerTools[target.id] ?? "dashboard")
+              ? (containerTools[target.id] ?? resolveDefaultToolPanel(target))
               : "dashboard";
-            const developmentSurface = target?.surfaces.find(
-              (surface) => surface.id === "development",
-            );
-            const developmentPanel = developmentSurface
-              ? (`browser:${developmentSurface.id}` as const)
+            const primarySurface = target
+              ? primaryBrowserSurface(target)
+              : undefined;
+            const primaryBrowserPanel = primarySurface
+              ? (`browser:${primarySurface.id}` as const)
               : null;
             const activeBrowserSurfaceId = browserSurfaceIdFromPanel(activeTool);
             const browserSurface =
               activeBrowserSurfaceId && target
-                ? target.surfaces.find((surface) => surface.id === activeBrowserSurfaceId)
+                ? browserSurfaceById(target, activeBrowserSurfaceId)
                 : undefined;
-            const developmentStatus =
-              developmentSurface && target
-                ? tunnelStatuses[surfaceKey(target.id, developmentSurface.id)] ??
-                  fallbackTunnelStatus(target.id, developmentSurface)
+            const primaryBrowserStatus =
+              primarySurface && target
+                ? tunnelStatuses[surfaceKey(target.id, primarySurface.id)] ??
+                  fallbackTunnelStatus(target.id, primarySurface)
                 : undefined;
-            const developmentBrowserFrame: BrowserFrameInstance | undefined =
-              developmentSurface && developmentStatus && target
+            const primaryBrowserFrame: BrowserFrameInstance | undefined =
+              primarySurface && primaryBrowserStatus && target
                 ? {
-                    cacheKey: surfaceKey(target.id, developmentSurface.id),
+                    cacheKey: surfaceKey(target.id, primarySurface.id),
                     frameVersion:
-                      browserFrameVersions[surfaceKey(target.id, developmentSurface.id)] ?? 0,
-                    isActive: isVisible && activeTool === developmentPanel,
-                    status: developmentStatus,
-                    surface: developmentSurface,
+                      browserFrameVersions[surfaceKey(target.id, primarySurface.id)] ?? 0,
+                    isActive: isVisible && activeTool === primaryBrowserPanel,
+                    status: primaryBrowserStatus,
+                    surface: primarySurface,
                     target,
                   }
                 : undefined;
@@ -381,10 +386,10 @@ function App() {
                   <ContainerPage
                     activeTool={activeTool}
                     dashboardRefreshSeconds={appSettings.dashboardRefreshSeconds}
-                    developmentPanel={developmentPanel}
-                    developmentBrowserFrame={developmentBrowserFrame}
-                    developmentSurface={developmentSurface}
-                    developmentStatus={developmentStatus}
+                    primaryBrowserFrame={primaryBrowserFrame}
+                    primaryBrowserPanel={primaryBrowserPanel}
+                    primaryBrowserStatus={primaryBrowserStatus}
+                    primaryBrowserSurface={primarySurface}
                     isTerminalCollapsed={Boolean(containerTerminalCollapsed[target.id])}
                     onReloadBrowser={() => {
                       if (browserSurface) {

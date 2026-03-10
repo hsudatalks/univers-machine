@@ -7,6 +7,11 @@ import type {
   RemoteFilePreview,
 } from "../types";
 
+function targetFilesRoot(target: DeveloperTarget): string {
+  const filesRoot = target.workspace?.filesRoot?.trim();
+  return filesRoot && filesRoot.length > 0 ? filesRoot : "~/repos";
+}
+
 export interface FilesTreeNode {
   entry: RemoteFileEntry;
   depth: number;
@@ -273,6 +278,7 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
   const initializeRootsFromEffect = useEffectEvent(() => {
     setIsLoadingRoots(true);
     setError(null);
+    const preferredFilesRoot = targetFilesRoot(target);
 
     void Promise.all([
       listRemoteDirectory(target.id, "~"),
@@ -284,15 +290,14 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
             entry.kind === "directory" && isVisibleEntry(entry, showHiddenDirectories),
         );
         const preferredRepo =
-          repoDirectories.find((entry) => entry.name === "hvac-workbench") ??
-          repoDirectories[0];
+          repoDirectories.find((entry) => entry.path === preferredFilesRoot) ?? repoDirectories[0];
         const nextRootOptions: FilesRootOption[] = [];
 
         if (preferredRepo) {
           nextRootOptions.push({
             label:
-              preferredRepo.name === "hvac-workbench"
-                ? "~/repos/hvac-workbench"
+              preferredRepo.path === preferredFilesRoot
+                ? preferredFilesRoot
                 : `~/repos/${preferredRepo.name}`,
             path: preferredRepo.path,
           });
@@ -311,7 +316,7 @@ export function useFilesPaneState(active: boolean, target: DeveloperTarget) {
 
         nextRootOptions.push({ label: "~", path: homeListing.path });
         setRootOptions(nextRootOptions);
-        loadDirectory(preferredRepo?.path ?? homeListing.path);
+        loadDirectory(preferredRepo?.path ?? preferredFilesRoot ?? homeListing.path);
       })
       .catch((loadError) => {
         setError(

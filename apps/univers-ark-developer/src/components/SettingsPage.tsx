@@ -5,6 +5,7 @@ import {
 } from "../lib/browser-cache";
 import { ensureTunnel, restartAllTunnels, restartTunnel } from "../lib/tauri";
 import { registerTunnelRequests } from "../lib/tunnel-manager";
+import { primaryBrowserService } from "../lib/target-services";
 import type {
   AppSettings,
   DeveloperTarget,
@@ -125,22 +126,26 @@ export function SettingsPage({
 
   const tunnelEntries = useMemo(() => {
     return targets.flatMap((target) =>
-      target.surfaces
-        .filter(
-          (surface) =>
-            surface.id === "development" && surface.tunnelCommand.trim(),
-        )
-        .map((surface) => {
-          const key = surfaceKey(target.id, surface.id);
-          const status = tunnelStatuses[key];
+      (() => {
+        const primaryService = primaryBrowserService(target);
+        const surface = primaryService?.browser;
 
-          return {
+        if (!surface?.tunnelCommand.trim()) {
+          return [];
+        }
+
+        const key = surfaceKey(target.id, surface.id);
+        const status = tunnelStatuses[key];
+
+        return [
+          {
             cacheKey: key,
             status,
             surface,
             target,
-          };
-        }),
+          },
+        ];
+      })(),
     );
   }, [targets, tunnelStatuses]);
 
@@ -170,22 +175,26 @@ export function SettingsPage({
   };
 
   const preloadAllIframes = async () => {
-    const developmentSurfaces = targets.flatMap((target) =>
-      target.surfaces
-        .filter((surface) => surface.id === "development" && surface.localUrl.trim())
-        .map((surface) => ({ surface, target })),
-    );
+    const primaryBrowserTargets = targets.flatMap((target) => {
+      const surface = primaryBrowserService(target)?.browser;
 
-    if (developmentSurfaces.length === 0) {
-      setPreloadSummary("No development browser surfaces available.");
+      if (!surface?.localUrl.trim()) {
+        return [];
+      }
+
+      return [{ surface, target }];
+    });
+
+    if (primaryBrowserTargets.length === 0) {
+      setPreloadSummary("No primary browser services available.");
       return;
     }
 
     setIsPreloadingIframes(true);
-    setPreloadSummary(`Loading 0 / ${developmentSurfaces.length} iframe(s)…`);
+    setPreloadSummary(`Loading 0 / ${primaryBrowserTargets.length} iframe(s)…`);
 
     await registerTunnelRequests(
-      developmentSurfaces.map(({ target, surface }) => ({
+      primaryBrowserTargets.map(({ target, surface }) => ({
         targetId: target.id,
         surfaceId: surface.id,
       })),
@@ -196,9 +205,9 @@ export function SettingsPage({
 
     const updateProgress = () => {
       const finishedCount = loadedCount + failedCount;
-      if (finishedCount < developmentSurfaces.length) {
+      if (finishedCount < primaryBrowserTargets.length) {
         setPreloadSummary(
-          `Loading ${loadedCount} / ${developmentSurfaces.length} iframe(s)…`,
+          `Loading ${loadedCount} / ${primaryBrowserTargets.length} iframe(s)…`,
         );
         return;
       }
@@ -212,7 +221,7 @@ export function SettingsPage({
     };
 
     void Promise.allSettled(
-      developmentSurfaces.map(async ({ surface, target }) => {
+      primaryBrowserTargets.map(async ({ surface, target }) => {
         let status = await ensureTunnel(target.id, surface.id);
         const deadline = Date.now() + 15_000;
 

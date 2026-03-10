@@ -11,10 +11,10 @@ import { FolderOpen, Globe, LayoutDashboard } from "lucide-react";
 interface ContainerPageProps {
   activeTool: ContainerToolPanel;
   dashboardRefreshSeconds: number;
-  developmentPanel: ContainerToolPanel | null;
-  developmentBrowserFrame?: BrowserFrameInstance;
-  developmentSurface?: DeveloperSurface;
-  developmentStatus?: TunnelStatus;
+  primaryBrowserFrame?: BrowserFrameInstance;
+  primaryBrowserPanel: ContainerToolPanel | null;
+  primaryBrowserStatus?: TunnelStatus;
+  primaryBrowserSurface?: DeveloperSurface;
   isTerminalCollapsed: boolean;
   onReloadBrowser: () => void;
   onRestartBrowser: () => void;
@@ -30,10 +30,10 @@ interface ContainerPageProps {
 export function ContainerPage({
   activeTool,
   dashboardRefreshSeconds,
-  developmentPanel,
-  developmentBrowserFrame,
-  developmentSurface,
-  developmentStatus,
+  primaryBrowserFrame,
+  primaryBrowserPanel,
+  primaryBrowserStatus,
+  primaryBrowserSurface,
   isTerminalCollapsed,
   onReloadBrowser,
   onRestartBrowser,
@@ -130,17 +130,17 @@ export function ContainerPage({
             <FolderOpen size={16} />
           </Button>
           <Button
-            aria-label="Development browser"
-            disabled={!developmentSurface}
-            isActive={activeTool === developmentPanel}
+            aria-label={primaryBrowserSurface?.label ?? "Primary browser"}
+            disabled={!primaryBrowserSurface}
+            isActive={activeTool === primaryBrowserPanel}
             onClick={() => {
-              if (developmentPanel) {
-                onSelectTool(developmentPanel);
+              if (primaryBrowserPanel) {
+                onSelectTool(primaryBrowserPanel);
               }
             }}
             size="icon"
-            title="Development browser"
-            variant={activeTool === developmentPanel ? "default" : "ghost"}
+            title={primaryBrowserSurface?.label ?? "Primary browser"}
+            variant={activeTool === primaryBrowserPanel ? "default" : "ghost"}
           >
             <Globe size={16} />
           </Button>
@@ -207,16 +207,9 @@ export function ContainerPage({
             <DashboardPane
               key={`${target.id}:${dashboardRefreshSeconds}`}
               dashboardRefreshSeconds={dashboardRefreshSeconds}
-              developmentStatus={developmentStatus}
-              developmentSurfaceLocalUrl={developmentStatus?.localUrl ?? developmentSurface?.localUrl}
-              onOpenDev={() => {
-                if (developmentPanel) {
-                  onSelectTool(developmentPanel);
-                }
-              }}
-              onOpenFiles={() => {
-                onSelectTool("files");
-              }}
+              primaryBrowserLabel={primaryBrowserSurface?.label}
+              primaryBrowserStatus={primaryBrowserStatus}
+              primaryBrowserUrl={primaryBrowserStatus?.localUrl ?? primaryBrowserSurface?.localUrl}
               target={target}
             />
           </div>
@@ -225,14 +218,14 @@ export function ContainerPage({
             <FilesPane active={pageVisible} target={target} />
           </div>
 
-          {developmentSurface ? (
+          {primaryBrowserSurface ? (
             <BrowserPane
-              activeFrame={developmentBrowserFrame}
-              isVisible={activeTool === developmentPanel}
+              activeFrame={primaryBrowserFrame}
+              isVisible={activeTool === primaryBrowserPanel}
               onReload={onReloadBrowser}
               onRestart={onRestartBrowser}
-              retainedFrames={developmentBrowserFrame ? [developmentBrowserFrame] : []}
-              slotLabel={developmentSurface.label}
+              retainedFrames={primaryBrowserFrame ? [primaryBrowserFrame] : []}
+              slotLabel={primaryBrowserSurface.label}
             />
           ) : null}
         </div>

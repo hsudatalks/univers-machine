@@ -1,5 +1,6 @@
 import { syncTunnelRegistrations } from "./tauri";
 import type { DeveloperTarget, TunnelStatus } from "../types";
+import { primaryBrowserService } from "./target-services";
 
 const desiredRegistrations = new Map<
   string,
@@ -12,15 +13,8 @@ function tunnelKey(targetId: string, surfaceId: string): string {
 }
 
 function defaultWarmSurfaceIds(target: DeveloperTarget): string[] {
-  const developmentSurface = target.surfaces.find(
-    (surface) => surface.id === "development",
-  );
-
-  return developmentSurface
-    ? [developmentSurface.id]
-    : target.surfaces[0]
-      ? [target.surfaces[0].id]
-      : [];
+  const primaryService = primaryBrowserService(target);
+  return primaryService ? [primaryService.id] : [];
 }
 
 export function registerTunnelRequests(

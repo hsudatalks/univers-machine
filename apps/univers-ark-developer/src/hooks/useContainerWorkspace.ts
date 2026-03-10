@@ -17,6 +17,11 @@ import {
   type ActiveView,
   type ContainerToolPanel,
 } from "../lib/view-types";
+import {
+  browserSurfaceById,
+  primaryBrowserSurface,
+  resolveDefaultToolPanel,
+} from "../lib/target-services";
 import type { DeveloperTarget, TunnelStatus } from "../types";
 
 const IS_MAC = navigator.platform.toUpperCase().includes("MAC");
@@ -165,7 +170,7 @@ export function useContainerWorkspace({
 
     if (isBrowserToolPanel(panel)) {
       const surfaceId = browserSurfaceIdFromPanel(panel);
-      const surface = target.surfaces.find((entry) => entry.id === surfaceId);
+      const surface = surfaceId ? browserSurfaceById(target, surfaceId) : undefined;
 
       if (surface) {
         warmTargetTunnels(target, [surface.id], onTunnelStatus);
@@ -235,11 +240,9 @@ export function useContainerWorkspace({
       return;
     }
 
-    const developmentSurface = target.surfaces.find(
-      (surface) => surface.id === "development",
-    );
-    const developmentPanel = developmentSurface
-      ? (`browser:${developmentSurface.id}` as const)
+    const primarySurface = primaryBrowserSurface(target);
+    const primaryPanel = primarySurface
+      ? (`browser:${primarySurface.id}` as const)
       : null;
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -274,7 +277,7 @@ export function useContainerWorkspace({
           nextPanel = "files";
           break;
         case "3":
-          nextPanel = developmentPanel;
+          nextPanel = primaryPanel;
           break;
         default:
           return;
@@ -307,9 +310,7 @@ export function useContainerWorkspace({
     setContainerTools((current) => ({
       ...current,
       [target.id]:
-        current[target.id] === "browser:preview"
-          ? "dashboard"
-          : current[target.id] ?? "dashboard",
+        current[target.id] ?? resolveDefaultToolPanel(target),
     }));
     setContainerTerminalWidths((current) => ({
       ...current,

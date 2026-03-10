@@ -25,6 +25,15 @@ function serverTerminalTarget(server: ManagedServer): DeveloperTarget {
     description: server.description,
     terminalCommand: `ssh ${server.host}`,
     notes: [],
+    workspace: {
+      profile: "",
+      defaultTool: "dashboard",
+      projectPath: "",
+      filesRoot: "",
+      primaryBrowserServiceId: "",
+      tmuxCommandServiceId: "",
+    },
+    services: [],
     surfaces: [],
   };
 }

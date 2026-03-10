@@ -5,6 +5,7 @@ import type {
   AppBootstrap,
   ContainerDashboard,
   ContainerDashboardUpdate,
+  DeveloperService,
   DeveloperSurface,
   DeveloperTarget,
   GithubMergeMethod,
@@ -18,6 +19,7 @@ import type {
   TerminalSnapshot,
   TunnelStatus,
 } from "../types";
+import { browserSurfaceById } from "./target-services";
 
 const SURFACE_PORT_START = import.meta.env.DEV ? 43000 : 45000;
 const SURFACE_PORT_END = import.meta.env.DEV ? 43999 : 45999;
@@ -41,6 +43,54 @@ const fallbackBootstrapSeed: AppBootstrap = {
         "Local shell with direct development and preview surfaces on ports 3432 and 4173.",
       terminalCommand: "exec /bin/zsh -l",
       notes: [],
+      workspace: {
+        profile: "ark-workbench",
+        defaultTool: "dashboard",
+        projectPath: "~/repos/hvac-workbench",
+        filesRoot: "~/repos/hvac-workbench",
+        primaryBrowserServiceId: "development",
+        tmuxCommandServiceId: "tmux-developer",
+      },
+      services: [
+        {
+          id: "development",
+          label: "Development",
+          kind: "browser",
+          description: "Primary Vite development surface.",
+          browser: {
+            id: "development",
+            label: "Development",
+            serviceType: "vite",
+            tunnelCommand: "",
+            localUrl: "http://127.0.0.1:3432/",
+            remoteUrl: "http://127.0.0.1:3432/",
+          },
+        },
+        {
+          id: "preview",
+          label: "Preview",
+          kind: "browser",
+          description: "Preview surface.",
+          browser: {
+            id: "preview",
+            label: "Preview",
+            serviceType: "http",
+            tunnelCommand: "",
+            localUrl: "http://127.0.0.1:4173/",
+            remoteUrl: "http://127.0.0.1:4173/",
+          },
+        },
+        {
+          id: "tmux-developer",
+          label: "Developer Tmux",
+          kind: "command",
+          description: "Restart the developer tmux server.",
+          command: {
+            restart:
+              "cd ~/repos/univers-container && ./.claude/skills/container-manage/bin/cm dev restart developer",
+          },
+        },
+      ],
       surfaces: [
         {
           id: "development",
@@ -210,12 +260,45 @@ function resolveFallbackSurface(
 }
 
 function resolveFallbackTarget(target: DeveloperTarget): DeveloperTarget {
+  const resolvedSurfaces = target.surfaces.map((surface) =>
+    resolveFallbackSurface(target.id, surface),
+  );
+  const resolvedServices =
+    target.services.length > 0
+      ? target.services.map((service) => ({
+          ...service,
+          browser: service.browser
+            ? resolveFallbackSurface(target.id, service.browser)
+            : service.browser,
+        }))
+      : resolvedSurfacesToServices(resolvedSurfaces);
+
   return {
     ...target,
-    surfaces: target.surfaces.map((surface) =>
-      resolveFallbackSurface(target.id, surface),
-    ),
+      workspace:
+      target.workspace ?? {
+        profile: "",
+        defaultTool: "dashboard",
+        projectPath: "",
+        filesRoot: "",
+        primaryBrowserServiceId: "",
+        tmuxCommandServiceId: "",
+      },
+    services: resolvedServices,
+    surfaces: resolvedSurfaces,
   };
+}
+
+function resolvedSurfacesToServices(
+  surfaces: DeveloperSurface[],
+): DeveloperService[] {
+  return surfaces.map((surface) => ({
+    id: surface.id,
+    label: surface.label,
+    kind: "browser",
+    description: "",
+    browser: surface,
+  }));
 }
 
 function fallbackTarget(targetId: string): DeveloperTarget {
@@ -229,7 +312,7 @@ function fallbackSurface(
   targetId: string,
   surfaceId: string,
 ): DeveloperSurface | undefined {
-  return fallbackTarget(targetId).surfaces.find((surface) => surface.id === surfaceId);
+  return browserSurfaceById(fallbackTarget(targetId), surfaceId);
 }
 
 function fallbackTunnelStatus(
@@ -585,7 +668,10 @@ export async function loadContainerDashboard(
     return {
       targetId,
       project: {
-        projectPath: "~/repos/hvac-workbench",
+        projectPath:
+          fallbackTarget(targetId).workspace?.projectPath ||
+          fallbackTarget(targetId).workspace?.filesRoot ||
+          "~/repos",
         repoFound: false,
         branch: null,
         isDirty: false,
