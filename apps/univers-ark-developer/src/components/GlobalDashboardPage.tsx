@@ -1,4 +1,5 @@
 import { Activity, Boxes, LayoutDashboard, Server, SquareTerminal } from "lucide-react";
+import { visibleContainers } from "../lib/container-visibility";
 import { primaryBrowserSurface } from "../lib/target-services";
 import type {
   DeveloperTarget,
@@ -66,27 +67,6 @@ export function GlobalDashboardPage({
   const reachableContainerCount = overviewContainers.filter(
     (entry) => entry.container.sshReachable,
   ).length;
-  const activeWebServiceCount = overviewContainers.filter((entry) => {
-    if (!entry.target) {
-      return false;
-    }
-
-    const primary = primaryBrowserSurface(entry.target);
-
-    if (!primary) {
-      return false;
-    }
-
-    const state = serviceStatuses[serviceKey(entry.target.id, primary.id)]?.state;
-
-    return (
-      state === "running" ||
-      state === "ready" ||
-      state === "healthy" ||
-      state === "loaded" ||
-      state === "direct"
-    );
-  }).length;
 
   return (
     <section className="page-section">
@@ -109,10 +89,6 @@ export function GlobalDashboardPage({
                     {reachableContainerCount} / {overviewContainers.length}
                   </span>
                 </div>
-                <div className="dashboard-summary-item">
-                  <span className="dashboard-meta-label">Web ready</span>
-                  <span className="dashboard-meta-value">{activeWebServiceCount}</span>
-                </div>
               </div>
 
               <div className="dashboard-summary-actions">
@@ -128,23 +104,24 @@ export function GlobalDashboardPage({
             </CardContent>
           </Card>
 
-          <Card className="border-border/80 bg-card/95">
+          <Card className="dashboard-card-wide border-border/80 bg-card/95">
             <CardHeader>
               <CardTitle className="dashboard-section-title">
                 <Server size={16} />
                 Machines
               </CardTitle>
             </CardHeader>
-            <CardContent className="server-dashboard-list">
+            <CardContent className="server-dashboard-list dashboard-card-list">
               {machines.map((machine) => {
-                const reachable = machine.containers.filter((item) => item.sshReachable).length;
+                const managedContainers = visibleContainers(machine.containers);
+                const reachable = managedContainers.filter((item) => item.sshReachable).length;
 
                 return (
-                  <div className="server-dashboard-row" key={machine.id}>
+                  <div className="server-dashboard-row dashboard-card-row" key={machine.id}>
                     <div className="server-dashboard-row-copy">
                       <span className="server-dashboard-row-title">{machine.label}</span>
                       <span className="server-dashboard-row-meta">
-                        {machine.host} · {machine.containers.length} container(s) · {reachable} ssh ready
+                        {machine.host} · {managedContainers.length} container(s) · {reachable} ssh ready
                       </span>
                     </div>
 
@@ -176,7 +153,7 @@ export function GlobalDashboardPage({
                 Agent teams
               </CardTitle>
             </CardHeader>
-            <CardContent className="server-dashboard-list">
+            <CardContent className="server-dashboard-list dashboard-card-list">
               {overviewContainers.map(({ container, machine, target }) => {
                 const primary = target ? primaryBrowserSurface(target) : undefined;
                 const webState = primary && target
@@ -184,7 +161,7 @@ export function GlobalDashboardPage({
                   : undefined;
 
                 return (
-                  <div className="server-dashboard-row" key={container.targetId}>
+                  <div className="server-dashboard-row dashboard-card-row" key={container.targetId}>
                     <div className="server-dashboard-row-copy">
                       <span className="server-dashboard-row-title">{container.label}</span>
                       <span className="server-dashboard-row-meta">
@@ -223,7 +200,7 @@ export function GlobalDashboardPage({
               ) : null}
 
               {standaloneTargets.map((target) => (
-                <div className="server-dashboard-row" key={target.id}>
+                <div className="server-dashboard-row dashboard-card-row" key={target.id}>
                   <div className="server-dashboard-row-copy">
                     <span className="server-dashboard-row-title">{target.label}</span>
                     <span className="server-dashboard-row-meta">

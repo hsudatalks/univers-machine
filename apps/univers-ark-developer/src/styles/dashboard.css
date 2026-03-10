@@ -210,6 +210,11 @@
   gap: 0.75rem;
 }
 
+.dashboard-card-list {
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  align-items: start;
+}
+
 .server-dashboard-row {
   display: flex;
   align-items: center;
@@ -219,6 +224,12 @@
   border-radius: 0.8rem;
   border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
   background: color-mix(in srgb, var(--secondary) 22%, transparent);
+}
+
+.dashboard-card-row {
+  min-height: 100%;
+  align-items: flex-start;
+  flex-direction: column;
 }
 
 .server-dashboard-row-copy {
@@ -241,6 +252,10 @@
   white-space: nowrap;
 }
 
+.dashboard-card-row .server-dashboard-row-meta {
+  white-space: normal;
+}
+
 .server-dashboard-row-actions {
   display: inline-flex;
   align-items: center;
@@ -249,7 +264,13 @@
   justify-content: flex-end;
 }
 
+.dashboard-card-row .server-dashboard-row-actions {
+  width: 100%;
+  justify-content: space-between;
+}
+
 .dashboard-global-section-label {
+  grid-column: 1 / -1;
   color: var(--muted-foreground);
   font-size: 0.68rem;
   font-weight: 700;
