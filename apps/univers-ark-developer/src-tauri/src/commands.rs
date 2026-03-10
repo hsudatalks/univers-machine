@@ -190,8 +190,7 @@ pub(crate) async fn load_bootstrap(
             config_path: config_path.display().to_string(),
             selected_target_id: targets_file.selected_target_id,
             targets: hydrated_targets_file.targets,
-            machines: servers.clone(),
-            servers,
+            machines: servers,
         })
     })
     .await
@@ -214,8 +213,7 @@ pub(crate) async fn refresh_bootstrap(
             config_path: config_path.display().to_string(),
             selected_target_id: targets_file.selected_target_id,
             targets: hydrated_targets_file.targets,
-            machines: servers.clone(),
-            servers,
+            machines: servers,
         })
     })
     .await
@@ -223,24 +221,24 @@ pub(crate) async fn refresh_bootstrap(
 }
 
 #[tauri::command]
-pub(crate) async fn load_server_inventory() -> Result<Vec<ManagedServer>, String> {
+pub(crate) async fn load_machine_inventory() -> Result<Vec<ManagedServer>, String> {
     async_runtime::spawn_blocking(|| read_server_inventory(false))
         .await
-        .map_err(|error| format!("Failed to join server inventory task: {}", error))?
+        .map_err(|error| format!("Failed to join machine inventory task: {}", error))?
 }
 
 #[tauri::command]
-pub(crate) async fn refresh_server_inventory() -> Result<Vec<ManagedServer>, String> {
+pub(crate) async fn refresh_machine_inventory() -> Result<Vec<ManagedServer>, String> {
     async_runtime::spawn_blocking(|| read_server_inventory(false))
         .await
-        .map_err(|error| format!("Failed to join refresh server inventory task: {}", error))?
+        .map_err(|error| format!("Failed to join refresh machine inventory task: {}", error))?
 }
 
 #[tauri::command]
-pub(crate) async fn scan_server_inventory(server_id: String) -> Result<ManagedServer, String> {
-    async_runtime::spawn_blocking(move || scan_and_store_server_inventory(&server_id))
+pub(crate) async fn scan_machine_inventory(machine_id: String) -> Result<ManagedServer, String> {
+    async_runtime::spawn_blocking(move || scan_and_store_server_inventory(&machine_id))
         .await
-        .map_err(|error| format!("Failed to join server scan task: {}", error))?
+        .map_err(|error| format!("Failed to join machine scan task: {}", error))?
 }
 
 #[tauri::command]

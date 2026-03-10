@@ -253,7 +253,6 @@ pub(crate) struct AppBootstrap {
     pub(crate) selected_target_id: Option<String>,
     pub(crate) targets: Vec<DeveloperTarget>,
     pub(crate) machines: Vec<ManagedServer>,
-    pub(crate) servers: Vec<ManagedServer>,
 }
 
 #[derive(Debug, Clone, Serialize)]

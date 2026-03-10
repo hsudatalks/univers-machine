@@ -479,7 +479,7 @@ export async function loadMachineInventory(): Promise<ManagedMachine[]> {
     return fallbackBootstrap.machines;
   }
 
-  return (await invoke<RawManagedMachine[]>("load_server_inventory")).map(
+  return (await invoke<RawManagedMachine[]>("load_machine_inventory")).map(
     normalizeManagedMachine,
   );
 }
@@ -489,7 +489,7 @@ export async function refreshMachineInventory(): Promise<ManagedMachine[]> {
     return fallbackBootstrap.machines;
   }
 
-  return (await invoke<RawManagedMachine[]>("refresh_server_inventory")).map(
+  return (await invoke<RawManagedMachine[]>("refresh_machine_inventory")).map(
     normalizeManagedMachine,
   );
 }
@@ -504,7 +504,7 @@ export async function scanMachineInventory(machineId: string): Promise<ManagedMa
   }
 
   return normalizeManagedMachine(
-    await invoke<RawManagedMachine>("scan_server_inventory", { serverId: machineId }),
+    await invoke<RawManagedMachine>("scan_machine_inventory", { machineId }),
   );
 }
 

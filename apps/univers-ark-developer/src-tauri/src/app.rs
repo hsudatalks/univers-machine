@@ -246,9 +246,9 @@ pub(crate) fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::load_bootstrap,
             commands::refresh_bootstrap,
-            commands::load_server_inventory,
-            commands::refresh_server_inventory,
-            commands::scan_server_inventory,
+            commands::load_machine_inventory,
+            commands::refresh_machine_inventory,
+            commands::scan_machine_inventory,
             commands::attach_terminal,
             commands::restart_terminal,
             commands::ensure_tunnel,
