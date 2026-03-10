@@ -519,7 +519,7 @@ if os.path.isdir("/proc"):
         if entry.isdigit():
             process_count += 1
 
-if process_count == 0:
+if process_count == 0 and os.name != 'nt':
     ps = subprocess.run(
         ["sh", "-lc", "ps -A | wc -l"],
         capture_output=True,
@@ -550,7 +550,7 @@ if os.path.exists("/proc/meminfo"):
     mem_total = meminfo.get("MemTotal", 0)
     mem_available = meminfo.get("MemAvailable", 0)
     mem_used = max(mem_total - mem_available, 0)
-else:
+elif os.name != 'nt':
     vm_stat = subprocess.run(["vm_stat"], capture_output=True, text=True, check=False)
     page_size = 4096
     if vm_stat.returncode == 0:
