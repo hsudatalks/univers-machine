@@ -5,7 +5,9 @@ use crate::models::{
 use csv::ReaderBuilder;
 
 use super::{
-    DiscoveredContainer, DiscoveredServerInventory, RemoteContainerContext, RemoteContainerServer,
+    ContainerDiscoveryMode, ContainerManagerType, DiscoveredContainer,
+    DiscoveredServerInventory, ManualContainerConfig, RemoteContainerContext,
+    RemoteContainerServer,
 };
 use super::ssh::{
     probe_managed_container_ssh, ssh_destination, terminal_command_for_server,
@@ -13,7 +15,18 @@ use super::ssh::{
 use crate::shell;
 
 pub(super) fn default_discovery_command(server: &RemoteContainerServer) -> String {
-    format!("ssh {} 'lxc list --format csv -c ns4'", server.host)
+    match server.manager_type {
+        ContainerManagerType::Lxd => {
+            format!("ssh {} 'lxc list --format csv -c ns4'", server.host)
+        }
+        ContainerManagerType::Docker => format!(
+            "ssh {} 'docker ps --format \"{{{{.Names}}}}\" | while read -r name; do [ -z \"$name\" ] && continue; ip=$(docker inspect -f \"{{{{range .NetworkSettings.Networks}}}}{{{{.IPAddress}}}}{{{{end}}}}\" \"$name\" 2>/dev/null); printf \"%s,RUNNING,%s\\n\" \"$name\" \"$ip\"; done'",
+            server.host
+        ),
+        ContainerManagerType::Orbstack => {
+            format!("ssh {} '/opt/homebrew/bin/orb list --format json'", server.host)
+        }
+    }
 }
 
 pub(super) fn trim_quotes(value: &str) -> &str {
@@ -223,10 +236,126 @@ fn discover_server_containers_output(server: &RemoteContainerServer) -> Result<S
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+#[derive(serde::Deserialize)]
+struct OrbListItem {
+    name: String,
+    state: String,
+}
+
+#[derive(serde::Deserialize)]
+struct OrbInfoRecord {
+    name: String,
+    state: String,
+}
+
+#[derive(serde::Deserialize)]
+struct OrbInfoResponse {
+    record: OrbInfoRecord,
+    ip4: String,
+}
+
+fn parse_orbstack_containers(
+    server: &RemoteContainerServer,
+    discovery_output: &str,
+) -> Result<Vec<DiscoveredContainer>, String> {
+    let list: Vec<OrbListItem> = serde_json::from_str(discovery_output).map_err(|error| {
+        format!(
+            "Failed to parse OrbStack discovery output for {}: {}",
+            server.host, error
+        )
+    })?;
+
+    let mut containers = Vec::new();
+    for item in list {
+        if !server.container_name_suffix.is_empty()
+            && !item.name.ends_with(&server.container_name_suffix)
+        {
+            continue;
+        }
+
+        if !server.include_stopped && !item.state.eq_ignore_ascii_case("running") {
+            continue;
+        }
+
+        let info_command = format!(
+            "ssh {} '/opt/homebrew/bin/orb info {} --format json'",
+            server.host, item.name
+        );
+        let output = shell::shell_command(&info_command).output().map_err(|error| {
+            format!(
+                "Failed to read OrbStack info for {} on {}: {}",
+                item.name, server.host, error
+            )
+        })?;
+
+        if !output.status.success() {
+            continue;
+        }
+
+        let info: OrbInfoResponse = serde_json::from_slice(&output.stdout).map_err(|error| {
+            format!(
+                "Failed to parse OrbStack info for {} on {}: {}",
+                item.name, server.host, error
+            )
+        })?;
+
+        if info.ip4.trim().is_empty() {
+            continue;
+        }
+
+        containers.push(DiscoveredContainer {
+            name: info.record.name,
+            status: info.record.state.to_uppercase(),
+            ipv4: info.ip4,
+            label: None,
+            description: None,
+            workspace: None,
+            services: vec![],
+            surfaces: vec![],
+        });
+    }
+
+    Ok(containers)
+}
+
+fn manual_container_to_discovered(container: &ManualContainerConfig) -> DiscoveredContainer {
+    let has_workspace_override = !container.workspace.profile.trim().is_empty()
+        || !container.workspace.default_tool.trim().is_empty()
+        || !container.workspace.project_path.trim().is_empty()
+        || !container.workspace.files_root.trim().is_empty()
+        || !container.workspace.primary_web_service_id.trim().is_empty()
+        || !container.workspace.tmux_command_service_id.trim().is_empty();
+
+    DiscoveredContainer {
+        name: container.name.clone(),
+        status: container.status.clone(),
+        ipv4: container.ipv4.clone(),
+        label: (!container.label.trim().is_empty()).then(|| container.label.clone()),
+        description: (!container.description.trim().is_empty())
+            .then(|| container.description.clone()),
+        workspace: has_workspace_override.then(|| container.workspace.clone()),
+        services: container.services.clone(),
+        surfaces: container.surfaces.clone(),
+    }
+}
+
+fn discover_manual_containers(server: &RemoteContainerServer) -> Vec<DiscoveredContainer> {
+    server
+        .manual_containers
+        .iter()
+        .filter(|container| !container.name.trim().is_empty() && !container.ipv4.trim().is_empty())
+        .map(manual_container_to_discovered)
+        .collect()
+}
+
 pub(super) fn parse_discovered_containers(
     server: &RemoteContainerServer,
     discovery_output: &str,
 ) -> Result<Vec<DiscoveredContainer>, String> {
+    if matches!(server.manager_type, ContainerManagerType::Orbstack) {
+        return parse_orbstack_containers(server, discovery_output);
+    }
+
     let mut containers = Vec::new();
     let mut reader = ReaderBuilder::new()
         .has_headers(false)
@@ -266,6 +395,11 @@ pub(super) fn parse_discovered_containers(
             name: name.to_string(),
             status: status.to_string(),
             ipv4,
+            label: None,
+            description: None,
+            workspace: None,
+            services: vec![],
+            surfaces: vec![],
         });
     }
 
@@ -275,6 +409,10 @@ pub(super) fn parse_discovered_containers(
 fn discover_server_containers(
     server: &RemoteContainerServer,
 ) -> Result<Vec<DiscoveredContainer>, String> {
+    if matches!(server.discovery_mode, ContainerDiscoveryMode::Manual) {
+        return Ok(discover_manual_containers(server));
+    }
+
     let output = discover_server_containers_output(server)?;
     parse_discovered_containers(server, &output)
 }
@@ -283,7 +421,10 @@ pub(super) fn build_target_from_container(
     server: &RemoteContainerServer,
     container: &DiscoveredContainer,
 ) -> DeveloperTarget {
-    let container_label = default_container_label(&container.name, &server.container_name_suffix);
+    let container_label = container
+        .label
+        .clone()
+        .unwrap_or_else(|| default_container_label(&container.name, &server.container_name_suffix));
     let context = RemoteContainerContext {
         container_ip: &container.ipv4,
         container_label: &container_label,
@@ -298,10 +439,12 @@ pub(super) fn build_target_from_container(
         server.host.clone()
     });
     let description = render_template(&server.target_description_template, &context, || {
-        format!(
-            "{} development container on {} ({})",
-            container_label, server.label, container.status
-        )
+        container.description.clone().unwrap_or_else(|| {
+            format!(
+                "{} development container on {} ({})",
+                container_label, server.label, container.status
+            )
+        })
     });
     let terminal_command = terminal_command_for_server(server, &context);
     let notes = server
@@ -309,16 +452,25 @@ pub(super) fn build_target_from_container(
         .iter()
         .map(|note| replace_remote_placeholders(note, &context))
         .collect::<Vec<_>>();
-    let workspace = render_workspace(&server.workspace, &context);
-    let services = if server.services.is_empty() {
-        server
-            .surfaces
+    let workspace_source = container.workspace.as_ref().unwrap_or(&server.workspace);
+    let workspace = render_workspace(workspace_source, &context);
+    let services_source = if !container.services.is_empty() {
+        &container.services
+    } else {
+        &server.services
+    };
+    let surfaces_source = if !container.surfaces.is_empty() {
+        &container.surfaces
+    } else {
+        &server.surfaces
+    };
+    let services = if services_source.is_empty() {
+        surfaces_source
             .iter()
             .map(|surface| web_service(&render_surface(surface, &context)))
             .collect::<Vec<_>>()
     } else {
-        server
-            .services
+        services_source
             .iter()
             .map(|service| render_service(service, &context))
             .collect::<Vec<_>>()

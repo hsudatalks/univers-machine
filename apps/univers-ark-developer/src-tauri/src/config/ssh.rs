@@ -1,7 +1,7 @@
 use crate::shell;
 use std::{fs, path::PathBuf};
 
-use super::{RemoteContainerContext, RemoteContainerServer};
+use super::{ContainerManagerType, RemoteContainerContext, RemoteContainerServer};
 
 pub(super) fn managed_known_hosts_file() -> String {
     let home = if cfg!(windows) {
@@ -204,10 +204,7 @@ fn deploy_key_command(
         key = shell_single_quote(public_key),
     );
 
-    let is_orbstack = server
-        .discovery_command
-        .to_ascii_lowercase()
-        .contains("orb");
+    let is_orbstack = matches!(server.manager_type, ContainerManagerType::Orbstack);
 
     if is_orbstack {
         format!(

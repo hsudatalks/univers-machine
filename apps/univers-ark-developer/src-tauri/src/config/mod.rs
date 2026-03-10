@@ -37,6 +37,42 @@ struct RawTargetsFile {
     remote_servers: Vec<RemoteContainerServer>,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum ContainerManagerType {
+    #[default]
+    Lxd,
+    Docker,
+    Orbstack,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum ContainerDiscoveryMode {
+    #[default]
+    Auto,
+    Manual,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ManualContainerConfig {
+    pub(super) name: String,
+    #[serde(default)]
+    pub(super) label: String,
+    #[serde(default)]
+    pub(super) description: String,
+    pub(super) ipv4: String,
+    #[serde(default = "default_manual_container_status")]
+    pub(super) status: String,
+    #[serde(default)]
+    pub(super) workspace: ContainerWorkspace,
+    #[serde(default)]
+    pub(super) services: Vec<DeveloperService>,
+    #[serde(default)]
+    pub(super) surfaces: Vec<BrowserSurface>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct RemoteContainerServer {
@@ -44,6 +80,10 @@ pub(super) struct RemoteContainerServer {
     pub(super) label: String,
     pub(super) host: String,
     pub(super) description: String,
+    #[serde(default)]
+    pub(super) manager_type: ContainerManagerType,
+    #[serde(default)]
+    pub(super) discovery_mode: ContainerDiscoveryMode,
     #[serde(default)]
     pub(super) discovery_command: String,
     pub(super) ssh_user: String,
@@ -69,6 +109,8 @@ pub(super) struct RemoteContainerServer {
     pub(super) services: Vec<DeveloperService>,
     #[serde(default)]
     pub(super) surfaces: Vec<BrowserSurface>,
+    #[serde(default)]
+    pub(super) manual_containers: Vec<ManualContainerConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -76,6 +118,11 @@ pub(super) struct DiscoveredContainer {
     pub(super) name: String,
     pub(super) status: String,
     pub(super) ipv4: String,
+    pub(super) label: Option<String>,
+    pub(super) description: Option<String>,
+    pub(super) workspace: Option<ContainerWorkspace>,
+    pub(super) services: Vec<DeveloperService>,
+    pub(super) surfaces: Vec<BrowserSurface>,
 }
 
 pub(super) struct RemoteContainerContext<'a> {
@@ -107,6 +154,10 @@ fn default_remote_server_ssh_options() -> String {
 
 fn default_container_name_suffix() -> String {
     String::from("-dev")
+}
+
+fn default_manual_container_status() -> String {
+    String::from("RUNNING")
 }
 
 const BUNDLED_TARGETS_TEMPLATE_NAME: &str = "developer-targets.json";
@@ -358,15 +409,16 @@ pub(crate) fn restart_container(server_id: &str, container_name: &str) -> Result
         .find(|server| server.id == server_id)
         .ok_or_else(|| format!("Unknown remote server: {}", server_id))?;
 
-    let is_orbstack = server.discovery_command.contains("orb");
-
-    let restart_command = if is_orbstack {
-        format!("ssh {} 'orb restart {}'", server.host, container_name)
-    } else {
-        format!(
-            "ssh {} 'lxc restart {} --force'",
-            server.host, container_name
-        )
+    let restart_command = match server.manager_type {
+        ContainerManagerType::Orbstack => {
+            format!("ssh {} '/opt/homebrew/bin/orb restart {}'", server.host, container_name)
+        }
+        ContainerManagerType::Docker => {
+            format!("ssh {} 'docker restart {}'", server.host, container_name)
+        }
+        ContainerManagerType::Lxd => {
+            format!("ssh {} 'lxc restart {} --force'", server.host, container_name)
+        }
     };
 
     let output = crate::shell::shell_command(&restart_command)
@@ -441,6 +493,8 @@ mod tests {
             label: String::from("Mechanism"),
             host: String::from("mechanism-dev"),
             description: String::from("Mechanism development server."),
+            manager_type: ContainerManagerType::Lxd,
+            discovery_mode: ContainerDiscoveryMode::Auto,
             discovery_command: String::new(),
             ssh_user: String::from("ubuntu"),
             ssh_options: String::from("-o StrictHostKeyChecking=accept-new"),
@@ -468,6 +522,7 @@ mod tests {
                     "ssh {sshOptions} -NT -L {localPort}:127.0.0.1:3433 -J {serverHost} {sshUser}@{containerIp}",
                 ),
             }],
+            manual_containers: vec![],
         }
     }
 
@@ -510,6 +565,11 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
             name: String::from("workflow-dev"),
             status: String::from("RUNNING"),
             ipv4: String::from("10.211.82.202"),
+            label: None,
+            description: None,
+            workspace: None,
+            services: vec![],
+            surfaces: vec![],
         };
 
         let target = build_target_from_container(&server, &container);
