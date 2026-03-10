@@ -1,14 +1,13 @@
 use crate::{
     config::{
-        read_bootstrap_data, read_server_inventory, read_targets_config,
-        execute_target_command_via_russh,
-        resolve_raw_target, restart_container as restart_remote_container,
-        run_target_shell_command, scan_and_store_server_inventory,
-        save_targets_config, targets_file_path,
+        execute_target_command_via_russh, read_bootstrap_data, read_server_inventory,
+        read_targets_config, resolve_raw_target, restart_container as restart_remote_container,
+        run_target_shell_command, save_targets_config, scan_and_store_server_inventory,
+        targets_file_path,
     },
     dashboard::{
-        load_container_dashboard as read_container_dashboard,
-        refresh_dashboard_once, start_dashboard_monitor as spawn_dashboard_monitor,
+        load_container_dashboard as read_container_dashboard, refresh_dashboard_once,
+        start_dashboard_monitor as spawn_dashboard_monitor,
         stop_dashboard_monitor as halt_dashboard_monitor,
     },
     files::{
@@ -18,20 +17,18 @@ use crate::{
     github::{
         load_github_project_state as read_github_project_state,
         load_github_pull_request_detail as read_github_pull_request_detail,
-        merge_github_pull_request as execute_github_pull_request_merge,
-        open_external_url,
+        merge_github_pull_request as execute_github_pull_request_merge, open_external_url,
     },
     models::{
-        AppBootstrap, AppSettings, ContainerDashboard, DashboardState,
-        GithubProjectState, GithubPullRequestDetail, MachineImportCandidate, ManagedServer,
-        RemoteDirectoryListing, RemoteFilePreview, TerminalSnapshot, TerminalState, TunnelState,
-        TunnelStatus,
-        command_service, tmux_command_service,
+        command_service, tmux_command_service, AppBootstrap, AppSettings, ContainerDashboard,
+        DashboardState, GithubProjectState, GithubPullRequestDetail, MachineImportCandidate,
+        ManagedServer, RemoteDirectoryListing, RemoteFilePreview, TerminalSnapshot, TerminalState,
+        TunnelState, TunnelStatus,
     },
     runtime::{read_runtime_targets_file, resolve_runtime_web_surface, surface_key},
     service_registry::{
-        emit_command_service_status, emit_dashboard_service_statuses,
-        emit_tunnel_service_status, sync_registered_web_services,
+        emit_command_service_status, emit_dashboard_service_statuses, emit_tunnel_service_status,
+        sync_registered_web_services,
     },
     settings::{load_app_settings as read_app_settings, save_app_settings as write_app_settings},
     shell::shell_command,
@@ -170,7 +167,11 @@ fn scan_ssh_config_machine_candidates_inner() -> Result<Vec<MachineImportCandida
                 host: final_hop.host.clone(),
                 port: final_hop.port,
                 ssh_user: final_hop.user.clone(),
-                identity_files: final_hop.identity_files().iter().map(path_to_string).collect(),
+                identity_files: final_hop
+                    .identity_files()
+                    .iter()
+                    .map(path_to_string)
+                    .collect(),
                 jump_chain,
                 description: format!("Imported from SSH config alias {}.", alias),
                 detail,
@@ -286,8 +287,12 @@ fn execute_command_service_inner(
     action: &str,
 ) -> Result<(), String> {
     let target = resolve_raw_target(target_id)?;
-    let service = command_service(&target, service_id)
-        .ok_or_else(|| format!("Unknown command service {} for target {}", service_id, target_id))?;
+    let service = command_service(&target, service_id).ok_or_else(|| {
+        format!(
+            "Unknown command service {} for target {}",
+            service_id, target_id
+        )
+    })?;
 
     let command = match action {
         "restart" => service
@@ -324,7 +329,10 @@ fn execute_command_service_inner(
     let (exit_status, stdout, stderr) = if is_local_target {
         let output = run_target_shell_command(target_id, command)?;
         (
-            output.status.code().unwrap_or(if output.status.success() { 0 } else { 1 }) as u32,
+            output
+                .status
+                .code()
+                .unwrap_or(if output.status.success() { 0 } else { 1 }) as u32,
             output.stdout,
             output.stderr,
         )
@@ -752,10 +760,7 @@ pub(crate) fn stop_dashboard_monitor(
 }
 
 #[tauri::command]
-pub(crate) fn refresh_container_dashboard(
-    app: AppHandle,
-    target_id: String,
-) -> Result<(), String> {
+pub(crate) fn refresh_container_dashboard(app: AppHandle, target_id: String) -> Result<(), String> {
     refresh_dashboard_once(app, target_id);
     Ok(())
 }
@@ -820,12 +825,7 @@ pub(crate) async fn execute_command_service(
     spec: CommandServiceActionSpec,
 ) -> Result<(), String> {
     async_runtime::spawn_blocking(move || {
-        execute_command_service_inner(
-            Some(&app),
-            &spec.target_id,
-            &spec.service_id,
-            &spec.action,
-        )
+        execute_command_service_inner(Some(&app), &spec.target_id, &spec.service_id, &spec.action)
     })
     .await
     .map_err(|error| format!("Failed to join command service task: {}", error))?

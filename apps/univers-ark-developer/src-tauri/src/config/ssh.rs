@@ -62,7 +62,11 @@ fn base_ssh_flags(server: &RemoteContainerServer, host_key_alias: &str) -> Vec<S
     flags.push(format!("-o HostKeyAlias={}", host_key_alias));
     flags.push(format!(
         "-o StrictHostKeyChecking={}",
-        if server.strict_host_key_checking { "yes" } else { "no" }
+        if server.strict_host_key_checking {
+            "accept-new"
+        } else {
+            "no"
+        }
     ));
 
     if !server.identity_files.is_empty() {
@@ -196,7 +200,10 @@ pub(super) fn build_host_ssh_command(
     }
 
     command.push(' ');
-    command.push_str(&format!("-p {} {}@{}", server.port, server.ssh_user, server.host));
+    command.push_str(&format!(
+        "-p {} {}@{}",
+        server.port, server.ssh_user, server.host
+    ));
 
     if let Some(remote_command) = remote_command {
         command.push(' ');
@@ -288,9 +295,7 @@ pub(super) fn probe_container_ssh(
     }
 }
 
-pub(super) fn probe_machine_host_ssh(
-    server: &RemoteContainerServer,
-) -> (bool, String, String) {
+pub(super) fn probe_machine_host_ssh(server: &RemoteContainerServer) -> (bool, String, String) {
     let command = ssh_probe_command_for_machine_host(server);
     let output = shell::shell_command(&command).output();
 
@@ -346,6 +351,7 @@ fn local_public_key() -> Option<String> {
 
 fn deploy_key_command(
     server: &RemoteContainerServer,
+    manager_type: ContainerManagerType,
     container_name: &str,
     public_key: &str,
 ) -> String {
@@ -356,7 +362,7 @@ fn deploy_key_command(
         key = shell_single_quote(public_key),
     );
 
-    let is_orbstack = matches!(server.manager_type, ContainerManagerType::Orbstack);
+    let is_orbstack = matches!(manager_type, ContainerManagerType::Orbstack);
 
     if is_orbstack {
         format!(
@@ -376,22 +382,34 @@ fn deploy_key_command(
     }
 }
 
-fn auto_deploy_public_key(
-    server: &RemoteContainerServer,
-    container_name: &str,
-) -> Option<String> {
-    let public_key = local_public_key()?;
-    let command = deploy_key_command(server, container_name, &public_key);
-    let output = shell::shell_command(&command).output().ok()?;
-
-    if output.status.success() {
-        Some(format!(
-            "Automatically deployed local SSH public key to {} via {}.",
-            container_name, server.host
-        ))
-    } else {
-        None
+fn deploy_key_managers(server: &RemoteContainerServer) -> Vec<ContainerManagerType> {
+    match server.manager_type {
+        ContainerManagerType::Orbstack => vec![ContainerManagerType::Orbstack],
+        ContainerManagerType::Lxd => vec![ContainerManagerType::Lxd],
+        ContainerManagerType::Docker => vec![],
+        ContainerManagerType::None => {
+            vec![ContainerManagerType::Orbstack, ContainerManagerType::Lxd]
+        }
     }
+}
+
+fn auto_deploy_public_key(server: &RemoteContainerServer, container_name: &str) -> Option<String> {
+    let public_key = local_public_key()?;
+    for manager_type in deploy_key_managers(server) {
+        let command = deploy_key_command(server, manager_type, container_name, &public_key);
+        let Ok(output) = shell::shell_command(&command).output() else {
+            continue;
+        };
+
+        if output.status.success() {
+            return Some(format!(
+                "Automatically deployed local SSH public key to {} via {}.",
+                container_name, server.host
+            ));
+        }
+    }
+
+    None
 }
 
 pub(super) fn probe_managed_container_ssh(
@@ -424,7 +442,10 @@ pub(super) fn run_target_shell_command_internal(
     target_id: &str,
     command: &str,
 ) -> Result<std::process::Output, String> {
-    shell::shell_command(command)
-        .output()
-        .map_err(|error| format!("Failed to execute shell command for {}: {}", target_id, error))
+    shell::shell_command(command).output().map_err(|error| {
+        format!(
+            "Failed to execute shell command for {}: {}",
+            target_id, error
+        )
+    })
 }

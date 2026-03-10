@@ -25,10 +25,7 @@ fn fill_string(target: &mut String, fallback: &str) {
     }
 }
 
-fn merge_workspace_defaults(
-    workspace: &mut ContainerWorkspace,
-    defaults: &ContainerWorkspace,
-) {
+fn merge_workspace_defaults(workspace: &mut ContainerWorkspace, defaults: &ContainerWorkspace) {
     fill_string(&mut workspace.profile, &defaults.profile);
     fill_string(&mut workspace.default_tool, &defaults.default_tool);
     fill_string(&mut workspace.project_path, &defaults.project_path);
@@ -63,10 +60,7 @@ fn merge_services(
     merged
 }
 
-fn merge_surfaces(
-    base: &[BrowserSurface],
-    overrides: &[BrowserSurface],
-) -> Vec<BrowserSurface> {
+fn merge_surfaces(base: &[BrowserSurface], overrides: &[BrowserSurface]) -> Vec<BrowserSurface> {
     let mut merged = base.to_vec();
 
     for override_surface in overrides {
@@ -153,10 +147,10 @@ pub(super) fn apply_profile_defaults_to_remote_server(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::{ContainerDiscoveryMode, ContainerManagerType};
-    use crate::models::{BrowserServiceType, CommandService, DeveloperServiceKind};
+    use super::*;
     use crate::models::MachineTransport;
+    use crate::models::{BrowserServiceType, CommandService, DeveloperServiceKind};
 
     fn fixture_profiles() -> ContainerProfiles {
         HashMap::from([(
@@ -306,7 +300,10 @@ mod tests {
 
         assert_eq!(machine.workspace.files_root, "~/repos/custom");
         assert_eq!(machine.workspace.default_tool, "dashboard");
-        assert!(machine.services.iter().any(|service| service.id == "development"));
+        assert!(machine
+            .services
+            .iter()
+            .any(|service| service.id == "development"));
         assert!(machine.services.iter().any(|service| service.id == "api"));
     }
 }

@@ -5,8 +5,7 @@ use crate::{
         SURFACE_PORT_START,
     },
     models::{
-        BrowserSurface, DeveloperService, DeveloperTarget, TargetsFile, TunnelState,
-        web_service,
+        web_service, BrowserSurface, DeveloperService, DeveloperTarget, TargetsFile, TunnelState,
     },
 };
 use std::net::TcpListener;
@@ -274,9 +273,8 @@ fn hydrate_target(
             .surfaces
             .iter()
             .map(|surface| {
-                hydrate_surface(&target.id, surface, tunnel_state).map(|hydrated_surface| {
-                    web_service(&hydrated_surface)
-                })
+                hydrate_surface(&target.id, surface, tunnel_state)
+                    .map(|hydrated_surface| web_service(&hydrated_surface))
             })
             .collect::<Result<Vec<_>, _>>()?
     } else {
@@ -306,11 +304,7 @@ fn hydrate_service(
     let mut hydrated_service = service.clone();
 
     if let Some(browser_surface) = &service.web {
-        hydrated_service.web = Some(hydrate_surface(
-            &target.id,
-            browser_surface,
-            tunnel_state,
-        )?);
+        hydrated_service.web = Some(hydrate_surface(&target.id, browser_surface, tunnel_state)?);
     }
 
     Ok(hydrated_service)

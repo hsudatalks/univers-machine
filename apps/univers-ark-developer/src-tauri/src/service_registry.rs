@@ -1,8 +1,8 @@
 use crate::{
     config::resolve_raw_target,
     models::{
-        ContainerDashboard, DeveloperServiceKind, ServiceRegistration, ServiceState,
-        ServiceStatus, TunnelStatus,
+        ContainerDashboard, DeveloperServiceKind, ServiceRegistration, ServiceState, ServiceStatus,
+        TunnelStatus,
     },
     runtime::service_key,
 };
@@ -16,7 +16,10 @@ fn upsert_service_status<R: Runtime>(app: &AppHandle<R>, status: ServiceStatus) 
         .map(|service_state| service_state.statuses.clone())
     {
         if let Ok(mut statuses) = statuses.lock() {
-            statuses.insert(service_key(&status.target_id, &status.service_id), status.clone());
+            statuses.insert(
+                service_key(&status.target_id, &status.service_id),
+                status.clone(),
+            );
         }
     }
 
@@ -49,9 +52,7 @@ fn register_service<R: Runtime>(
         if let Ok(mut registrations) = registrations.lock() {
             registrations.insert(
                 service_key(target_id, service_id),
-                ServiceRegistration {
-                    kind,
-                },
+                ServiceRegistration { kind },
             );
         }
     }
@@ -96,7 +97,12 @@ pub(crate) fn sync_registered_web_services<R: Runtime>(
 }
 
 pub(crate) fn emit_tunnel_service_status<R: Runtime>(app: &AppHandle<R>, status: &TunnelStatus) {
-    register_service(app, &status.target_id, &status.service_id, DeveloperServiceKind::Web);
+    register_service(
+        app,
+        &status.target_id,
+        &status.service_id,
+        DeveloperServiceKind::Web,
+    );
     upsert_service_status(
         app,
         ServiceStatus {
@@ -141,7 +147,12 @@ pub(crate) fn emit_dashboard_service_statuses<R: Runtime>(
     for service in &dashboard.services {
         let kind = target
             .as_ref()
-            .and_then(|target| target.services.iter().find(|candidate| candidate.id == service.id))
+            .and_then(|target| {
+                target
+                    .services
+                    .iter()
+                    .find(|candidate| candidate.id == service.id)
+            })
             .map(|service| service.kind)
             .unwrap_or(DeveloperServiceKind::Endpoint);
 

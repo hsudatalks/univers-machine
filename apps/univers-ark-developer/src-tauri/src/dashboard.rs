@@ -2,9 +2,8 @@ use crate::{
     config::{resolve_raw_target, resolve_target_ssh_chain, run_target_shell_command},
     models::{
         ContainerAgentInfo, ContainerDashboard, ContainerDashboardUpdate, ContainerProjectInfo,
-        ContainerRuntimeInfo, ContainerServiceInfo, ContainerTmuxInfo,
-        ContainerTmuxSessionInfo, DashboardMonitor, DashboardState, DeveloperTarget,
-        EndpointProbeType,
+        ContainerRuntimeInfo, ContainerServiceInfo, ContainerTmuxInfo, ContainerTmuxSessionInfo,
+        DashboardMonitor, DashboardState, DeveloperTarget, EndpointProbeType,
     },
     service_registry::emit_dashboard_service_statuses,
 };
@@ -18,8 +17,8 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Runtime, State};
-use url::Url;
 use univers_ark_russh::{execute_chain, ClientOptions as RusshClientOptions};
+use url::Url;
 
 const DEFAULT_PROJECT_PATH: &str = "~/repos";
 pub(crate) const DASHBOARD_UPDATED_EVENT: &str = "container-dashboard-updated";
@@ -731,7 +730,11 @@ fn load_container_dashboard_via_russh(target_id: &str, command: &str) -> Result<
         .build()
         .map_err(|error| format!("Failed to build russh runtime: {}", error))?;
     let output = runtime
-        .block_on(execute_chain(&chain, command, &RusshClientOptions::default()))
+        .block_on(execute_chain(
+            &chain,
+            command,
+            &RusshClientOptions::default(),
+        ))
         .map_err(|error| format!("russh dashboard exec failed for {}: {}", target_id, error))?;
 
     if output.exit_status != 0 {
@@ -822,26 +825,24 @@ pub(crate) fn start_dashboard_monitor<R: Runtime>(
         .map_err(|_| String::from("Dashboard monitor state is unavailable"))?
         .insert(target_id.clone(), monitor);
 
-    thread::spawn(move || {
-        loop {
-            emit_dashboard_update(
-                &app,
-                &target_id,
-                refresh_seconds,
-                load_container_dashboard(&target_id),
-            );
+    thread::spawn(move || loop {
+        emit_dashboard_update(
+            &app,
+            &target_id,
+            refresh_seconds,
+            load_container_dashboard(&target_id),
+        );
 
-            if refresh_seconds == 0 || stop_requested.load(Ordering::Relaxed) {
-                break;
-            }
+        if refresh_seconds == 0 || stop_requested.load(Ordering::Relaxed) {
+            break;
+        }
 
-            let sleep_chunks = refresh_seconds.saturating_mul(4);
-            for _ in 0..sleep_chunks {
-                if stop_requested.load(Ordering::Relaxed) {
-                    return;
-                }
-                thread::sleep(Duration::from_millis(250));
+        let sleep_chunks = refresh_seconds.saturating_mul(4);
+        for _ in 0..sleep_chunks {
+            if stop_requested.load(Ordering::Relaxed) {
+                return;
             }
+            thread::sleep(Duration::from_millis(250));
         }
     });
 
@@ -855,10 +856,7 @@ pub(crate) fn stop_dashboard_monitor(
     stop_dashboard_monitor_inner(dashboard_state.inner(), &target_id)
 }
 
-pub(crate) fn refresh_dashboard_once<R: Runtime>(
-    app: AppHandle<R>,
-    target_id: String,
-) {
+pub(crate) fn refresh_dashboard_once<R: Runtime>(app: AppHandle<R>, target_id: String) {
     thread::spawn(move || {
         emit_dashboard_update(&app, &target_id, 0, load_container_dashboard(&target_id));
     });
@@ -866,7 +864,10 @@ pub(crate) fn refresh_dashboard_once<R: Runtime>(
 
 pub(crate) fn stop_all_dashboard_monitors(dashboard_state: &DashboardState) {
     let sessions = match dashboard_state.sessions.lock() {
-        Ok(mut sessions) => sessions.drain().map(|(_, monitor)| monitor).collect::<Vec<_>>(),
+        Ok(mut sessions) => sessions
+            .drain()
+            .map(|(_, monitor)| monitor)
+            .collect::<Vec<_>>(),
         Err(_) => return,
     };
 

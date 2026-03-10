@@ -58,7 +58,9 @@ fn settings_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> Result<PathBuf, 
     Ok(app_config_dir.join(settings_file_name()))
 }
 
-pub(crate) fn load_app_settings<R: Runtime>(app_handle: &AppHandle<R>) -> Result<AppSettings, String> {
+pub(crate) fn load_app_settings<R: Runtime>(
+    app_handle: &AppHandle<R>,
+) -> Result<AppSettings, String> {
     let path = settings_file_path(app_handle)?;
 
     if !path.exists() {

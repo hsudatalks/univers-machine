@@ -3,11 +3,11 @@ mod profiles;
 mod ssh;
 
 use crate::models::{
-    BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget, ManagedContainerKind,
-    ManagedServer, MachineTransport, TargetsFile,
+    BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget, MachineTransport,
+    ManagedContainerKind, ManagedServer, TargetsFile,
 };
-use serde_json::{Value, json};
 use serde::Deserialize;
+use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     fs,
@@ -22,11 +22,17 @@ use univers_ark_russh::{
 };
 
 use self::{
-    discovery::{cached_remote_server_inventory, discover_remote_server_inventory, scan_server_containers},
-    profiles::{
-        ContainerProfileConfig, ContainerProfiles, apply_profile_defaults_to_remote_server,
+    discovery::{
+        cached_remote_server_inventory, discover_remote_server_inventory,
+        inventory_from_scanned_containers, scan_server_containers,
     },
-    ssh::{build_host_ssh_command, build_ssh_command, run_target_shell_command_internal, shell_single_quote},
+    profiles::{
+        apply_profile_defaults_to_remote_server, ContainerProfileConfig, ContainerProfiles,
+    },
+    ssh::{
+        build_host_ssh_command, build_ssh_command, run_target_shell_command_internal,
+        shell_single_quote,
+    },
 };
 
 #[derive(Debug, Deserialize)]
@@ -40,11 +46,11 @@ struct RawTargetsFile {
     machines: Vec<RemoteContainerServer>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub(super) enum ContainerManagerType {
-    None,
     #[default]
+    None,
     Lxd,
     Docker,
     Orbstack,
@@ -68,6 +74,10 @@ pub(super) struct MachineContainerConfig {
     pub(super) name: String,
     #[serde(default)]
     pub(super) kind: ManagedContainerKind,
+    #[serde(default = "default_container_enabled")]
+    pub(super) enabled: bool,
+    #[serde(default = "default_container_source")]
+    pub(super) source: String,
     #[serde(default)]
     pub(super) label: String,
     #[serde(default)]
@@ -151,6 +161,7 @@ pub(super) struct DiscoveredContainer {
     pub(super) id: String,
     pub(super) kind: ManagedContainerKind,
     pub(super) name: String,
+    pub(super) source: String,
     pub(super) status: String,
     pub(super) ipv4: String,
     pub(super) label: Option<String>,
@@ -207,6 +218,25 @@ fn default_manual_container_status() -> String {
     String::from("RUNNING")
 }
 
+fn default_container_enabled() -> bool {
+    true
+}
+
+fn default_container_source() -> String {
+    String::from("unknown")
+}
+
+fn manager_priority(server: &RemoteContainerServer) -> Vec<ContainerManagerType> {
+    match server.manager_type {
+        ContainerManagerType::None => vec![
+            ContainerManagerType::Orbstack,
+            ContainerManagerType::Docker,
+            ContainerManagerType::Lxd,
+        ],
+        manager_type => vec![manager_type],
+    }
+}
+
 const BUNDLED_TARGETS_TEMPLATE_NAME: &str = "developer-targets.json";
 
 fn targets_file_name() -> &'static str {
@@ -235,14 +265,11 @@ pub(crate) fn app_root() -> PathBuf {
 }
 
 pub(crate) fn targets_file_path() -> PathBuf {
-    configured_targets_path()
-        .get()
-        .cloned()
-        .unwrap_or_else(|| {
-            univers_config_dir()
-                .map(|dir| dir.join(targets_file_name()))
-                .unwrap_or_else(|_| app_root().join(targets_file_name()))
-        })
+    configured_targets_path().get().cloned().unwrap_or_else(|| {
+        univers_config_dir()
+            .map(|dir| dir.join(targets_file_name()))
+            .unwrap_or_else(|_| app_root().join(targets_file_name()))
+    })
 }
 
 fn bundled_targets_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> PathBuf {
@@ -301,12 +328,36 @@ fn targets_cache() -> &'static Mutex<Option<CachedResolvedInventory>> {
     TARGETS_CACHE.get_or_init(|| Mutex::new(None))
 }
 
+fn sanitize_workspace_aliases(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            if let Some(legacy_value) = map.remove("primaryBrowserServiceId") {
+                map.entry(String::from("primaryWebServiceId"))
+                    .or_insert(legacy_value);
+            }
+
+            map.values_mut().for_each(sanitize_workspace_aliases);
+        }
+        Value::Array(items) => items.iter_mut().for_each(sanitize_workspace_aliases),
+        _ => {}
+    }
+}
+
+fn sanitize_targets_json_content(content: &str) -> Result<String, String> {
+    let mut value: Value =
+        serde_json::from_str(content).map_err(|error| format!("Invalid config JSON: {}", error))?;
+    sanitize_workspace_aliases(&mut value);
+    serde_json::to_string_pretty(&value)
+        .map_err(|error| format!("Failed to serialize sanitized config JSON: {}", error))
+}
+
 fn read_raw_targets_file() -> Result<RawTargetsFile, String> {
     let config_path = targets_file_path();
     let content = fs::read_to_string(&config_path)
         .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))?;
 
-    serde_json::from_str::<RawTargetsFile>(&content)
+    let sanitized = sanitize_targets_json_content(&content)?;
+    serde_json::from_str::<RawTargetsFile>(&sanitized)
         .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))
 }
 
@@ -325,12 +376,9 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
     let mut targets = Vec::new();
     let mut servers = Vec::new();
 
-    raw_targets_file
-        .machines
-        .iter_mut()
-        .for_each(|server| {
-            apply_profile_defaults_to_remote_server(server, &profiles, default_profile.as_deref())
-        });
+    raw_targets_file.machines.iter_mut().for_each(|server| {
+        apply_profile_defaults_to_remote_server(server, &profiles, default_profile.as_deref())
+    });
 
     let discovered: Vec<_> = std::thread::scope(|scope| {
         let handles: Vec<_> = raw_targets_file
@@ -347,7 +395,10 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
             })
             .collect();
 
-        handles.into_iter().map(|handle| handle.join().unwrap()).collect()
+        handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect()
     });
 
     for inventory in discovered {
@@ -374,6 +425,7 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
 }
 
 fn discovered_container_to_manual_value(
+    server: &RemoteContainerServer,
     container: &DiscoveredContainer,
     existing: Option<&MachineContainerConfig>,
 ) -> Value {
@@ -396,6 +448,26 @@ fn discovered_container_to_manual_value(
         .cloned()
         .or_else(|| existing.map(|item| item.description.clone()))
         .unwrap_or_default();
+    let source = if matches!(container.kind, ManagedContainerKind::Host) {
+        String::from("host")
+    } else if let Some(existing) = existing {
+        if existing.source.trim().is_empty() || existing.source == "unknown" {
+            container.source.clone()
+        } else {
+            existing.source.clone()
+        }
+    } else {
+        container.source.clone()
+    };
+    let enabled = if matches!(container.kind, ManagedContainerKind::Host) {
+        true
+    } else if let Some(existing) = existing {
+        existing.enabled
+    } else if server.container_name_suffix.trim().is_empty() {
+        true
+    } else {
+        container.name.ends_with(&server.container_name_suffix)
+    };
     let workspace = existing
         .map(|item| serde_json::to_value(&item.workspace).unwrap_or_else(|_| json!({})))
         .unwrap_or_else(|| json!({}));
@@ -410,6 +482,8 @@ fn discovered_container_to_manual_value(
         "id": id,
         "name": container.name,
         "kind": container.kind,
+        "enabled": enabled,
+        "source": source,
         "label": label,
         "description": description,
         "ipv4": container.ipv4,
@@ -424,46 +498,41 @@ pub(crate) fn scan_and_store_server_inventory(server_id: &str) -> Result<Managed
     let config_path = targets_file_path();
     let raw_content = fs::read_to_string(&config_path)
         .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))?;
-    let mut raw_json: Value = serde_json::from_str(&raw_content)
+    let sanitized_content = sanitize_targets_json_content(&raw_content)?;
+    let mut raw_json: Value = serde_json::from_str(&sanitized_content)
         .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))?;
-    let mut raw_targets_file: RawTargetsFile = serde_json::from_str(&raw_content)
+    let mut raw_targets_file: RawTargetsFile = serde_json::from_str(&sanitized_content)
         .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))?;
 
     let profiles: ContainerProfiles = raw_targets_file.profiles.clone();
     let default_profile = raw_targets_file.default_profile.clone();
-    raw_targets_file
-        .machines
-        .iter_mut()
-        .for_each(|server| {
-            apply_profile_defaults_to_remote_server(server, &profiles, default_profile.as_deref())
-        });
+    raw_targets_file.machines.iter_mut().for_each(|server| {
+        apply_profile_defaults_to_remote_server(server, &profiles, default_profile.as_deref())
+    });
 
     let Some(server_index) = raw_targets_file
         .machines
         .iter()
-        .position(|server| server.id == server_id) else {
+        .position(|server| server.id == server_id)
+    else {
         return Err(format!("Unknown server: {}", server_id));
     };
 
     let server = raw_targets_file.machines[server_index].clone();
     let discovered = scan_server_containers(&server)?;
-    let inventory = discover_remote_server_inventory(&server);
-    let existing_manual = raw_targets_file.machines[server_index]
-        .containers
-        .clone();
+    let inventory = inventory_from_scanned_containers(&server, discovered.clone());
+    let existing_manual = raw_targets_file.machines[server_index].containers.clone();
     let manual_values = discovered
         .iter()
         .map(|container| {
             let existing = existing_manual
                 .iter()
                 .find(|item| item.name == container.name);
-            discovered_container_to_manual_value(container, existing)
+            discovered_container_to_manual_value(&server, container, existing)
         })
         .collect::<Vec<_>>();
 
-    let Some(remote_servers) = raw_json
-        .get_mut("machines")
-        .and_then(Value::as_array_mut) else {
+    let Some(remote_servers) = raw_json.get_mut("machines").and_then(Value::as_array_mut) else {
         return Err(String::from("Config is missing machines."));
     };
 
@@ -641,84 +710,104 @@ pub(crate) fn restart_container(server_id: &str, container_name: &str) -> Result
         .find(|server| server.id == server_id)
         .ok_or_else(|| format!("Unknown machine: {}", server_id))?;
     if matches!(server.transport, MachineTransport::Local) {
-        return Err(String::from("Local host container cannot be restarted from machine inventory."));
+        return Err(String::from(
+            "Local host container cannot be restarted from machine inventory.",
+        ));
     }
 
-    let restart_command = match server.manager_type {
-        ContainerManagerType::Orbstack => {
-            build_host_ssh_command(
+    let mut errors = Vec::new();
+
+    for manager_type in manager_priority(server) {
+        let restart_command = match manager_type {
+            ContainerManagerType::Orbstack => build_host_ssh_command(
                 server,
                 &[],
                 Some(&shell_single_quote(&format!(
                     "/opt/homebrew/bin/orb restart {}",
                     container_name
                 ))),
-            )
-        }
-        ContainerManagerType::Docker => {
-            build_host_ssh_command(
+            ),
+            ContainerManagerType::Docker => build_host_ssh_command(
                 server,
                 &[],
-                Some(&shell_single_quote(&format!("docker restart {}", container_name))),
-            )
-        }
-        ContainerManagerType::Lxd => {
-            build_host_ssh_command(
+                Some(&shell_single_quote(&format!(
+                    "docker restart {}",
+                    container_name
+                ))),
+            ),
+            ContainerManagerType::Lxd => build_host_ssh_command(
                 server,
                 &[],
                 Some(&shell_single_quote(&format!(
                     "lxc restart {} --force",
                     container_name
                 ))),
-            )
-        }
-        ContainerManagerType::None => {
-            return Err(format!(
-                "Machine {} does not define a container manager",
-                server_id
-            ));
-        }
-    };
+            ),
+            ContainerManagerType::None => continue,
+        };
 
-    let output = crate::shell::shell_command(&restart_command)
-        .output()
-        .map_err(|error| {
-            format!(
-                "Failed to restart container {} on {}: {}",
-                container_name, server.host, error
-            )
-        })?;
+        let output = crate::shell::shell_command(&restart_command)
+            .output()
+            .map_err(|error| {
+                format!(
+                    "Failed to restart container {} on {}: {}",
+                    container_name, server.host, error
+                )
+            })?;
 
-    if !output.status.success() {
+        if output.status.success() {
+            return Ok(());
+        }
+
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if stderr.is_empty() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
             format!(
                 "Failed to restart container {} on {}: exit code {}",
-                container_name,
-                server.host,
-                output.status
+                container_name, server.host, output.status
             )
-        } else {
-            stderr
-        });
+        };
+
+        let normalized = detail.to_ascii_lowercase();
+        if normalized.contains("command not found")
+            || normalized.contains("no such file or directory")
+            || normalized.contains("not found")
+        {
+            continue;
+        }
+
+        errors.push(detail);
     }
 
-    Ok(())
+    if errors.is_empty() {
+        Err(format!(
+            "Failed to restart container {} on {} with supported container managers.",
+            container_name, server.host
+        ))
+    } else {
+        Err(errors.join("\n"))
+    }
 }
 
 pub(crate) fn read_targets_config() -> Result<String, String> {
     let config_path = targets_file_path();
-    fs::read_to_string(&config_path)
-        .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))
+    let content = fs::read_to_string(&config_path)
+        .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))?;
+
+    sanitize_targets_json_content(&content)
 }
 
 pub(crate) fn save_targets_config(content: &str) -> Result<(), String> {
-    // Validate JSON parses correctly before writing
-    serde_json::from_str::<RawTargetsFile>(content)
+    let sanitized_content = sanitize_targets_json_content(content)?;
+    serde_json::from_str::<RawTargetsFile>(&sanitized_content)
         .map_err(|error| format!("Invalid config JSON: {}", error))?;
 
     let config_path = targets_file_path();
-    fs::write(&config_path, content)
+    fs::write(&config_path, sanitized_content)
         .map_err(|error| format!("Failed to write {}: {}", config_path.display(), error))?;
 
     // Invalidate inventory cache so next load picks up changes
@@ -738,11 +827,13 @@ pub(crate) fn read_bootstrap_data(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::ssh::ssh_destination;
-    use crate::models::{BrowserServiceType, ManagedContainer, ManagedContainerKind, MachineTransport};
     use super::discovery::{
         build_target_from_container, parse_discovered_containers, server_state_for_containers,
+    };
+    use super::ssh::ssh_destination;
+    use super::*;
+    use crate::models::{
+        BrowserServiceType, MachineTransport, ManagedContainer, ManagedContainerKind,
     };
 
     fn fixture_server() -> RemoteContainerServer {
@@ -828,6 +919,7 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
             id: String::from("workflow-dev"),
             kind: ManagedContainerKind::Managed,
             name: String::from("workflow-dev"),
+            source: String::from("lxd"),
             status: String::from("RUNNING"),
             ipv4: String::from("10.211.82.202"),
             label: None,
@@ -847,10 +939,7 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
         } else {
             std::env::var("HOME").unwrap()
         };
-        let expected_known_hosts_file = format!(
-            "{}/.ssh/univers-ark-developer-known_hosts",
-            home
-        );
+        let expected_known_hosts_file = format!("{}/.ssh/univers-ark-developer-known_hosts", home);
         let expected_terminal_command = format!(
             "ssh -o UserKnownHostsFile={kh} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -o StrictHostKeyChecking=no -tt -J ubuntu@mechanism-dev -p 22 ubuntu@10.211.82.202 'tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l'",
             kh = expected_known_hosts_file

@@ -1,22 +1,25 @@
 use crate::models::{
-    BrowserServiceType, BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget,
-    ManagedContainer, ManagedContainerKind, ManagedServer, MachineTransport, web_service,
+    web_service, BrowserServiceType, BrowserSurface, ContainerWorkspace, DeveloperService,
+    DeveloperTarget, MachineTransport, ManagedContainer, ManagedContainerKind, ManagedServer,
 };
 use csv::ReaderBuilder;
+use std::collections::HashSet;
 
-use super::{
-    ContainerDiscoveryMode, ContainerManagerType, DiscoveredContainer,
-    DiscoveredServerInventory, MachineContainerConfig, RemoteContainerContext,
-    RemoteContainerServer,
-};
 use super::ssh::{
-    build_host_ssh_command, probe_machine_host_ssh, probe_managed_container_ssh, ssh_destination,
-    terminal_command_for_server, shell_single_quote,
+    build_host_ssh_command, probe_machine_host_ssh, probe_managed_container_ssh,
+    shell_single_quote, ssh_destination, terminal_command_for_server,
+};
+use super::{
+    ContainerDiscoveryMode, ContainerManagerType, DiscoveredContainer, DiscoveredServerInventory,
+    MachineContainerConfig, RemoteContainerContext, RemoteContainerServer,
 };
 use crate::shell;
 
-pub(super) fn default_discovery_command(server: &RemoteContainerServer) -> String {
-    match server.manager_type {
+fn default_discovery_command_for_manager(
+    server: &RemoteContainerServer,
+    manager_type: ContainerManagerType,
+) -> String {
+    match manager_type {
         ContainerManagerType::None => String::new(),
         ContainerManagerType::Lxd => build_host_ssh_command(
             server,
@@ -35,6 +38,17 @@ pub(super) fn default_discovery_command(server: &RemoteContainerServer) -> Strin
             &[],
             Some(&shell_single_quote("/opt/homebrew/bin/orb list --format json")),
         ),
+    }
+}
+
+fn discovery_managers(server: &RemoteContainerServer) -> Vec<ContainerManagerType> {
+    match server.manager_type {
+        ContainerManagerType::None => vec![
+            ContainerManagerType::Orbstack,
+            ContainerManagerType::Docker,
+            ContainerManagerType::Lxd,
+        ],
+        manager_type => vec![manager_type],
     }
 }
 
@@ -221,21 +235,13 @@ fn render_workspace(
     }
 }
 
-fn discover_server_containers_output(server: &RemoteContainerServer) -> Result<String, String> {
-    let command = if server.discovery_command.trim().is_empty() {
-        default_discovery_command(server)
-    } else {
-        server.discovery_command.clone()
-    };
-
-    let output = shell::shell_command(&command)
-        .output()
-        .map_err(|error| {
-            format!(
-                "Failed to discover containers on {} with `{}`: {}",
-                server.host, command, error
-            )
-        })?;
+fn run_discovery_command(server: &RemoteContainerServer, command: &str) -> Result<String, String> {
+    let output = shell::shell_command(&command).output().map_err(|error| {
+        format!(
+            "Failed to discover containers on {} with `{}`: {}",
+            server.host, command, error
+        )
+    })?;
 
     if !output.status.success() {
         return Err(format!(
@@ -278,63 +284,81 @@ fn parse_orbstack_containers(
         )
     })?;
 
-    let mut containers = Vec::new();
-    for item in list {
-        if !server.container_name_suffix.is_empty()
-            && !item.name.ends_with(&server.container_name_suffix)
-        {
-            continue;
+    let items = list
+        .into_iter()
+        .filter(|item| server.include_stopped || item.state.eq_ignore_ascii_case("running"))
+        .collect::<Vec<_>>();
+
+    std::thread::scope(|scope| {
+        let handles = items
+            .into_iter()
+            .map(|item| {
+                scope.spawn(move || -> Result<Option<DiscoveredContainer>, String> {
+                    let info_command = build_host_ssh_command(
+                        server,
+                        &[],
+                        Some(&shell_single_quote(&format!(
+                            "/opt/homebrew/bin/orb info {} --format json",
+                            item.name
+                        ))),
+                    );
+                    let output = shell::shell_command(&info_command)
+                        .output()
+                        .map_err(|error| {
+                            format!(
+                                "Failed to read OrbStack info for {} on {}: {}",
+                                item.name, server.host, error
+                            )
+                        })?;
+
+                    if !output.status.success() {
+                        return Ok(None);
+                    }
+
+                    let info: OrbInfoResponse =
+                        serde_json::from_slice(&output.stdout).map_err(|error| {
+                            format!(
+                                "Failed to parse OrbStack info for {} on {}: {}",
+                                item.name, server.host, error
+                            )
+                        })?;
+
+                    if info.ip4.trim().is_empty() {
+                        return Ok(None);
+                    }
+
+                    Ok(Some(DiscoveredContainer {
+                        id: info.record.name.clone(),
+                        kind: ManagedContainerKind::Managed,
+                        name: info.record.name,
+                        source: String::from("orbstack"),
+                        status: info.record.state.to_uppercase(),
+                        ipv4: info.ip4,
+                        label: None,
+                        description: None,
+                        workspace: None,
+                        services: vec![],
+                        surfaces: vec![],
+                    }))
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let mut containers = Vec::new();
+        for handle in handles {
+            let result = handle.join().map_err(|_| {
+                format!(
+                    "OrbStack discovery worker panicked while scanning {}",
+                    server.host
+                )
+            })?;
+            if let Some(container) = result? {
+                containers.push(container);
+            }
         }
 
-        if !server.include_stopped && !item.state.eq_ignore_ascii_case("running") {
-            continue;
-        }
-
-        let info_command = build_host_ssh_command(
-            server,
-            &[],
-            Some(&shell_single_quote(&format!(
-                "/opt/homebrew/bin/orb info {} --format json",
-                item.name
-            ))),
-        );
-        let output = shell::shell_command(&info_command).output().map_err(|error| {
-            format!(
-                "Failed to read OrbStack info for {} on {}: {}",
-                item.name, server.host, error
-            )
-        })?;
-
-        if !output.status.success() {
-            continue;
-        }
-
-        let info: OrbInfoResponse = serde_json::from_slice(&output.stdout).map_err(|error| {
-            format!(
-                "Failed to parse OrbStack info for {} on {}: {}",
-                item.name, server.host, error
-            )
-        })?;
-
-        if info.ip4.trim().is_empty() {
-            continue;
-        }
-
-        containers.push(DiscoveredContainer {
-            id: info.record.name.clone(),
-            kind: ManagedContainerKind::Managed,
-            name: info.record.name,
-            status: info.record.state.to_uppercase(),
-            ipv4: info.ip4,
-            label: None,
-            description: None,
-            workspace: None,
-            services: vec![],
-            surfaces: vec![],
-        });
-    }
-
-    Ok(containers)
+        Ok(containers)
+    })
 }
 
 fn machine_container_to_discovered(container: &MachineContainerConfig) -> DiscoveredContainer {
@@ -343,7 +367,11 @@ fn machine_container_to_discovered(container: &MachineContainerConfig) -> Discov
         || !container.workspace.project_path.trim().is_empty()
         || !container.workspace.files_root.trim().is_empty()
         || !container.workspace.primary_web_service_id.trim().is_empty()
-        || !container.workspace.tmux_command_service_id.trim().is_empty();
+        || !container
+            .workspace
+            .tmux_command_service_id
+            .trim()
+            .is_empty();
 
     DiscoveredContainer {
         id: if container.id.trim().is_empty() {
@@ -353,6 +381,15 @@ fn machine_container_to_discovered(container: &MachineContainerConfig) -> Discov
         },
         kind: container.kind,
         name: container.name.clone(),
+        source: if container.source.trim().is_empty() {
+            if matches!(container.kind, ManagedContainerKind::Host) {
+                String::from("host")
+            } else {
+                String::from("manual")
+            }
+        } else {
+            container.source.clone()
+        },
         status: container.status.clone(),
         ipv4: container.ipv4.clone(),
         label: (!container.label.trim().is_empty()).then(|| container.label.clone()),
@@ -376,6 +413,8 @@ fn discover_host_container(server: &RemoteContainerServer) -> DiscoveredContaine
             id: String::from("host"),
             name: String::from("host"),
             kind: ManagedContainerKind::Host,
+            enabled: true,
+            source: String::from("host"),
             label: String::from("Host"),
             description: String::new(),
             ipv4: String::new(),
@@ -396,6 +435,11 @@ fn discover_host_container(server: &RemoteContainerServer) -> DiscoveredContaine
             String::from("host")
         } else {
             container.name
+        },
+        source: if container.source.trim().is_empty() {
+            String::from("host")
+        } else {
+            container.source
         },
         status: if container.status.trim().is_empty() {
             String::from("RUNNING")
@@ -420,19 +464,16 @@ fn discover_manual_containers(server: &RemoteContainerServer) -> Vec<DiscoveredC
         .containers
         .iter()
         .filter(|container| matches!(container.kind, ManagedContainerKind::Managed))
+        .filter(|container| container.enabled)
         .filter(|container| !container.name.trim().is_empty() && !container.ipv4.trim().is_empty())
         .map(machine_container_to_discovered)
         .collect()
 }
 
-pub(super) fn parse_discovered_containers(
+fn parse_csv_discovered_containers(
     server: &RemoteContainerServer,
     discovery_output: &str,
 ) -> Result<Vec<DiscoveredContainer>, String> {
-    if matches!(server.manager_type, ContainerManagerType::Orbstack) {
-        return parse_orbstack_containers(server, discovery_output);
-    }
-
     let mut containers = Vec::new();
     let mut reader = ReaderBuilder::new()
         .has_headers(false)
@@ -458,12 +499,6 @@ pub(super) fn parse_discovered_containers(
             continue;
         }
 
-        if !server.container_name_suffix.is_empty()
-            && !name.ends_with(&server.container_name_suffix)
-        {
-            continue;
-        }
-
         let Some(ipv4) = extract_ipv4(raw_ipv4) else {
             continue;
         };
@@ -472,6 +507,7 @@ pub(super) fn parse_discovered_containers(
             id: name.to_string(),
             kind: ManagedContainerKind::Managed,
             name: name.to_string(),
+            source: String::from("unknown"),
             status: status.to_string(),
             ipv4,
             label: None,
@@ -483,6 +519,161 @@ pub(super) fn parse_discovered_containers(
     }
 
     Ok(containers)
+}
+
+fn parse_discovered_containers_for_manager(
+    server: &RemoteContainerServer,
+    manager_type: ContainerManagerType,
+    discovery_output: &str,
+) -> Result<Vec<DiscoveredContainer>, String> {
+    if matches!(manager_type, ContainerManagerType::Orbstack) {
+        return parse_orbstack_containers(server, discovery_output);
+    }
+
+    let mut containers = parse_csv_discovered_containers(server, discovery_output)?;
+    let source = match manager_type {
+        ContainerManagerType::Docker => "docker",
+        ContainerManagerType::Lxd => "lxd",
+        ContainerManagerType::Orbstack => "orbstack",
+        ContainerManagerType::None => "unknown",
+    };
+    containers.iter_mut().for_each(|container| {
+        container.source = source.to_string();
+    });
+    Ok(containers)
+}
+
+pub(super) fn parse_discovered_containers(
+    server: &RemoteContainerServer,
+    discovery_output: &str,
+) -> Result<Vec<DiscoveredContainer>, String> {
+    let trimmed = discovery_output.trim_start();
+
+    if trimmed.starts_with('[') || trimmed.starts_with('{') {
+        if let Ok(containers) = parse_orbstack_containers(server, discovery_output) {
+            return Ok(containers);
+        }
+    }
+
+    let mut containers = parse_csv_discovered_containers(server, discovery_output)?;
+    containers.iter_mut().for_each(|container| {
+        container.source = String::from("custom");
+    });
+    Ok(containers)
+}
+
+fn is_ignorable_discovery_error(error: &str) -> bool {
+    let normalized = error.to_ascii_lowercase();
+
+    normalized.contains("command not found")
+        || normalized.contains("no such file or directory")
+        || normalized.contains("not installed")
+        || normalized.contains("unknown command")
+}
+
+fn manager_type_label(manager_type: ContainerManagerType) -> &'static str {
+    match manager_type {
+        ContainerManagerType::None => "none",
+        ContainerManagerType::Orbstack => "orbstack",
+        ContainerManagerType::Docker => "docker",
+        ContainerManagerType::Lxd => "lxd",
+    }
+}
+
+struct ManagerDiscoveryResult {
+    manager_type: ContainerManagerType,
+    attempted: bool,
+    containers: Result<Vec<DiscoveredContainer>, String>,
+}
+
+fn discover_containers_with_supported_managers(
+    server: &RemoteContainerServer,
+) -> Result<Vec<DiscoveredContainer>, String> {
+    let mut discovered = Vec::new();
+    let mut seen_names = HashSet::new();
+    let mut failures = Vec::new();
+    let mut attempted_managers = 0;
+
+    let manager_results = std::thread::scope(|scope| {
+        let handles = discovery_managers(server)
+            .into_iter()
+            .map(|manager_type| {
+                scope.spawn(move || {
+                    let command = default_discovery_command_for_manager(server, manager_type);
+                    if command.trim().is_empty() {
+                        return ManagerDiscoveryResult {
+                            manager_type,
+                            attempted: false,
+                            containers: Ok(Vec::new()),
+                        };
+                    }
+                    let output = match run_discovery_command(server, &command) {
+                        Ok(output) => output,
+                        Err(error) => {
+                            return ManagerDiscoveryResult {
+                                manager_type,
+                                attempted: true,
+                                containers: Err(error),
+                            };
+                        }
+                    };
+                    let containers =
+                        parse_discovered_containers_for_manager(server, manager_type, &output);
+                    ManagerDiscoveryResult {
+                        manager_type,
+                        attempted: true,
+                        containers,
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let mut results = Vec::with_capacity(handles.len());
+        for handle in handles {
+            let result = handle.join().map_err(|_| {
+                format!(
+                    "Container discovery worker panicked while scanning {}",
+                    server.host
+                )
+            })?;
+            results.push(result);
+        }
+
+        Ok::<Vec<ManagerDiscoveryResult>, String>(results)
+    })?;
+
+    for result in manager_results {
+        if !result.attempted {
+            continue;
+        }
+
+        attempted_managers += 1;
+
+        match result.containers {
+            Ok(containers) => {
+                for container in containers {
+                    if seen_names.insert(container.name.clone()) {
+                        discovered.push(container);
+                    }
+                }
+            }
+            Err(error) => {
+                if !is_ignorable_discovery_error(&error) {
+                    failures.push(format!(
+                        "[{}] {}",
+                        manager_type_label(result.manager_type),
+                        error
+                    ));
+                }
+            }
+        }
+    }
+
+    if !discovered.is_empty() || attempted_managers == 0 || failures.is_empty() {
+        return Ok(discovered);
+    }
+
+    Err(failures.join("\n"))
 }
 
 pub(super) fn scan_server_containers(
@@ -502,15 +693,19 @@ pub(super) fn scan_server_containers(
         return Ok(containers);
     }
 
-    let output = discover_server_containers_output(server)?;
     let mut containers = vec![discover_host_container(server)];
-    containers.extend(parse_discovered_containers(server, &output)?);
+
+    if !server.discovery_command.trim().is_empty() {
+        let output = run_discovery_command(server, &server.discovery_command)?;
+        containers.extend(parse_discovered_containers(server, &output)?);
+        return Ok(containers);
+    }
+
+    containers.extend(discover_containers_with_supported_managers(server)?);
     Ok(containers)
 }
 
-pub(super) fn cached_server_containers(
-    server: &RemoteContainerServer,
-) -> Vec<DiscoveredContainer> {
+pub(super) fn cached_server_containers(server: &RemoteContainerServer) -> Vec<DiscoveredContainer> {
     let mut containers = vec![discover_host_container(server)];
     containers.extend(discover_manual_containers(server));
     containers
@@ -631,23 +826,24 @@ fn build_managed_container(
     } else {
         ssh_destination(server, &container.ipv4)
     };
-    let (ssh_reachable, ssh_state, ssh_message) = if matches!(server.transport, MachineTransport::Local) {
-        (
-            true,
-            String::from("ready"),
-            String::from("Local workspace is ready."),
-        )
-    } else if probe_ssh && matches!(container.kind, ManagedContainerKind::Host) {
-        probe_machine_host_ssh(server)
-    } else if probe_ssh {
-        probe_managed_container_ssh(server, &container.ipv4, &container.name)
-    } else {
-        (
-            true,
-            String::from("cached"),
-            String::from("Using cached container snapshot."),
-        )
-    };
+    let (ssh_reachable, ssh_state, ssh_message) =
+        if matches!(server.transport, MachineTransport::Local) {
+            (
+                true,
+                String::from("ready"),
+                String::from("Local workspace is ready."),
+            )
+        } else if probe_ssh && matches!(container.kind, ManagedContainerKind::Host) {
+            probe_machine_host_ssh(server)
+        } else if probe_ssh {
+            probe_managed_container_ssh(server, &container.ipv4, &container.name)
+        } else {
+            (
+                true,
+                String::from("cached"),
+                String::from("Using cached container snapshot."),
+            )
+        };
 
     (
         ManagedContainer {
@@ -747,13 +943,18 @@ fn build_server_inventory(
     }
 }
 
+pub(super) fn inventory_from_scanned_containers(
+    server: &RemoteContainerServer,
+    containers: Vec<DiscoveredContainer>,
+) -> DiscoveredServerInventory {
+    build_server_inventory(server, containers, false)
+}
+
 pub(super) fn discover_remote_server_inventory(
     server: &RemoteContainerServer,
 ) -> DiscoveredServerInventory {
     match scan_server_containers(server) {
-        Ok(containers) => {
-            build_server_inventory(server, containers, true)
-        }
+        Ok(containers) => build_server_inventory(server, containers, true),
         Err(error) => DiscoveredServerInventory {
             server: ManagedServer {
                 id: server.id.clone(),

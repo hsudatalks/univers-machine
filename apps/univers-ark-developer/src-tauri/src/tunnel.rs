@@ -1,14 +1,14 @@
 use crate::{
-    constants::{TUNNEL_PROBE_INTERVAL, TUNNEL_PROBE_MESSAGE_DELAY, TUNNEL_PROBE_TIMEOUT},
     config::resolve_target_ssh_chain,
+    constants::{TUNNEL_PROBE_INTERVAL, TUNNEL_PROBE_MESSAGE_DELAY, TUNNEL_PROBE_TIMEOUT},
     models::{
-        BrowserServiceType, BrowserSurface, RusshTunnelForward, TunnelProcess,
-        TunnelRegistration, TunnelSession, TunnelState, TunnelStatus,
+        BrowserServiceType, BrowserSurface, RusshTunnelForward, TunnelProcess, TunnelRegistration,
+        TunnelSession, TunnelState, TunnelStatus,
     },
     proxy::{proxy_error_message, start_vite_proxy},
     runtime::{
-        allocate_internal_tunnel_port, internal_probe_url, resolve_runtime_web_surface,
-        resolve_runtime_vite_hmr_tunnel_command, service_key, surface_key, surface_local_port,
+        allocate_internal_tunnel_port, internal_probe_url, resolve_runtime_vite_hmr_tunnel_command,
+        resolve_runtime_web_surface, service_key, surface_key, surface_local_port,
     },
     service_registry::emit_tunnel_service_status,
 };
@@ -20,10 +20,10 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Emitter};
-use url::Url;
 use univers_ark_russh::{
     start_local_forward_chain, ClientOptions as RusshClientOptions, ResolvedEndpointChain,
 };
+use url::Url;
 
 const TUNNEL_STOP_WAIT_TIMEOUT: Duration = Duration::from_secs(2);
 const TUNNEL_SUPERVISOR_INTERVAL: Duration = Duration::from_millis(500);
@@ -548,9 +548,9 @@ fn parse_forward_target(command_line: &str) -> Result<(String, u16), String> {
         let Some((before_port, remote_port)) = forward_spec.rsplit_once(':') else {
             continue;
         };
-        let remote_port = remote_port
-            .parse::<u16>()
-            .map_err(|error| format!("Invalid remote forward port in {}: {}", forward_spec, error))?;
+        let remote_port = remote_port.parse::<u16>().map_err(|error| {
+            format!("Invalid remote forward port in {}: {}", forward_spec, error)
+        })?;
         let Some(remote_host) = before_port.rsplit(':').next() else {
             continue;
         };
@@ -724,12 +724,10 @@ fn spawn_managed_tunnel_session(
             if monitor_error.is_none() {
                 for forward in &monitored_forwards {
                     if !forward.forward.is_running() {
-                        monitor_error = Some(
-                            forward
-                                .forward
-                                .last_error()
-                                .unwrap_or_else(|| format!("{} stopped unexpectedly.", forward.label)),
-                        );
+                        monitor_error =
+                            Some(forward.forward.last_error().unwrap_or_else(|| {
+                                format!("{} stopped unexpectedly.", forward.label)
+                            }));
                         break;
                     }
                 }
@@ -739,7 +737,13 @@ fn spawn_managed_tunnel_session(
                 if remove_tunnel_session_if_current(&monitor_sessions, &session_key, session_id) {
                     let _ = app_handle.emit(
                         "tunnel-status",
-                        tunnel_status(&target_id, &surface_id, Some(local_url.clone()), "error", error),
+                        tunnel_status(
+                            &target_id,
+                            &surface_id,
+                            Some(local_url.clone()),
+                            "error",
+                            error,
+                        ),
                     );
                 }
                 break;
@@ -760,7 +764,13 @@ fn spawn_managed_tunnel_session(
                     let state = if success { "stopped" } else { "error" };
                     let _ = app_handle.emit(
                         "tunnel-status",
-                        tunnel_status(&target_id, &surface_id, Some(local_url.clone()), state, message),
+                        tunnel_status(
+                            &target_id,
+                            &surface_id,
+                            Some(local_url.clone()),
+                            state,
+                            message,
+                        ),
                     );
                 }
                 break;
@@ -799,9 +809,10 @@ fn spawn_vite_proxy_session(
     let remote_port = remote_url
         .port_or_known_default()
         .ok_or_else(|| format!("Remote URL for {} surface is missing a port", surface.id))?;
-    let (_, hmr_remote_port) = parse_forward_target(
-        &resolve_runtime_vite_hmr_tunnel_command(&surface.vite_hmr_tunnel_command, hmr_forward_port),
-    )?;
+    let (_, hmr_remote_port) = parse_forward_target(&resolve_runtime_vite_hmr_tunnel_command(
+        &surface.vite_hmr_tunnel_command,
+        hmr_forward_port,
+    ))?;
 
     let local_http_bind = format!("127.0.0.1:{}", http_forward_port);
     let http_forward = spawn_russh_forward(

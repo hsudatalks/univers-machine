@@ -245,7 +245,12 @@ fn spawn_russh_terminal_session(
         32,
         &RusshClientOptions::default(),
     )
-    .map_err(|error| format!("Failed to start russh terminal for {}: {}", target.id, error))?;
+    .map_err(|error| {
+        format!(
+            "Failed to start russh terminal for {}: {}",
+            target.id, error
+        )
+    })?;
 
     let session = TerminalSession {
         local: None,

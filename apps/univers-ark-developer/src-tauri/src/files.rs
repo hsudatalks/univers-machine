@@ -22,7 +22,12 @@ fn list_remote_directory_via_russh(
             path,
             &RusshClientOptions::default(),
         ))
-        .map_err(|error| format!("russh directory listing failed for {}: {}", target_id, error))?;
+        .map_err(|error| {
+            format!(
+                "russh directory listing failed for {}: {}",
+                target_id, error
+            )
+        })?;
 
     Ok(map_russh_directory_listing(target_id, listing))
 }

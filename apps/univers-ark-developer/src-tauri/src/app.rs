@@ -14,7 +14,6 @@ use tauri::{
     AppHandle, Emitter, Manager, Runtime,
 };
 
-
 const TOGGLE_SIDEBAR_MENU_ID: &str = "toggle_sidebar";
 const TOGGLE_SIDEBAR_EVENT: &str = "toggle-sidebar-requested";
 const PREVIOUS_CONTAINER_MENU_ID: &str = "previous_container";
@@ -32,7 +31,11 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
         name: Some(pkg_info.name.clone()),
         version: Some(pkg_info.version.to_string()),
         copyright: config.bundle.copyright.clone(),
-        authors: config.bundle.publisher.clone().map(|publisher| vec![publisher]),
+        authors: config
+            .bundle
+            .publisher
+            .clone()
+            .map(|publisher| vec![publisher]),
         ..Default::default()
     };
 
@@ -129,8 +132,7 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
         ],
     )?;
 
-    let help_menu =
-        Submenu::with_id_and_items(app_handle, HELP_SUBMENU_ID, "Help", true, &[])?;
+    let help_menu = Submenu::with_id_and_items(app_handle, HELP_SUBMENU_ID, "Help", true, &[])?;
 
     Menu::with_items(
         app_handle,
@@ -226,7 +228,10 @@ pub(crate) fn run() {
         })
         .setup(|app| {
             initialize_targets_file_path(app.handle())?;
-            start_tunnel_supervisor(app.handle().clone(), app.state::<TunnelState>().inner().clone());
+            start_tunnel_supervisor(
+                app.handle().clone(),
+                app.state::<TunnelState>().inner().clone(),
+            );
 
             std::thread::spawn(|| match cleanup_stale_ssh_tunnels() {
                 Ok(cleaned) if cleaned > 0 => {

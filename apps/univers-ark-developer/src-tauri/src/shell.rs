@@ -127,7 +127,10 @@ mod tests {
     #[cfg(windows)]
     fn splits_simple_ssh_command() {
         let tokens = split_command_tokens("ssh domain-dev 'lxc list --format csv -c ns4'");
-        assert_eq!(tokens, vec!["ssh", "domain-dev", "lxc list --format csv -c ns4"]);
+        assert_eq!(
+            tokens,
+            vec!["ssh", "domain-dev", "lxc list --format csv -c ns4"]
+        );
     }
 
     #[test]
@@ -166,7 +169,15 @@ mod tests {
         let tokens = split_command_tokens("ssh -o BatchMode=yes -o ConnectTimeout=4 host true");
         assert_eq!(
             tokens,
-            vec!["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=4", "host", "true"]
+            vec![
+                "ssh",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=4",
+                "host",
+                "true"
+            ]
         );
     }
 }

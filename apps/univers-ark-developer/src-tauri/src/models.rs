@@ -659,7 +659,8 @@ impl Clone for TunnelState {
             desired_tunnels: self.desired_tunnels.clone(),
             local_ports: self.local_ports.clone(),
             next_session_id: AtomicU64::new(
-                self.next_session_id.load(std::sync::atomic::Ordering::Relaxed),
+                self.next_session_id
+                    .load(std::sync::atomic::Ordering::Relaxed),
             ),
         }
     }
