@@ -1,5 +1,5 @@
 {
-  "selectedTargetId": "local",
+  "selectedTargetId": "local::host",
   "defaultProfile": "ark-default",
   "profiles": {
     "ark-default": {
@@ -64,19 +64,50 @@
       ]
     }
   },
-  "targets": [
+  "machines": [
     {
       "id": "local",
       "label": "Local",
+      "transport": "local",
       "host": "localhost",
-      "description": "Local shell with direct development and preview surfaces on ports 3432 and 4173.",
-      "terminalCommand": "exec /bin/zsh -l",
+      "port": 22,
+      "description": "Local machine.",
+      "managerType": "none",
+      "discoveryMode": "host-only",
+      "discoveryCommand": "",
+      "sshUser": "",
+      "identityFiles": [],
+      "jumpChain": [],
+      "knownHostsPath": "~/.univers/known_hosts",
+      "strictHostKeyChecking": true,
+      "containerNameSuffix": "",
+      "includeStopped": false,
+      "targetLabelTemplate": "",
+      "targetHostTemplate": "{machineHost}",
+      "targetDescriptionTemplate": "",
+      "terminalCommandTemplate": "",
       "notes": [],
       "workspace": {
         "profile": "ark-workbench"
       },
-      "services": []
+      "services": [],
+      "surfaces": [],
+      "containers": [
+        {
+          "id": "host",
+          "name": "host",
+          "kind": "host",
+          "label": "Host",
+          "description": "Local host workspace",
+          "ipv4": "",
+          "status": "RUNNING",
+          "workspace": {
+            "profile": "ark-workbench"
+          },
+          "services": [],
+          "surfaces": []
+        }
+      ]
     }
-  ],
-  "remoteServers": []
+  ]
 }

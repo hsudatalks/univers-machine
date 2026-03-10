@@ -23,6 +23,22 @@ pub(super) fn managed_known_hosts_file() -> String {
     }
 }
 
+fn expand_home_path(path: &str) -> String {
+    if let Some(stripped) = path.trim().strip_prefix("~/") {
+        let home = if cfg!(windows) {
+            std::env::var("USERPROFILE").ok()
+        } else {
+            std::env::var("HOME").ok()
+        };
+
+        if let Some(home) = home {
+            return format!("{}/{}", home.replace('\\', "/"), stripped);
+        }
+    }
+
+    path.trim().to_string()
+}
+
 pub(super) fn container_host_key_alias(
     server: &RemoteContainerServer,
     container_name: &str,
@@ -30,26 +46,82 @@ pub(super) fn container_host_key_alias(
     format!("univers-ark-developer--{}--{}", server.id, container_name)
 }
 
+pub(super) fn machine_host_key_alias(server: &RemoteContainerServer) -> String {
+    format!("univers-ark-developer--{}--host", server.id)
+}
+
+fn base_ssh_flags(server: &RemoteContainerServer, host_key_alias: &str) -> Vec<String> {
+    let mut flags = Vec::new();
+    let known_hosts_file = if server.known_hosts_path.trim().is_empty() {
+        managed_known_hosts_file()
+    } else {
+        expand_home_path(&server.known_hosts_path)
+    };
+
+    flags.push(format!("-o UserKnownHostsFile={}", known_hosts_file));
+    flags.push(format!("-o HostKeyAlias={}", host_key_alias));
+    flags.push(format!(
+        "-o StrictHostKeyChecking={}",
+        if server.strict_host_key_checking { "yes" } else { "no" }
+    ));
+
+    if !server.identity_files.is_empty() {
+        flags.push(String::from("-o IdentitiesOnly=yes"));
+        for identity_file in &server.identity_files {
+            flags.push(format!("-i {}", expand_home_path(identity_file)));
+        }
+    }
+
+    flags
+}
+
+fn proxy_jump_for_host(server: &RemoteContainerServer) -> Option<String> {
+    let jumps = server
+        .jump_chain
+        .iter()
+        .map(|jump| {
+            if jump.port == 22 {
+                format!("{}@{}", jump.user, jump.host)
+            } else {
+                format!("{}@{}:{}", jump.user, jump.host, jump.port)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if jumps.is_empty() {
+        None
+    } else {
+        Some(jumps.join(","))
+    }
+}
+
+fn proxy_jump_for_container(server: &RemoteContainerServer) -> String {
+    let mut jumps = server
+        .jump_chain
+        .iter()
+        .map(|jump| {
+            if jump.port == 22 {
+                format!("{}@{}", jump.user, jump.host)
+            } else {
+                format!("{}@{}:{}", jump.user, jump.host, jump.port)
+            }
+        })
+        .collect::<Vec<_>>();
+    let machine_hop = if server.port == 22 {
+        format!("{}@{}", server.ssh_user, server.host)
+    } else {
+        format!("{}@{}:{}", server.ssh_user, server.host, server.port)
+    };
+    jumps.push(machine_hop);
+    jumps.join(",")
+}
+
 pub(super) fn ssh_options_for_context(
     server: &RemoteContainerServer,
     container_name: &str,
 ) -> String {
-    let base_options = server.ssh_options.trim();
     let host_key_alias = container_host_key_alias(server, container_name);
-    let known_hosts_file = managed_known_hosts_file();
-    let managed_known_hosts_option = format!("-o UserKnownHostsFile={}", known_hosts_file);
-
-    if base_options.is_empty() {
-        format!(
-            "{} -o HostKeyAlias={}",
-            managed_known_hosts_option, host_key_alias
-        )
-    } else {
-        format!(
-            "{} {} -o HostKeyAlias={}",
-            base_options, managed_known_hosts_option, host_key_alias
-        )
-    }
+    base_ssh_flags(server, &host_key_alias).join(" ")
 }
 
 pub(super) fn shell_single_quote(value: &str) -> String {
@@ -73,12 +145,12 @@ pub(super) fn build_ssh_command(
     extra_options: &[&str],
     remote_command: Option<&str>,
 ) -> String {
-    let ssh_options = ssh_options_for_context(server, container_name);
+    let ssh_options = base_ssh_flags(server, &container_host_key_alias(server, container_name));
     let mut command = String::from("ssh");
 
-    if !ssh_options.is_empty() {
+    for option in &ssh_options {
         command.push(' ');
-        command.push_str(&ssh_options);
+        command.push_str(option);
     }
 
     for extra_option in extra_options {
@@ -87,9 +159,44 @@ pub(super) fn build_ssh_command(
     }
 
     command.push_str(" -J ");
-    command.push_str(&server.host);
+    command.push_str(&proxy_jump_for_container(server));
     command.push(' ');
+    command.push_str("-p 22 ");
     command.push_str(&ssh_destination(server, container_ip));
+
+    if let Some(remote_command) = remote_command {
+        command.push(' ');
+        command.push_str(remote_command);
+    }
+
+    command
+}
+
+pub(super) fn build_host_ssh_command(
+    server: &RemoteContainerServer,
+    extra_options: &[&str],
+    remote_command: Option<&str>,
+) -> String {
+    let ssh_options = base_ssh_flags(server, &machine_host_key_alias(server));
+    let mut command = String::from("ssh");
+
+    for option in &ssh_options {
+        command.push(' ');
+        command.push_str(option);
+    }
+
+    for extra_option in extra_options {
+        command.push(' ');
+        command.push_str(extra_option);
+    }
+
+    if let Some(proxy_jump) = proxy_jump_for_host(server) {
+        command.push_str(" -J ");
+        command.push_str(&proxy_jump);
+    }
+
+    command.push(' ');
+    command.push_str(&format!("-p {} {}@{}", server.port, server.ssh_user, server.host));
 
     if let Some(remote_command) = remote_command {
         command.push(' ');
@@ -134,12 +241,57 @@ fn ssh_probe_command_for_server(
     )
 }
 
+fn ssh_probe_command_for_machine_host(server: &RemoteContainerServer) -> String {
+    build_host_ssh_command(
+        server,
+        &[
+            "-o BatchMode=yes",
+            "-o ConnectTimeout=4",
+            "-o ConnectionAttempts=1",
+        ],
+        Some("true"),
+    )
+}
+
 pub(super) fn probe_container_ssh(
     server: &RemoteContainerServer,
     container_ip: &str,
     container_name: &str,
 ) -> (bool, String, String) {
     let command = ssh_probe_command_for_server(server, container_ip, container_name);
+    let output = shell::shell_command(&command).output();
+
+    match output {
+        Ok(output) if output.status.success() => (
+            true,
+            String::from("ready"),
+            format!("SSH ready via {}.", server.host),
+        ),
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let detail = if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                format!("Probe command exited with {}", output.status)
+            };
+
+            (false, String::from("error"), detail)
+        }
+        Err(error) => (
+            false,
+            String::from("error"),
+            format!("Failed to run SSH probe: {}", error),
+        ),
+    }
+}
+
+pub(super) fn probe_machine_host_ssh(
+    server: &RemoteContainerServer,
+) -> (bool, String, String) {
+    let command = ssh_probe_command_for_machine_host(server);
     let output = shell::shell_command(&command).output();
 
     match output {
@@ -208,16 +360,16 @@ fn deploy_key_command(
 
     if is_orbstack {
         format!(
-            "ssh {} \"orb run -m {} -u {} bash -c {}\"",
-            server.host,
+            "{} \"orb run -m {} -u {} bash -c {}\"",
+            build_host_ssh_command(server, &[], None),
             container_name,
             server.ssh_user,
             shell_single_quote(&inject_script),
         )
     } else {
         format!(
-            "ssh {} \"lxc exec {} -- bash -c {}\"",
-            server.host,
+            "{} \"lxc exec {} -- bash -c {}\"",
+            build_host_ssh_command(server, &[], None),
             container_name,
             shell_single_quote(&inject_script),
         )

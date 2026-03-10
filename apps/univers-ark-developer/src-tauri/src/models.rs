@@ -38,6 +38,22 @@ pub(crate) enum EndpointProbeType {
     Tcp,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum MachineTransport {
+    Local,
+    #[default]
+    Ssh,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum ManagedContainerKind {
+    Host,
+    #[default]
+    Managed,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BrowserSurface {
@@ -113,6 +129,14 @@ pub(crate) struct EndpointService {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DeveloperTarget {
     pub(crate) id: String,
+    #[serde(default)]
+    pub(crate) machine_id: String,
+    #[serde(default)]
+    pub(crate) container_id: String,
+    #[serde(default)]
+    pub(crate) transport: MachineTransport,
+    #[serde(default)]
+    pub(crate) container_kind: ManagedContainerKind,
     pub(crate) label: String,
     pub(crate) host: String,
     pub(crate) description: String,
@@ -197,21 +221,6 @@ pub(crate) fn command_service<'a>(
     })
 }
 
-pub(crate) fn sync_target_services(target: &mut DeveloperTarget) {
-    if !target.services.is_empty() {
-        target.surfaces = target
-            .services
-            .iter()
-            .filter_map(|service| service.web.clone())
-            .collect();
-        return;
-    }
-
-    if !target.surfaces.is_empty() {
-        target.services = target.surfaces.iter().map(web_service).collect();
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TargetsFile {
@@ -243,6 +252,7 @@ pub(crate) struct AppBootstrap {
     pub(crate) config_path: String,
     pub(crate) selected_target_id: Option<String>,
     pub(crate) targets: Vec<DeveloperTarget>,
+    pub(crate) machines: Vec<ManagedServer>,
     pub(crate) servers: Vec<ManagedServer>,
 }
 
@@ -251,6 +261,9 @@ pub(crate) struct AppBootstrap {
 pub(crate) struct ManagedContainer {
     pub(crate) server_id: String,
     pub(crate) server_label: String,
+    pub(crate) container_id: String,
+    pub(crate) kind: ManagedContainerKind,
+    pub(crate) transport: MachineTransport,
     pub(crate) target_id: String,
     pub(crate) name: String,
     pub(crate) label: String,
@@ -269,6 +282,7 @@ pub(crate) struct ManagedContainer {
 pub(crate) struct ManagedServer {
     pub(crate) id: String,
     pub(crate) label: String,
+    pub(crate) transport: MachineTransport,
     pub(crate) host: String,
     pub(crate) description: String,
     pub(crate) state: String,

@@ -1,5 +1,5 @@
 use crate::{
-    config::{read_server_inventory, resolve_raw_target, run_target_shell_command},
+    config::{resolve_raw_target, resolve_target_ssh_chain, run_target_shell_command},
     models::{
         ContainerAgentInfo, ContainerDashboard, ContainerDashboardUpdate, ContainerProjectInfo,
         ContainerRuntimeInfo, ContainerServiceInfo, ContainerTmuxInfo,
@@ -19,7 +19,7 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Runtime, State};
 use url::Url;
-use univers_ark_russh::{execute_chain, ClientOptions as RusshClientOptions, ResolvedEndpoint, SshConfigResolver};
+use univers_ark_russh::{execute_chain, ClientOptions as RusshClientOptions};
 
 const DEFAULT_PROJECT_PATH: &str = "~/repos";
 pub(crate) const DASHBOARD_UPDATED_EVENT: &str = "container-dashboard-updated";
@@ -724,39 +724,7 @@ fn load_container_dashboard_stdout(target_id: &str) -> Result<Vec<u8>, String> {
 }
 
 fn load_container_dashboard_via_russh(target_id: &str, command: &str) -> Result<Vec<u8>, String> {
-    let servers = read_server_inventory(false)?;
-    let Some((server_host, container_ip, ssh_user, container_name)) = servers
-        .iter()
-        .find_map(|server| {
-            server
-                .containers
-                .iter()
-                .find(|container| container.target_id == target_id)
-                .map(|container| {
-                    (
-                        server.host.clone(),
-                        container.ipv4.clone(),
-                        container.ssh_user.clone(),
-                        container.name.clone(),
-                    )
-                })
-        })
-    else {
-        return Err(format!("No container inventory found for {}", target_id));
-    };
-
-    let resolver =
-        SshConfigResolver::from_default_path().map_err(|error| format!("Failed to load SSH config: {}", error))?;
-    let mut chain = resolver
-        .resolve(&server_host)
-        .map_err(|error| format!("Failed to resolve SSH destination {}: {}", server_host, error))?;
-    chain.push(ResolvedEndpoint::new(
-        format!("{}::{}", server_host, container_name),
-        container_ip,
-        ssh_user,
-        22,
-        Vec::new(),
-    ));
+    let chain = resolve_target_ssh_chain(target_id)?;
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()

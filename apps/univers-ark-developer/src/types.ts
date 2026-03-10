@@ -1,6 +1,8 @@
 export type BrowserServiceType = "http" | "vite";
 export type DeveloperServiceKind = "web" | "endpoint" | "command";
 export type EndpointProbeType = "http" | "tcp";
+export type MachineTransport = "local" | "ssh";
+export type ManagedContainerKind = "host" | "managed";
 
 export interface DeveloperSurface {
   id: string;
@@ -46,6 +48,10 @@ export interface ContainerWorkspace {
 
 export interface DeveloperTarget {
   id: string;
+  machineId: string;
+  containerId: string;
+  transport: MachineTransport;
+  containerKind: ManagedContainerKind;
   label: string;
   host: string;
   description: string;
@@ -60,6 +66,9 @@ export interface DeveloperTarget {
 export interface ManagedContainer {
   serverId: string;
   serverLabel: string;
+  containerId: string;
+  kind: ManagedContainerKind;
+  transport: MachineTransport;
   targetId: string;
   name: string;
   label: string;
@@ -73,15 +82,18 @@ export interface ManagedContainer {
   sshReachable: boolean;
 }
 
-export interface ManagedServer {
+export interface ManagedMachine {
   id: string;
   label: string;
+  transport: MachineTransport;
   host: string;
   description: string;
   state: string;
   message: string;
   containers: ManagedContainer[];
 }
+
+export type ManagedServer = ManagedMachine;
 
 export interface RemoteFileEntry {
   name: string;
@@ -184,6 +196,7 @@ export interface AppBootstrap {
   configPath: string;
   selectedTargetId: string | null;
   targets: DeveloperTarget[];
+  machines: ManagedMachine[];
   servers: ManagedServer[];
 }
 

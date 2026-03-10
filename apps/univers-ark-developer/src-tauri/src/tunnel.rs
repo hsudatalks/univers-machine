@@ -1,6 +1,6 @@
 use crate::{
     constants::{TUNNEL_PROBE_INTERVAL, TUNNEL_PROBE_MESSAGE_DELAY, TUNNEL_PROBE_TIMEOUT},
-    config::read_server_inventory,
+    config::resolve_target_ssh_chain,
     models::{
         BrowserServiceType, BrowserSurface, RusshTunnelForward, TunnelProcess,
         TunnelRegistration, TunnelSession, TunnelState, TunnelStatus,
@@ -22,8 +22,7 @@ use std::{
 use tauri::{AppHandle, Emitter};
 use url::Url;
 use univers_ark_russh::{
-    start_local_forward_chain, ClientOptions as RusshClientOptions, ResolvedEndpoint,
-    ResolvedEndpointChain, SshConfigResolver,
+    start_local_forward_chain, ClientOptions as RusshClientOptions, ResolvedEndpointChain,
 };
 
 const TUNNEL_STOP_WAIT_TIMEOUT: Duration = Duration::from_secs(2);
@@ -529,41 +528,7 @@ pub(crate) fn start_tunnel_supervisor(app: AppHandle, tunnel_state: TunnelState)
 }
 
 fn resolve_container_chain(target_id: &str) -> Result<ResolvedEndpointChain, String> {
-    let servers = read_server_inventory(false)?;
-    let Some((server_host, container_ip, ssh_user, container_name)) = servers
-        .iter()
-        .find_map(|server| {
-            server
-                .containers
-                .iter()
-                .find(|container| container.target_id == target_id)
-                .map(|container| {
-                    (
-                        server.host.clone(),
-                        container.ipv4.clone(),
-                        container.ssh_user.clone(),
-                        container.name.clone(),
-                    )
-                })
-        })
-    else {
-        return Err(format!("No container inventory found for {}", target_id));
-    };
-
-    let resolver =
-        SshConfigResolver::from_default_path().map_err(|error| format!("Failed to load SSH config: {}", error))?;
-    let mut chain = resolver
-        .resolve(&server_host)
-        .map_err(|error| format!("Failed to resolve SSH destination {}: {}", server_host, error))?;
-    chain.push(ResolvedEndpoint::new(
-        format!("{}::{}", server_host, container_name),
-        container_ip,
-        ssh_user,
-        22,
-        Vec::new(),
-    ));
-
-    Ok(chain)
+    resolve_target_ssh_chain(target_id)
 }
 
 fn parse_forward_target(command_line: &str) -> Result<(String, u16), String> {

@@ -1,5 +1,5 @@
 use crate::{
-    config::read_server_inventory,
+    config::resolve_target_ssh_chain,
     constants::OUTPUT_BUFFER_LIMIT,
     models::{
         DeveloperTarget, LocalTerminalSession, RusshTerminalSession, TerminalExitEvent,
@@ -16,7 +16,7 @@ use std::{
 use tauri::{AppHandle, Emitter};
 use univers_ark_russh::{
     start_pty_session_chain, ClientOptions as RusshClientOptions, PtySessionEvent,
-    ResolvedEndpoint, ResolvedEndpointChain, SshConfigResolver,
+    ResolvedEndpointChain,
 };
 
 pub(crate) fn append_output(output: &Arc<Mutex<String>>, chunk: &str) {
@@ -55,7 +55,7 @@ pub(crate) fn spawn_terminal_session(
     sessions: Arc<Mutex<HashMap<String, TerminalSession>>>,
     target: &DeveloperTarget,
 ) -> Result<TerminalSession, String> {
-    if let Ok(chain) = resolve_target_chain(target) {
+    if let Ok(chain) = resolve_target_ssh_chain(&target.id) {
         return spawn_russh_terminal_session(app, sessions, target, chain);
     }
 
@@ -296,62 +296,4 @@ fn spawn_russh_terminal_session(
     });
 
     Ok(session)
-}
-
-fn resolve_target_chain(target: &DeveloperTarget) -> Result<ResolvedEndpointChain, String> {
-    if let Ok(chain) = resolve_container_chain(&target.id) {
-        return Ok(chain);
-    }
-
-    if is_local_host(&target.host) {
-        return Err(format!("Target {} uses local host", target.id));
-    }
-
-    let resolver = SshConfigResolver::from_default_path()
-        .map_err(|error| format!("Failed to load SSH config: {}", error))?;
-    resolver
-        .resolve(&target.host)
-        .map_err(|error| format!("Failed to resolve SSH destination {}: {}", target.host, error))
-}
-
-fn resolve_container_chain(target_id: &str) -> Result<ResolvedEndpointChain, String> {
-    let servers = read_server_inventory(false)?;
-    let Some((server_host, container_ip, ssh_user, container_name)) = servers
-        .iter()
-        .find_map(|server| {
-            server
-                .containers
-                .iter()
-                .find(|container| container.target_id == target_id)
-                .map(|container| {
-                    (
-                        server.host.clone(),
-                        container.ipv4.clone(),
-                        container.ssh_user.clone(),
-                        container.name.clone(),
-                    )
-                })
-        })
-    else {
-        return Err(format!("No container inventory found for {}", target_id));
-    };
-
-    let resolver = SshConfigResolver::from_default_path()
-        .map_err(|error| format!("Failed to load SSH config: {}", error))?;
-    let mut chain = resolver
-        .resolve(&server_host)
-        .map_err(|error| format!("Failed to resolve SSH destination {}: {}", server_host, error))?;
-    chain.push(ResolvedEndpoint::new(
-        format!("{}::{}", server_host, container_name),
-        container_ip,
-        ssh_user,
-        22,
-        Vec::new(),
-    ));
-
-    Ok(chain)
-}
-
-fn is_local_host(host: &str) -> bool {
-    matches!(host.trim(), "" | "localhost" | "127.0.0.1" | "::1")
 }

@@ -35,15 +35,80 @@ const PARENT_VIEW_REQUESTED_EVENT = "parent-view-requested";
 const fallbackBootstrapSeed: AppBootstrap = {
   appName: "Univers Ark Developer",
   configPath: "developer-targets.json",
-  selectedTargetId: "local",
-  servers: [],
-  targets: [
+  selectedTargetId: "local::host",
+  machines: [
     {
       id: "local",
       label: "Local",
+      transport: "local",
+      host: "localhost",
+      description: "Local machine.",
+      state: "ready",
+      message: "Local host workspace is ready.",
+      containers: [
+        {
+          serverId: "local",
+          serverLabel: "Local",
+          containerId: "host",
+          kind: "host",
+          transport: "local",
+          targetId: "local::host",
+          name: "host",
+          label: "Host",
+          status: "RUNNING",
+          ipv4: "",
+          sshUser: "",
+          sshDestination: "",
+          sshCommand: "exec /bin/zsh -l",
+          sshState: "ready",
+          sshMessage: "Local host workspace is ready.",
+          sshReachable: true,
+        },
+      ],
+    },
+  ],
+  servers: [
+    {
+      id: "local",
+      label: "Local",
+      transport: "local",
+      host: "localhost",
+      description: "Local machine.",
+      state: "ready",
+      message: "Local host workspace is ready.",
+      containers: [
+        {
+          serverId: "local",
+          serverLabel: "Local",
+          containerId: "host",
+          kind: "host",
+          transport: "local",
+          targetId: "local::host",
+          name: "host",
+          label: "Host",
+          status: "RUNNING",
+          ipv4: "",
+          sshUser: "",
+          sshDestination: "",
+          sshCommand: "exec /bin/zsh -l",
+          sshState: "ready",
+          sshMessage: "Local host workspace is ready.",
+          sshReachable: true,
+        },
+      ],
+    },
+  ],
+  targets: [
+    {
+      id: "local::host",
+      machineId: "local",
+      containerId: "host",
+      transport: "local",
+      containerKind: "host",
+      label: "Host",
       host: "localhost",
       description:
-        "Local shell with direct development and preview surfaces on ports 3432 and 4173.",
+        "Local host workspace with direct development and preview surfaces on ports 3432 and 4173.",
       terminalCommand: "exec /bin/zsh -l",
       notes: [],
       workspace: {
@@ -119,6 +184,8 @@ const fallbackBootstrapSeed: AppBootstrap = {
 
 const fallbackBootstrap: AppBootstrap = {
   ...fallbackBootstrapSeed,
+  machines: fallbackBootstrapSeed.machines,
+  servers: fallbackBootstrapSeed.servers,
   targets: fallbackBootstrapSeed.targets.map(resolveFallbackTarget),
 };
 

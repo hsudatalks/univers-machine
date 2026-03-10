@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ManagedServer } from "../types";
 import { loadTargetsConfig, scanServerInventory, updateTargetsConfig } from "../lib/tauri";
 import {
-  createEmptyManualContainer,
-  createEmptyServer,
+  createEmptyMachine,
+  createEmptyMachineContainer,
   parseTargetsConfig,
   stringifyTargetsConfig,
   type ContainerDiscoveryMode,
   type ContainerManagerType,
-  type RemoteServerConfig,
+  type MachineConfig,
   type TargetsConfigDocument,
 } from "../lib/targets-config";
 import { Badge } from "./ui/badge";
@@ -32,7 +32,7 @@ export function ServerDialog({
 }: ServerDialogProps) {
   const [activeTab, setActiveTab] = useState<ServerDialogTab>("general");
   const [config, setConfig] = useState<TargetsConfigDocument | null>(null);
-  const [form, setForm] = useState<RemoteServerConfig>(createEmptyServer(defaultProfileId));
+  const [form, setForm] = useState<MachineConfig>(createEmptyMachine(defaultProfileId));
   const [originalId, setOriginalId] = useState<string | null>(server?.id ?? null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -52,15 +52,15 @@ export function ServerDialog({
       setConfig(parsed);
 
       if (server) {
-        const match = parsed.remoteServers.find((entry) => entry.id === server.id);
+        const match = parsed.machines.find((entry) => entry.id === server.id);
         if (match) {
           setForm(match);
           setOriginalId(match.id);
         } else {
-          setError(`Server "${server.id}" not found in config.`);
+          setError(`Machine "${server.id}" not found in config.`);
         }
       } else {
-        setForm(createEmptyServer(defaultProfileId || Object.keys(parsed.profiles)[0] || ""));
+        setForm(createEmptyMachine(defaultProfileId || Object.keys(parsed.profiles)[0] || ""));
       }
     } catch (loadError) {
       setError(String(loadError));
@@ -82,16 +82,16 @@ export function ServerDialog({
     if (!config) return false;
     const nextId = form.id.trim();
     if (!nextId) return false;
-    return config.remoteServers.some((entry) => entry.id === nextId && entry.id !== originalId);
+    return config.machines.some((entry) => entry.id === nextId && entry.id !== originalId);
   }, [config, form.id, originalId]);
 
-  const updateField = <K extends keyof RemoteServerConfig>(field: K, value: RemoteServerConfig[K]) => {
+  const updateField = <K extends keyof MachineConfig>(field: K, value: MachineConfig[K]) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setError(null);
     setSaveMessage(null);
   };
 
-  const updateWorkspaceField = (field: keyof RemoteServerConfig["workspace"], value: string) => {
+  const updateWorkspaceField = (field: keyof MachineConfig["workspace"], value: string) => {
     setForm((prev) => ({
       ...prev,
       workspace: {
@@ -105,12 +105,12 @@ export function ServerDialog({
 
   const updateManualContainerField = (
     index: number,
-    field: keyof RemoteServerConfig["manualContainers"][number],
+    field: keyof MachineConfig["containers"][number],
     value: string,
   ) => {
     setForm((prev) => ({
       ...prev,
-      manualContainers: prev.manualContainers.map((container, containerIndex) =>
+      containers: prev.containers.map((container, containerIndex) =>
         containerIndex === index ? { ...container, [field]: value } : container,
       ),
     }));
@@ -123,11 +123,11 @@ export function ServerDialog({
 
     const nextId = form.id.trim();
     if (!nextId) {
-      setError("Server ID is required.");
+      setError("Machine ID is required.");
       return;
     }
     if (hasIdConflict) {
-      setError(`Server "${nextId}" already exists.`);
+      setError(`Machine "${nextId}" already exists.`);
       return;
     }
 
@@ -138,29 +138,41 @@ export function ServerDialog({
     try {
       const nextConfig: TargetsConfigDocument = {
         ...config,
-        remoteServers: [...config.remoteServers],
+        machines: [...config.machines],
       };
-      const nextServer: RemoteServerConfig = {
+      const hostContainer =
+        form.containers.find((container) => container.kind === "host") ?? {
+          ...form.containers[0],
+          id: "host",
+          name: "host",
+          kind: "host" as const,
+          label: "Host",
+        };
+      const nextServer: MachineConfig = {
         ...form,
         id: nextId,
-        manualContainers:
+        containers:
           form.discoveryMode === "manual"
-            ? form.manualContainers.filter(
-                (container) => container.name.trim() && container.ipv4.trim(),
-              )
-            : [],
+            ? [
+                hostContainer,
+                ...form.containers.filter(
+                  (container) =>
+                    container.kind === "managed" && container.name.trim() && container.ipv4.trim(),
+                ),
+              ]
+            : [hostContainer],
       };
 
-      const existingIndex = nextConfig.remoteServers.findIndex(
+      const existingIndex = nextConfig.machines.findIndex(
         (entry) => entry.id === originalId,
       );
 
       const isNewServer = existingIndex < 0;
 
       if (existingIndex >= 0) {
-        nextConfig.remoteServers[existingIndex] = nextServer;
+        nextConfig.machines[existingIndex] = nextServer;
       } else {
-        nextConfig.remoteServers.push(nextServer);
+        nextConfig.machines.push(nextServer);
       }
 
       await updateTargetsConfig(stringifyTargetsConfig(nextConfig));
@@ -209,14 +221,14 @@ export function ServerDialog({
   return (
     <div className="dialog-backdrop" onClick={onClose}>
       <div
-        aria-label={isCreateMode ? "Create server" : `${form.label || form.id} server settings`}
+        aria-label={isCreateMode ? "Create machine" : `${form.label || form.id} machine settings`}
         className="dialog-panel"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
         <header className="dialog-header">
           <div className="dialog-header-copy">
-            <span className="dialog-title">{isCreateMode ? "New server" : form.label || form.id}</span>
+            <span className="dialog-title">{isCreateMode ? "New machine" : form.label || form.id}</span>
             <span className="dialog-subtitle">{form.host || "Define connection and discovery settings"}</span>
           </div>
           <Button
@@ -233,13 +245,17 @@ export function ServerDialog({
         </header>
 
         <Tabs onValueChange={(value) => setActiveTab(value as ServerDialogTab)} value={activeTab}>
-          <TabsList className="dialog-tabs" aria-label="Server settings sections">
+          <TabsList className="dialog-tabs" aria-label="Machine settings sections">
             <TabsTrigger className="dialog-tab" value="general">General</TabsTrigger>
             <TabsTrigger className="dialog-tab" value="connection">Connection</TabsTrigger>
             <TabsTrigger className="dialog-tab" value="discovery">Discovery</TabsTrigger>
             <TabsTrigger className="dialog-tab" value="containers">
               Containers
-              {form.discoveryMode === "manual" ? ` (${form.manualContainers.length})` : server ? ` (${server.containers.length})` : ""}
+              {form.discoveryMode === "manual"
+                ? ` (${form.containers.filter((container) => container.kind === "managed").length})`
+                : server
+                  ? ` (${server.containers.length})`
+                  : ""}
             </TabsTrigger>
           </TabsList>
 
@@ -270,6 +286,15 @@ export function ServerDialog({
 
                 <TabsContent value="connection">
                   <div className="dialog-tab-content">
+                    <SelectField
+                      label="Transport"
+                      onChange={(value) => updateField("transport", value as MachineConfig["transport"])}
+                      options={[
+                        { value: "ssh", label: "SSH" },
+                        { value: "local", label: "Local" },
+                      ]}
+                      value={form.transport}
+                    />
                     <EditField
                       label="SSH User"
                       mono
@@ -277,10 +302,25 @@ export function ServerDialog({
                       value={form.sshUser}
                     />
                     <EditField
-                      label="SSH Options"
+                      label="Port"
                       mono
-                      onChange={(value) => updateField("sshOptions", value)}
-                      value={form.sshOptions}
+                      onChange={(value) => updateField("port", Number(value) || 22)}
+                      value={String(form.port)}
+                    />
+                    <EditField
+                      label="Identity Files"
+                      mono
+                      multiline
+                      onChange={(value) =>
+                        updateField(
+                          "identityFiles",
+                          value
+                            .split("\n")
+                            .map((line) => line.trim())
+                            .filter(Boolean),
+                        )
+                      }
+                      value={form.identityFiles.join("\n")}
                     />
                     <EditField
                       label="Terminal Command Template"
@@ -298,6 +338,7 @@ export function ServerDialog({
                       label="Container manager"
                       onChange={(value) => updateField("managerType", value as ContainerManagerType)}
                       options={[
+                        { value: "none", label: "None" },
                         { value: "lxd", label: "LXD" },
                         { value: "docker", label: "Docker" },
                         { value: "orbstack", label: "OrbStack" },
@@ -308,6 +349,7 @@ export function ServerDialog({
                       label="Discovery mode"
                       onChange={(value) => updateField("discoveryMode", value as ContainerDiscoveryMode)}
                       options={[
+                        { value: "host-only", label: "Host only" },
                         { value: "auto", label: "Auto scan" },
                         { value: "manual", label: "Manual containers" },
                       ]}
@@ -350,23 +392,35 @@ export function ServerDialog({
                   {form.discoveryMode === "manual" ? (
                     <div className="dialog-tab-content">
                       <div className="dialog-section-actions">
-                        <Button onClick={() => updateField("manualContainers", [...form.manualContainers, createEmptyManualContainer()])} size="sm" variant="outline">
+                        <Button
+                          onClick={() =>
+                            updateField("containers", [
+                              ...form.containers,
+                              createEmptyMachineContainer(),
+                            ])
+                          }
+                          size="sm"
+                          variant="outline"
+                        >
                           Add container
                         </Button>
                       </div>
-                      {form.manualContainers.length === 0 ? (
+                      {form.containers.filter((container) => container.kind === "managed").length === 0 ? (
                         <p className="dialog-empty">No manual containers defined.</p>
                       ) : (
                         <div className="dialog-list">
-                          {form.manualContainers.map((container, index) => (
+                          {form.containers
+                            .map((container, index) => ({ container, index }))
+                            .filter(({ container }) => container.kind === "managed")
+                            .map(({ container, index }) => (
                             <div className="dialog-card" key={`${container.name || "container"}-${index}`}>
                               <div className="dialog-card-header">
                                 <span className="dialog-card-title">{container.label || container.name || `Container ${index + 1}`}</span>
                                 <Button
                                   onClick={() =>
                                     updateField(
-                                      "manualContainers",
-                                      form.manualContainers.filter((_, itemIndex) => itemIndex !== index),
+                                      "containers",
+                                      form.containers.filter((_, itemIndex) => itemIndex !== index),
                                     )
                                   }
                                   size="sm"
@@ -376,6 +430,7 @@ export function ServerDialog({
                                 </Button>
                               </div>
                               <div className="dialog-field-grid">
+                                <EditField label="ID" mono onChange={(value) => updateManualContainerField(index, "id", value)} value={container.id} />
                                 <EditField label="Name" mono onChange={(value) => updateManualContainerField(index, "name", value)} value={container.name} />
                                 <EditField label="Label" onChange={(value) => updateManualContainerField(index, "label", value)} value={container.label} />
                                 <EditField label="IPv4" mono onChange={(value) => updateManualContainerField(index, "ipv4", value)} value={container.ipv4} />

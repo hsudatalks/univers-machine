@@ -1,31 +1,40 @@
 use crate::models::{
     BrowserServiceType, BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget,
-    ManagedContainer, ManagedServer, web_service,
+    ManagedContainer, ManagedContainerKind, ManagedServer, MachineTransport, web_service,
 };
 use csv::ReaderBuilder;
 
 use super::{
     ContainerDiscoveryMode, ContainerManagerType, DiscoveredContainer,
-    DiscoveredServerInventory, ManualContainerConfig, RemoteContainerContext,
+    DiscoveredServerInventory, MachineContainerConfig, RemoteContainerContext,
     RemoteContainerServer,
 };
 use super::ssh::{
-    probe_managed_container_ssh, ssh_destination, terminal_command_for_server,
+    build_host_ssh_command, probe_machine_host_ssh, probe_managed_container_ssh, ssh_destination,
+    terminal_command_for_server, shell_single_quote,
 };
 use crate::shell;
 
 pub(super) fn default_discovery_command(server: &RemoteContainerServer) -> String {
     match server.manager_type {
-        ContainerManagerType::Lxd => {
-            format!("ssh {} 'lxc list --format csv -c ns4'", server.host)
-        }
-        ContainerManagerType::Docker => format!(
-            "ssh {} 'docker ps --format \"{{{{.Names}}}}\" | while read -r name; do [ -z \"$name\" ] && continue; ip=$(docker inspect -f \"{{{{range .NetworkSettings.Networks}}}}{{{{.IPAddress}}}}{{{{end}}}}\" \"$name\" 2>/dev/null); printf \"%s,RUNNING,%s\\n\" \"$name\" \"$ip\"; done'",
-            server.host
+        ContainerManagerType::None => String::new(),
+        ContainerManagerType::Lxd => build_host_ssh_command(
+            server,
+            &[],
+            Some(&shell_single_quote("lxc list --format csv -c ns4")),
         ),
-        ContainerManagerType::Orbstack => {
-            format!("ssh {} '/opt/homebrew/bin/orb list --format json'", server.host)
-        }
+        ContainerManagerType::Docker => build_host_ssh_command(
+            server,
+            &[],
+            Some(&shell_single_quote(
+                "docker ps --format \"{{.Names}}\" | while read -r name; do [ -z \"$name\" ] && continue; ip=$(docker inspect -f \"{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}\" \"$name\" 2>/dev/null); printf \"%s,RUNNING,%s\\n\" \"$name\" \"$ip\"; done",
+            )),
+        ),
+        ContainerManagerType::Orbstack => build_host_ssh_command(
+            server,
+            &[],
+            Some(&shell_single_quote("/opt/homebrew/bin/orb list --format json")),
+        ),
     }
 }
 
@@ -114,6 +123,10 @@ fn replace_remote_placeholders(template: &str, context: &RemoteContainerContext<
         .replace("{serverLabel}", &context.server.label)
         .replace("{serverHost}", &context.server.host)
         .replace("{serverDescription}", &context.server.description)
+        .replace("{machineId}", &context.server.id)
+        .replace("{machineLabel}", &context.server.label)
+        .replace("{machineHost}", &context.server.host)
+        .replace("{machineDescription}", &context.server.description)
         .replace("{containerIp}", context.container_ip)
         .replace("{containerLabel}", context.container_label)
         .replace("{containerName}", context.container_name)
@@ -277,9 +290,13 @@ fn parse_orbstack_containers(
             continue;
         }
 
-        let info_command = format!(
-            "ssh {} '/opt/homebrew/bin/orb info {} --format json'",
-            server.host, item.name
+        let info_command = build_host_ssh_command(
+            server,
+            &[],
+            Some(&shell_single_quote(&format!(
+                "/opt/homebrew/bin/orb info {} --format json",
+                item.name
+            ))),
         );
         let output = shell::shell_command(&info_command).output().map_err(|error| {
             format!(
@@ -304,6 +321,8 @@ fn parse_orbstack_containers(
         }
 
         containers.push(DiscoveredContainer {
+            id: info.record.name.clone(),
+            kind: ManagedContainerKind::Managed,
             name: info.record.name,
             status: info.record.state.to_uppercase(),
             ipv4: info.ip4,
@@ -318,7 +337,7 @@ fn parse_orbstack_containers(
     Ok(containers)
 }
 
-fn manual_container_to_discovered(container: &ManualContainerConfig) -> DiscoveredContainer {
+fn machine_container_to_discovered(container: &MachineContainerConfig) -> DiscoveredContainer {
     let has_workspace_override = !container.workspace.profile.trim().is_empty()
         || !container.workspace.default_tool.trim().is_empty()
         || !container.workspace.project_path.trim().is_empty()
@@ -327,6 +346,12 @@ fn manual_container_to_discovered(container: &ManualContainerConfig) -> Discover
         || !container.workspace.tmux_command_service_id.trim().is_empty();
 
     DiscoveredContainer {
+        id: if container.id.trim().is_empty() {
+            container.name.clone()
+        } else {
+            container.id.clone()
+        },
+        kind: container.kind,
         name: container.name.clone(),
         status: container.status.clone(),
         ipv4: container.ipv4.clone(),
@@ -339,12 +364,64 @@ fn manual_container_to_discovered(container: &ManualContainerConfig) -> Discover
     }
 }
 
+fn discover_host_container(server: &RemoteContainerServer) -> DiscoveredContainer {
+    let container = server
+        .containers
+        .iter()
+        .find(|container| {
+            matches!(container.kind, ManagedContainerKind::Host) || container.id == "host"
+        })
+        .cloned()
+        .unwrap_or_else(|| MachineContainerConfig {
+            id: String::from("host"),
+            name: String::from("host"),
+            kind: ManagedContainerKind::Host,
+            label: String::from("Host"),
+            description: String::new(),
+            ipv4: String::new(),
+            status: String::from("RUNNING"),
+            workspace: server.workspace.clone(),
+            services: Vec::new(),
+            surfaces: Vec::new(),
+        });
+
+    DiscoveredContainer {
+        id: if container.id.trim().is_empty() {
+            String::from("host")
+        } else {
+            container.id
+        },
+        kind: ManagedContainerKind::Host,
+        name: if container.name.trim().is_empty() {
+            String::from("host")
+        } else {
+            container.name
+        },
+        status: if container.status.trim().is_empty() {
+            String::from("RUNNING")
+        } else {
+            container.status
+        },
+        ipv4: container.ipv4,
+        label: Some(if container.label.trim().is_empty() {
+            String::from("Host")
+        } else {
+            container.label
+        }),
+        description: (!container.description.trim().is_empty()).then(|| container.description),
+        workspace: Some(container.workspace),
+        services: container.services,
+        surfaces: container.surfaces,
+    }
+}
+
 fn discover_manual_containers(server: &RemoteContainerServer) -> Vec<DiscoveredContainer> {
     server
-        .manual_containers
+        .containers
         .iter()
+        .filter(|container| matches!(container.kind, ManagedContainerKind::Managed))
         .filter(|container| !container.name.trim().is_empty() && !container.ipv4.trim().is_empty())
-        .map(manual_container_to_discovered)
+        .map(machine_container_to_discovered)
         .collect()
 }
 
@@ -392,6 +469,8 @@ pub(super) fn parse_discovered_containers(
         };
 
         containers.push(DiscoveredContainer {
+            id: name.to_string(),
+            kind: ManagedContainerKind::Managed,
             name: name.to_string(),
             status: status.to_string(),
             ipv4,
@@ -409,18 +488,32 @@ pub(super) fn parse_discovered_containers(
 pub(super) fn scan_server_containers(
     server: &RemoteContainerServer,
 ) -> Result<Vec<DiscoveredContainer>, String> {
+    if matches!(server.transport, MachineTransport::Local) {
+        return Ok(vec![discover_host_container(server)]);
+    }
+
+    if matches!(server.discovery_mode, ContainerDiscoveryMode::HostOnly) {
+        return Ok(vec![discover_host_container(server)]);
+    }
+
     if matches!(server.discovery_mode, ContainerDiscoveryMode::Manual) {
-        return Ok(discover_manual_containers(server));
+        let mut containers = vec![discover_host_container(server)];
+        containers.extend(discover_manual_containers(server));
+        return Ok(containers);
     }
 
     let output = discover_server_containers_output(server)?;
-    parse_discovered_containers(server, &output)
+    let mut containers = vec![discover_host_container(server)];
+    containers.extend(parse_discovered_containers(server, &output)?);
+    Ok(containers)
 }
 
 pub(super) fn cached_server_containers(
     server: &RemoteContainerServer,
 ) -> Vec<DiscoveredContainer> {
-    discover_manual_containers(server)
+    let mut containers = vec![discover_host_container(server)];
+    containers.extend(discover_manual_containers(server));
+    containers
 }
 
 pub(super) fn build_target_from_container(
@@ -441,9 +534,13 @@ pub(super) fn build_target_from_container(
     let label = render_template(&server.target_label_template, &context, || {
         container_label.clone()
     });
-    let host = render_template(&server.target_host_template, &context, || {
-        server.host.clone()
-    });
+    let host = if matches!(server.transport, MachineTransport::Local) {
+        String::from("localhost")
+    } else {
+        render_template(&server.target_host_template, &context, || {
+            server.host.clone()
+        })
+    };
     let description = render_template(&server.target_description_template, &context, || {
         container.description.clone().unwrap_or_else(|| {
             format!(
@@ -452,7 +549,19 @@ pub(super) fn build_target_from_container(
             )
         })
     });
-    let terminal_command = terminal_command_for_server(server, &context);
+    let terminal_command = if matches!(server.transport, MachineTransport::Local) {
+        String::from("exec /bin/zsh -l")
+    } else if matches!(container.kind, ManagedContainerKind::Host) {
+        build_host_ssh_command(
+            server,
+            &["-tt"],
+            Some(&shell_single_quote(
+                "tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l",
+            )),
+        )
+    } else {
+        terminal_command_for_server(server, &context)
+    };
     let notes = server
         .notes
         .iter()
@@ -487,7 +596,11 @@ pub(super) fn build_target_from_container(
         .collect::<Vec<_>>();
 
     DeveloperTarget {
-        id: format!("{}::{}", server.id, container.name),
+        id: format!("{}::{}", server.id, container.id),
+        machine_id: server.id.clone(),
+        container_id: container.id.clone(),
+        transport: server.transport,
+        container_kind: container.kind,
         label,
         host,
         description,
@@ -509,8 +622,24 @@ fn build_managed_container(
 ) -> (ManagedContainer, Option<DeveloperTarget>) {
     let target = build_target_from_container(server, container);
     let ssh_command = target.terminal_command.clone();
-    let ssh_dest = ssh_destination(server, &container.ipv4);
-    let (ssh_reachable, ssh_state, ssh_message) = if probe_ssh {
+    let ssh_dest = if matches!(container.kind, ManagedContainerKind::Host) {
+        if matches!(server.transport, MachineTransport::Local) {
+            String::from("local")
+        } else {
+            format!("{}@{}", server.ssh_user, server.host)
+        }
+    } else {
+        ssh_destination(server, &container.ipv4)
+    };
+    let (ssh_reachable, ssh_state, ssh_message) = if matches!(server.transport, MachineTransport::Local) {
+        (
+            true,
+            String::from("ready"),
+            String::from("Local workspace is ready."),
+        )
+    } else if probe_ssh && matches!(container.kind, ManagedContainerKind::Host) {
+        probe_machine_host_ssh(server)
+    } else if probe_ssh {
         probe_managed_container_ssh(server, &container.ipv4, &container.name)
     } else {
         (
@@ -524,6 +653,9 @@ fn build_managed_container(
         ManagedContainer {
             server_id: server.id.clone(),
             server_label: server.label.clone(),
+            container_id: target.container_id.clone(),
+            kind: container.kind,
+            transport: server.transport,
             target_id: target.id.clone(),
             name: container.name.clone(),
             label: target.label.clone(),
@@ -604,6 +736,7 @@ fn build_server_inventory(
         server: ManagedServer {
             id: server.id.clone(),
             label: server.label.clone(),
+            transport: server.transport,
             host: server.host.clone(),
             description: server.description.clone(),
             state,
@@ -625,6 +758,7 @@ pub(super) fn discover_remote_server_inventory(
             server: ManagedServer {
                 id: server.id.clone(),
                 label: server.label.clone(),
+                transport: server.transport,
                 host: server.host.clone(),
                 description: server.description.clone(),
                 state: String::from("error"),

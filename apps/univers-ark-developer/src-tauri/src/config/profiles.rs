@@ -1,4 +1,4 @@
-use crate::models::{BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget, sync_target_services};
+use crate::models::{BrowserSurface, ContainerWorkspace, DeveloperService};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -127,33 +127,6 @@ fn resolve_profile_defaults(
     Some(resolved)
 }
 
-pub(super) fn apply_profile_defaults_to_target(
-    target: &mut DeveloperTarget,
-    profile_defaults: &ContainerProfiles,
-    default_profile: Option<&str>,
-) {
-    let profile_name = if target.workspace.profile.trim().is_empty() {
-        default_profile.unwrap_or_default().trim().to_string()
-    } else {
-        target.workspace.profile.trim().to_string()
-    };
-
-    let Some(defaults) = resolve_profile_defaults(&profile_name, profile_defaults) else {
-        sync_target_services(target);
-        return;
-    };
-
-    if target.workspace.profile.trim().is_empty() && !profile_name.is_empty() {
-        target.workspace.profile = profile_name;
-    }
-
-    merge_workspace_defaults(&mut target.workspace, &defaults.workspace);
-    target.services = merge_services(&defaults.services, &target.services);
-    target.surfaces = merge_surfaces(&defaults.surfaces, &target.surfaces);
-
-    sync_target_services(target);
-}
-
 pub(super) fn apply_profile_defaults_to_remote_server(
     server: &mut RemoteContainerServer,
     profile_defaults: &ContainerProfiles,
@@ -181,7 +154,9 @@ pub(super) fn apply_profile_defaults_to_remote_server(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::{ContainerDiscoveryMode, ContainerManagerType};
     use crate::models::{BrowserServiceType, CommandService, DeveloperServiceKind};
+    use crate::models::MachineTransport;
 
     fn fixture_profiles() -> ContainerProfiles {
         HashMap::from([(
@@ -231,56 +206,67 @@ mod tests {
         )])
     }
 
-    #[test]
-    fn applies_ark_workbench_defaults_to_target() {
-        let mut target = DeveloperTarget {
+    fn fixture_machine(profile: &str) -> RemoteContainerServer {
+        RemoteContainerServer {
             id: String::from("local"),
             label: String::from("Local"),
+            transport: MachineTransport::Local,
             host: String::from("localhost"),
+            port: 22,
             description: String::new(),
-            terminal_command: String::new(),
-            terminal_startup_command: String::new(),
+            manager_type: ContainerManagerType::None,
+            discovery_mode: ContainerDiscoveryMode::HostOnly,
+            discovery_command: String::new(),
+            ssh_user: String::new(),
+            identity_files: vec![],
+            jump_chain: vec![],
+            known_hosts_path: String::new(),
+            strict_host_key_checking: false,
+            container_name_suffix: String::new(),
+            include_stopped: false,
+            target_label_template: String::new(),
+            target_host_template: String::new(),
+            target_description_template: String::new(),
+            terminal_command_template: String::new(),
             notes: vec![],
             workspace: ContainerWorkspace {
-                profile: String::from("ark-workbench"),
+                profile: profile.to_string(),
                 ..ContainerWorkspace::default()
             },
             services: vec![],
             surfaces: vec![],
-        };
+            containers: vec![],
+        }
+    }
 
-        apply_profile_defaults_to_target(&mut target, &fixture_profiles(), None);
+    #[test]
+    fn applies_ark_workbench_defaults_to_machine() {
+        let mut machine = fixture_machine("ark-workbench");
 
-        assert_eq!(target.workspace.default_tool, "dashboard");
-        assert_eq!(target.workspace.primary_web_service_id, "development");
-        assert_eq!(target.services.len(), 2);
-        assert_eq!(target.surfaces.len(), 1);
-        assert!(target
+        apply_profile_defaults_to_remote_server(&mut machine, &fixture_profiles(), None);
+
+        assert_eq!(machine.workspace.default_tool, "dashboard");
+        assert_eq!(machine.workspace.primary_web_service_id, "development");
+        assert_eq!(machine.services.len(), 2);
+        assert!(machine
             .services
             .iter()
             .any(|service| service.id == "development" && service.web.is_some()));
     }
 
     #[test]
-    fn applies_default_profile_when_target_profile_is_empty() {
-        let mut target = DeveloperTarget {
-            id: String::from("local"),
-            label: String::from("Local"),
-            host: String::from("localhost"),
-            description: String::new(),
-            terminal_command: String::new(),
-            terminal_startup_command: String::new(),
-            notes: vec![],
-            workspace: ContainerWorkspace::default(),
-            services: vec![],
-            surfaces: vec![],
-        };
+    fn applies_default_profile_when_machine_profile_is_empty() {
+        let mut machine = fixture_machine("");
 
-        apply_profile_defaults_to_target(&mut target, &fixture_profiles(), Some("ark-workbench"));
+        apply_profile_defaults_to_remote_server(
+            &mut machine,
+            &fixture_profiles(),
+            Some("ark-workbench"),
+        );
 
-        assert_eq!(target.workspace.profile, "ark-workbench");
-        assert_eq!(target.workspace.default_tool, "dashboard");
-        assert_eq!(target.services.len(), 2);
+        assert_eq!(machine.workspace.profile, "ark-workbench");
+        assert_eq!(machine.workspace.default_tool, "dashboard");
+        assert_eq!(machine.services.len(), 2);
     }
 
     #[test]
@@ -314,27 +300,13 @@ mod tests {
             },
         );
 
-        let mut target = DeveloperTarget {
-            id: String::from("local"),
-            label: String::from("Local"),
-            host: String::from("localhost"),
-            description: String::new(),
-            terminal_command: String::new(),
-            terminal_startup_command: String::new(),
-            notes: vec![],
-            workspace: ContainerWorkspace {
-                profile: String::from("derived"),
-                ..ContainerWorkspace::default()
-            },
-            services: vec![],
-            surfaces: vec![],
-        };
+        let mut machine = fixture_machine("derived");
 
-        apply_profile_defaults_to_target(&mut target, &profiles, None);
+        apply_profile_defaults_to_remote_server(&mut machine, &profiles, None);
 
-        assert_eq!(target.workspace.files_root, "~/repos/custom");
-        assert_eq!(target.workspace.default_tool, "dashboard");
-        assert!(target.services.iter().any(|service| service.id == "development"));
-        assert!(target.services.iter().any(|service| service.id == "api"));
+        assert_eq!(machine.workspace.files_root, "~/repos/custom");
+        assert_eq!(machine.workspace.default_tool, "dashboard");
+        assert!(machine.services.iter().any(|service| service.id == "development"));
+        assert!(machine.services.iter().any(|service| service.id == "api"));
     }
 }

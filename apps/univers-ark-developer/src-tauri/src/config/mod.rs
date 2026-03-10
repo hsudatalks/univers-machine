@@ -3,8 +3,8 @@ mod profiles;
 mod ssh;
 
 use crate::models::{
-    BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget, ManagedServer,
-    TargetsFile,
+    BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget, ManagedContainerKind,
+    ManagedServer, MachineTransport, TargetsFile,
 };
 use serde_json::{Value, json};
 use serde::Deserialize;
@@ -18,16 +18,15 @@ use std::{
 use tauri::{path::BaseDirectory, AppHandle, Manager, Runtime};
 use univers_ark_russh::{
     execute_chain, ClientOptions as RusshClientOptions, ExecOutput as RusshExecOutput,
-    ResolvedEndpoint, ResolvedEndpointChain, SshConfigResolver,
+    ResolvedEndpoint, ResolvedEndpointChain,
 };
 
 use self::{
     discovery::{cached_remote_server_inventory, discover_remote_server_inventory, scan_server_containers},
     profiles::{
         ContainerProfileConfig, ContainerProfiles, apply_profile_defaults_to_remote_server,
-        apply_profile_defaults_to_target,
     },
-    ssh::{build_ssh_command, run_target_shell_command_internal, shell_single_quote},
+    ssh::{build_host_ssh_command, build_ssh_command, run_target_shell_command_internal, shell_single_quote},
 };
 
 #[derive(Debug, Deserialize)]
@@ -38,14 +37,13 @@ struct RawTargetsFile {
     #[serde(default)]
     profiles: HashMap<String, ContainerProfileConfig>,
     #[serde(default)]
-    targets: Vec<DeveloperTarget>,
-    #[serde(default)]
-    remote_servers: Vec<RemoteContainerServer>,
+    machines: Vec<RemoteContainerServer>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub(super) enum ContainerManagerType {
+    None,
     #[default]
     Lxd,
     Docker,
@@ -55,6 +53,7 @@ pub(super) enum ContainerManagerType {
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub(super) enum ContainerDiscoveryMode {
+    HostOnly,
     #[default]
     Auto,
     Manual,
@@ -62,12 +61,17 @@ pub(super) enum ContainerDiscoveryMode {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct ManualContainerConfig {
+pub(super) struct MachineContainerConfig {
+    #[serde(default)]
+    pub(super) id: String,
     pub(super) name: String,
+    #[serde(default)]
+    pub(super) kind: ManagedContainerKind,
     #[serde(default)]
     pub(super) label: String,
     #[serde(default)]
     pub(super) description: String,
+    #[serde(default)]
     pub(super) ipv4: String,
     #[serde(default = "default_manual_container_status")]
     pub(super) status: String,
@@ -79,12 +83,27 @@ pub(super) struct ManualContainerConfig {
     pub(super) surfaces: Vec<BrowserSurface>,
 }
 
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct SshJumpConfig {
+    pub(super) host: String,
+    #[serde(default = "default_ssh_port")]
+    pub(super) port: u16,
+    pub(super) user: String,
+    #[serde(default)]
+    pub(super) identity_files: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct RemoteContainerServer {
     pub(super) id: String,
     pub(super) label: String,
+    #[serde(default)]
+    pub(super) transport: MachineTransport,
     pub(super) host: String,
+    #[serde(default = "default_ssh_port")]
+    pub(super) port: u16,
     pub(super) description: String,
     #[serde(default)]
     pub(super) manager_type: ContainerManagerType,
@@ -92,9 +111,16 @@ pub(super) struct RemoteContainerServer {
     pub(super) discovery_mode: ContainerDiscoveryMode,
     #[serde(default)]
     pub(super) discovery_command: String,
+    #[serde(default = "default_ssh_user")]
     pub(super) ssh_user: String,
-    #[serde(default = "default_remote_server_ssh_options")]
-    pub(super) ssh_options: String,
+    #[serde(default)]
+    pub(super) identity_files: Vec<String>,
+    #[serde(default)]
+    pub(super) jump_chain: Vec<SshJumpConfig>,
+    #[serde(default = "default_known_hosts_path")]
+    pub(super) known_hosts_path: String,
+    #[serde(default = "default_strict_host_key_checking")]
+    pub(super) strict_host_key_checking: bool,
     #[serde(default = "default_container_name_suffix")]
     pub(super) container_name_suffix: String,
     #[serde(default)]
@@ -116,11 +142,13 @@ pub(super) struct RemoteContainerServer {
     #[serde(default)]
     pub(super) surfaces: Vec<BrowserSurface>,
     #[serde(default)]
-    pub(super) manual_containers: Vec<ManualContainerConfig>,
+    pub(super) containers: Vec<MachineContainerConfig>,
 }
 
 #[derive(Debug, Clone)]
 pub(super) struct DiscoveredContainer {
+    pub(super) id: String,
+    pub(super) kind: ManagedContainerKind,
     pub(super) name: String,
     pub(super) status: String,
     pub(super) ipv4: String,
@@ -154,12 +182,24 @@ pub(super) struct DiscoveredServerInventory {
     pub(super) available_targets: Vec<DeveloperTarget>,
 }
 
-fn default_remote_server_ssh_options() -> String {
-    String::from("-o StrictHostKeyChecking=accept-new")
+fn default_ssh_port() -> u16 {
+    22
+}
+
+fn default_ssh_user() -> String {
+    String::from("ubuntu")
 }
 
 fn default_container_name_suffix() -> String {
     String::from("-dev")
+}
+
+fn default_known_hosts_path() -> String {
+    String::from("~/.univers/known_hosts")
+}
+
+fn default_strict_host_key_checking() -> bool {
+    true
 }
 
 fn default_manual_container_status() -> String {
@@ -167,7 +207,6 @@ fn default_manual_container_status() -> String {
 }
 
 const BUNDLED_TARGETS_TEMPLATE_NAME: &str = "developer-targets.json";
-const SERVER_TERMINAL_TARGET_PREFIX: &str = "server-host::";
 
 fn targets_file_name() -> &'static str {
     if cfg!(debug_assertions) {
@@ -282,16 +321,11 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
     let mut raw_targets_file = read_raw_targets_file()?;
     let profiles: ContainerProfiles = raw_targets_file.profiles.clone();
     let default_profile = raw_targets_file.default_profile.clone();
-    let mut targets = raw_targets_file.targets;
-    targets
-        .iter_mut()
-        .for_each(|target| {
-            apply_profile_defaults_to_target(target, &profiles, default_profile.as_deref())
-        });
+    let mut targets = Vec::new();
     let mut servers = Vec::new();
 
     raw_targets_file
-        .remote_servers
+        .machines
         .iter_mut()
         .for_each(|server| {
             apply_profile_defaults_to_remote_server(server, &profiles, default_profile.as_deref())
@@ -299,7 +333,7 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
 
     let discovered: Vec<_> = std::thread::scope(|scope| {
         let handles: Vec<_> = raw_targets_file
-            .remote_servers
+            .machines
             .iter()
             .map(|server| {
                 scope.spawn(|| {
@@ -340,8 +374,15 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
 
 fn discovered_container_to_manual_value(
     container: &DiscoveredContainer,
-    existing: Option<&ManualContainerConfig>,
+    existing: Option<&MachineContainerConfig>,
 ) -> Value {
+    let id = if container.id.trim().is_empty() {
+        existing
+            .map(|item| item.id.clone())
+            .unwrap_or_else(|| container.name.clone())
+    } else {
+        container.id.clone()
+    };
     let label = container
         .label
         .as_ref()
@@ -365,7 +406,9 @@ fn discovered_container_to_manual_value(
         .unwrap_or_else(|| json!([]));
 
     json!({
+        "id": id,
         "name": container.name,
+        "kind": container.kind,
         "label": label,
         "description": description,
         "ipv4": container.ipv4,
@@ -388,24 +431,24 @@ pub(crate) fn scan_and_store_server_inventory(server_id: &str) -> Result<Managed
     let profiles: ContainerProfiles = raw_targets_file.profiles.clone();
     let default_profile = raw_targets_file.default_profile.clone();
     raw_targets_file
-        .remote_servers
+        .machines
         .iter_mut()
         .for_each(|server| {
             apply_profile_defaults_to_remote_server(server, &profiles, default_profile.as_deref())
         });
 
     let Some(server_index) = raw_targets_file
-        .remote_servers
+        .machines
         .iter()
         .position(|server| server.id == server_id) else {
         return Err(format!("Unknown server: {}", server_id));
     };
 
-    let server = raw_targets_file.remote_servers[server_index].clone();
+    let server = raw_targets_file.machines[server_index].clone();
     let discovered = scan_server_containers(&server)?;
     let inventory = discover_remote_server_inventory(&server);
-    let existing_manual = raw_targets_file.remote_servers[server_index]
-        .manual_containers
+    let existing_manual = raw_targets_file.machines[server_index]
+        .containers
         .clone();
     let manual_values = discovered
         .iter()
@@ -418,9 +461,9 @@ pub(crate) fn scan_and_store_server_inventory(server_id: &str) -> Result<Managed
         .collect::<Vec<_>>();
 
     let Some(remote_servers) = raw_json
-        .get_mut("remoteServers")
+        .get_mut("machines")
         .and_then(Value::as_array_mut) else {
-        return Err(String::from("Config is missing remoteServers."));
+        return Err(String::from("Config is missing machines."));
     };
 
     let Some(server_json) = remote_servers
@@ -430,7 +473,7 @@ pub(crate) fn scan_and_store_server_inventory(server_id: &str) -> Result<Managed
         return Err(format!("Unknown server: {}", server_id));
     };
 
-    server_json["manualContainers"] = Value::Array(manual_values);
+    server_json["containers"] = Value::Array(manual_values);
     let next_content = serde_json::to_string_pretty(&raw_json)
         .map_err(|error| format!("Failed to serialize updated config: {}", error))?;
     save_targets_config(&next_content)?;
@@ -446,34 +489,6 @@ pub(crate) fn read_targets_file() -> Result<TargetsFile, String> {
     load_inventory(false).map(|inventory| inventory.targets_file)
 }
 
-fn resolve_server_terminal_target(target_id: &str) -> Result<Option<DeveloperTarget>, String> {
-    let Some(server_id) = target_id.strip_prefix(SERVER_TERMINAL_TARGET_PREFIX) else {
-        return Ok(None);
-    };
-
-    let raw_targets_file = read_raw_targets_file()?;
-    let Some(server) = raw_targets_file
-        .remote_servers
-        .into_iter()
-        .find(|server| server.id == server_id)
-    else {
-        return Ok(None);
-    };
-
-    Ok(Some(DeveloperTarget {
-        id: target_id.to_string(),
-        label: format!("{} host", server.label),
-        host: server.host.clone(),
-        description: format!("Interactive shell on {}.", server.host),
-        terminal_command: format!("ssh {}", server.host),
-        terminal_startup_command: String::new(),
-        notes: vec![format!("Server shell for {}.", server.host)],
-        workspace: ContainerWorkspace::default(),
-        services: vec![],
-        surfaces: vec![],
-    }))
-}
-
 pub(crate) fn resolve_raw_target(target_id: &str) -> Result<DeveloperTarget, String> {
     let targets_file = read_targets_file()?;
 
@@ -484,17 +499,48 @@ pub(crate) fn resolve_raw_target(target_id: &str) -> Result<DeveloperTarget, Str
     {
         return Ok(target);
     }
-
-    resolve_server_terminal_target(target_id)?
-        .ok_or_else(|| format!("Unknown target: {}", target_id))
+    Err(format!("Unknown target: {}", target_id))
 }
 
-fn is_local_host(host: &str) -> bool {
-    matches!(host.trim(), "" | "localhost" | "127.0.0.1" | "::1")
+fn identity_paths(paths: &[String]) -> Vec<PathBuf> {
+    paths.iter().map(PathBuf::from).collect()
+}
+
+fn resolved_machine_chain(server: &RemoteContainerServer) -> Result<ResolvedEndpointChain, String> {
+    if matches!(server.transport, MachineTransport::Local) {
+        return Err(format!("Machine {} uses local transport", server.id));
+    }
+
+    let mut hops = server
+        .jump_chain
+        .iter()
+        .enumerate()
+        .map(|(index, jump)| {
+            ResolvedEndpoint::new(
+                format!("{}::jump-{}", server.id, index + 1),
+                jump.host.clone(),
+                jump.user.clone(),
+                jump.port,
+                identity_paths(&jump.identity_files),
+            )
+        })
+        .collect::<Vec<_>>();
+    hops.push(ResolvedEndpoint::new(
+        server.id.clone(),
+        server.host.clone(),
+        server.ssh_user.clone(),
+        server.port,
+        identity_paths(&server.identity_files),
+    ));
+
+    Ok(ResolvedEndpointChain::from_hops(hops))
 }
 
 pub(crate) fn resolve_target_ssh_chain(target_id: &str) -> Result<ResolvedEndpointChain, String> {
     let target = resolve_raw_target(target_id)?;
+    if matches!(target.transport, MachineTransport::Local) {
+        return Err(format!("Target {} uses local transport", target_id));
+    }
     let inventory = load_inventory(false)?;
 
     if let Some(container) = inventory
@@ -505,35 +551,26 @@ pub(crate) fn resolve_target_ssh_chain(target_id: &str) -> Result<ResolvedEndpoi
     {
         let raw_targets_file = read_raw_targets_file()?;
         let server = raw_targets_file
-            .remote_servers
+            .machines
             .iter()
             .find(|server| server.id == container.server_id)
-            .ok_or_else(|| format!("Unknown remote server for {}", target_id))?;
-        let resolver = SshConfigResolver::from_default_path()
-            .map_err(|error| format!("Failed to load SSH config: {}", error))?;
-        let mut chain = resolver
-            .resolve(&server.host)
-            .map_err(|error| format!("Failed to resolve SSH destination {}: {}", server.host, error))?;
-        chain.push(ResolvedEndpoint::new(
-            format!("{}::{}", server.host, container.name),
-            container.ipv4.clone(),
-            container.ssh_user.clone(),
-            22,
-            Vec::new(),
-        ));
+            .ok_or_else(|| format!("Unknown machine for {}", target_id))?;
+        let mut chain = resolved_machine_chain(server)?;
+
+        if !matches!(container.kind, ManagedContainerKind::Host) {
+            chain.push(ResolvedEndpoint::new(
+                format!("{}::{}", server.id, container.name),
+                container.ipv4.clone(),
+                container.ssh_user.clone(),
+                22,
+                Vec::new(),
+            ));
+        }
 
         return Ok(chain);
     }
 
-    if is_local_host(&target.host) {
-        return Err(format!("Target {} uses local host", target_id));
-    }
-
-    let resolver = SshConfigResolver::from_default_path()
-        .map_err(|error| format!("Failed to load SSH config: {}", error))?;
-    resolver
-        .resolve(&target.host)
-        .map_err(|error| format!("Failed to resolve SSH destination {}: {}", target.host, error))
+    Err(format!("Unknown machine inventory for {}", target_id))
 }
 
 pub(crate) fn execute_target_command_via_russh(
@@ -569,18 +606,25 @@ pub(crate) fn run_target_shell_command(
     {
         let raw_targets_file = read_raw_targets_file()?;
         let server = raw_targets_file
-            .remote_servers
+            .machines
             .iter()
             .find(|server| server.id == container.server_id)
-            .ok_or_else(|| format!("Unknown remote server for {}", target_id))?;
+            .ok_or_else(|| format!("Unknown machine for {}", target_id))?;
+        if matches!(container.transport, MachineTransport::Local) {
+            return run_target_shell_command_internal(target_id, remote_command);
+        }
         let quoted_remote_command = shell_single_quote(remote_command);
-        let ssh_command = build_ssh_command(
-            server,
-            &container.ipv4,
-            &container.name,
-            &[],
-            Some(&quoted_remote_command),
-        );
+        let ssh_command = if matches!(container.kind, ManagedContainerKind::Host) {
+            build_host_ssh_command(server, &[], Some(&quoted_remote_command))
+        } else {
+            build_ssh_command(
+                server,
+                &container.ipv4,
+                &container.name,
+                &[],
+                Some(&quoted_remote_command),
+            )
+        };
 
         return run_target_shell_command_internal(target_id, &ssh_command);
     }
@@ -591,20 +635,47 @@ pub(crate) fn run_target_shell_command(
 pub(crate) fn restart_container(server_id: &str, container_name: &str) -> Result<(), String> {
     let raw_targets_file = read_raw_targets_file()?;
     let server = raw_targets_file
-        .remote_servers
+        .machines
         .iter()
         .find(|server| server.id == server_id)
-        .ok_or_else(|| format!("Unknown remote server: {}", server_id))?;
+        .ok_or_else(|| format!("Unknown machine: {}", server_id))?;
+    if matches!(server.transport, MachineTransport::Local) {
+        return Err(String::from("Local host container cannot be restarted from machine inventory."));
+    }
 
     let restart_command = match server.manager_type {
         ContainerManagerType::Orbstack => {
-            format!("ssh {} '/opt/homebrew/bin/orb restart {}'", server.host, container_name)
+            build_host_ssh_command(
+                server,
+                &[],
+                Some(&shell_single_quote(&format!(
+                    "/opt/homebrew/bin/orb restart {}",
+                    container_name
+                ))),
+            )
         }
         ContainerManagerType::Docker => {
-            format!("ssh {} 'docker restart {}'", server.host, container_name)
+            build_host_ssh_command(
+                server,
+                &[],
+                Some(&shell_single_quote(&format!("docker restart {}", container_name))),
+            )
         }
         ContainerManagerType::Lxd => {
-            format!("ssh {} 'lxc restart {} --force'", server.host, container_name)
+            build_host_ssh_command(
+                server,
+                &[],
+                Some(&shell_single_quote(&format!(
+                    "lxc restart {} --force",
+                    container_name
+                ))),
+            )
+        }
+        ContainerManagerType::None => {
+            return Err(format!(
+                "Machine {} does not define a container manager",
+                server_id
+            ));
         }
     };
 
@@ -668,8 +739,7 @@ pub(crate) fn read_bootstrap_data(
 mod tests {
     use super::*;
     use super::ssh::ssh_destination;
-    use crate::models::ManagedContainer;
-    use crate::models::BrowserServiceType;
+    use crate::models::{BrowserServiceType, ManagedContainer, ManagedContainerKind, MachineTransport};
     use super::discovery::{
         build_target_from_container, parse_discovered_containers, server_state_for_containers,
     };
@@ -678,13 +748,18 @@ mod tests {
         RemoteContainerServer {
             id: String::from("mechanism-dev"),
             label: String::from("Mechanism"),
+            transport: MachineTransport::Ssh,
             host: String::from("mechanism-dev"),
+            port: 22,
             description: String::from("Mechanism development server."),
             manager_type: ContainerManagerType::Lxd,
             discovery_mode: ContainerDiscoveryMode::Auto,
             discovery_command: String::new(),
             ssh_user: String::from("ubuntu"),
-            ssh_options: String::from("-o StrictHostKeyChecking=accept-new"),
+            identity_files: vec![],
+            jump_chain: vec![],
+            known_hosts_path: String::new(),
+            strict_host_key_checking: false,
             container_name_suffix: String::from("-dev"),
             include_stopped: false,
             target_label_template: String::new(),
@@ -709,7 +784,7 @@ mod tests {
                     "ssh {sshOptions} -NT -L {localPort}:127.0.0.1:3433 -J {serverHost} {sshUser}@{containerIp}",
                 ),
             }],
-            manual_containers: vec![],
+            containers: vec![],
         }
     }
 
@@ -749,6 +824,8 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
     fn renders_terminal_and_tunnel_commands_for_discovered_container() {
         let server = fixture_server();
         let container = DiscoveredContainer {
+            id: String::from("workflow-dev"),
+            kind: ManagedContainerKind::Managed,
             name: String::from("workflow-dev"),
             status: String::from("RUNNING"),
             ipv4: String::from("10.211.82.202"),
@@ -774,14 +851,14 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
             home
         );
         let expected_terminal_command = format!(
-            "ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={kh} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -tt -J mechanism-dev ubuntu@10.211.82.202 'tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l'",
+            "ssh -o UserKnownHostsFile={kh} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -o StrictHostKeyChecking=no -tt -J ubuntu@mechanism-dev -p 22 ubuntu@10.211.82.202 'tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l'",
             kh = expected_known_hosts_file
         );
         assert_eq!(target.terminal_command, expected_terminal_command);
         assert_eq!(
             target.surfaces[0].tunnel_command,
             format!(
-                "ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -NT -L {{localPort}}:127.0.0.1:3432 -J mechanism-dev ubuntu@10.211.82.202",
+                "ssh -o UserKnownHostsFile={} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -o StrictHostKeyChecking=no -NT -L {{localPort}}:127.0.0.1:3432 -J mechanism-dev ubuntu@10.211.82.202",
                 expected_known_hosts_file
             )
         );
@@ -793,6 +870,9 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
             ManagedContainer {
                 server_id: String::from("mechanism-dev"),
                 server_label: String::from("Mechanism"),
+                container_id: String::from("automation-dev"),
+                kind: ManagedContainerKind::Managed,
+                transport: MachineTransport::Ssh,
                 target_id: String::from("mechanism-dev::automation-dev"),
                 name: String::from("automation-dev"),
                 label: String::from("Automation"),
@@ -808,6 +888,9 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
             ManagedContainer {
                 server_id: String::from("mechanism-dev"),
                 server_label: String::from("Mechanism"),
+                container_id: String::from("runtime-dev"),
+                kind: ManagedContainerKind::Managed,
+                transport: MachineTransport::Ssh,
                 target_id: String::from("mechanism-dev::runtime-dev"),
                 name: String::from("runtime-dev"),
                 label: String::from("Runtime"),

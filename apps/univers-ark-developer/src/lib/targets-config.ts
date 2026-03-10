@@ -7,8 +7,10 @@ import type {
   EndpointProbeType,
 } from "../types";
 
-export type ContainerManagerType = "lxd" | "docker" | "orbstack";
-export type ContainerDiscoveryMode = "auto" | "manual";
+export type MachineTransport = "local" | "ssh";
+export type ContainerManagerType = "none" | "lxd" | "docker" | "orbstack";
+export type ContainerDiscoveryMode = "host-only" | "auto" | "manual";
+export type MachineContainerKind = "host" | "managed";
 
 export interface EditableEndpointService {
   probeType: EndpointProbeType;
@@ -33,8 +35,17 @@ export interface ContainerProfileConfig {
   surfaces?: DeveloperSurface[];
 }
 
-export interface ManualContainerConfig {
+export interface SshJumpConfig {
+  host: string;
+  port: number;
+  user: string;
+  identityFiles: string[];
+}
+
+export interface MachineContainerConfig {
+  id: string;
   name: string;
+  kind: MachineContainerKind;
   label: string;
   description: string;
   ipv4: string;
@@ -44,16 +55,21 @@ export interface ManualContainerConfig {
   surfaces: DeveloperSurface[];
 }
 
-export interface RemoteServerConfig {
+export interface MachineConfig {
   id: string;
   label: string;
+  transport: MachineTransport;
   host: string;
+  port: number;
   description: string;
   managerType: ContainerManagerType;
   discoveryMode: ContainerDiscoveryMode;
   discoveryCommand: string;
   sshUser: string;
-  sshOptions: string;
+  identityFiles: string[];
+  jumpChain: SshJumpConfig[];
+  knownHostsPath: string;
+  strictHostKeyChecking: boolean;
   containerNameSuffix: string;
   includeStopped: boolean;
   targetLabelTemplate: string;
@@ -64,15 +80,14 @@ export interface RemoteServerConfig {
   workspace: ContainerWorkspace;
   services: EditableDeveloperService[];
   surfaces: DeveloperSurface[];
-  manualContainers: ManualContainerConfig[];
+  containers: MachineContainerConfig[];
 }
 
 export interface TargetsConfigDocument {
   selectedTargetId?: string | null;
   defaultProfile?: string | null;
   profiles: Record<string, ContainerProfileConfig>;
-  targets: Array<Record<string, unknown>>;
-  remoteServers: RemoteServerConfig[];
+  machines: MachineConfig[];
 }
 
 function normalizeWorkspace(
@@ -98,11 +113,11 @@ function normalizeProfile(
   };
 }
 
-function normalizeManualContainer(
-  container: Partial<ManualContainerConfig> | undefined,
-): ManualContainerConfig {
+function normalizeMachineContainer(
+  container: Partial<MachineContainerConfig> | undefined,
+): MachineContainerConfig {
   return {
-    ...createEmptyManualContainer(),
+    ...createEmptyMachineContainer(),
     ...container,
     workspace: normalizeWorkspace(container?.workspace),
     services: container?.services ?? [],
@@ -110,16 +125,23 @@ function normalizeManualContainer(
   };
 }
 
-function normalizeServer(
-  server: Partial<RemoteServerConfig> | undefined,
-): RemoteServerConfig {
+function normalizeMachine(
+  machine: Partial<MachineConfig> | undefined,
+): MachineConfig {
   return {
-    ...createEmptyServer(server?.workspace?.profile ?? ""),
-    ...server,
-    workspace: normalizeWorkspace(server?.workspace),
-    services: server?.services ?? [],
-    surfaces: server?.surfaces ?? [],
-    manualContainers: (server?.manualContainers ?? []).map(normalizeManualContainer),
+    ...createEmptyMachine(machine?.workspace?.profile ?? ""),
+    ...machine,
+    workspace: normalizeWorkspace(machine?.workspace),
+    services: machine?.services ?? [],
+    surfaces: machine?.surfaces ?? [],
+    identityFiles: machine?.identityFiles ?? [],
+    jumpChain: (machine?.jumpChain ?? []).map((jump) => ({
+      host: jump.host ?? "",
+      port: jump.port ?? 22,
+      user: jump.user ?? "",
+      identityFiles: jump.identityFiles ?? [],
+    })),
+    containers: (machine?.containers ?? []).map(normalizeMachineContainer),
   };
 }
 
@@ -136,13 +158,21 @@ export function parseTargetsConfig(raw: string): TargetsConfigDocument {
     selectedTargetId: parsed.selectedTargetId ?? null,
     defaultProfile: parsed.defaultProfile ?? null,
     profiles,
-    targets: parsed.targets ?? [],
-    remoteServers: (parsed.remoteServers ?? []).map(normalizeServer),
+    machines: (parsed.machines ?? []).map(normalizeMachine),
   };
 }
 
 export function stringifyTargetsConfig(config: TargetsConfigDocument): string {
-  return JSON.stringify(config, null, 2);
+  return JSON.stringify(
+    {
+      selectedTargetId: config.selectedTargetId ?? null,
+      defaultProfile: config.defaultProfile ?? null,
+      profiles: config.profiles,
+      machines: config.machines,
+    },
+    null,
+    2,
+  );
 }
 
 export function createEmptyWorkspace(profile = ""): ContainerWorkspace {
@@ -229,9 +259,26 @@ export function createDefaultCommandService(
   };
 }
 
-export function createEmptyManualContainer(): ManualContainerConfig {
+export function createHostContainer(profileId = ""): MachineContainerConfig {
   return {
+    id: "host",
+    name: "host",
+    kind: "host",
+    label: "Host",
+    description: "",
+    ipv4: "",
+    status: "RUNNING",
+    workspace: createEmptyWorkspace(profileId),
+    services: [],
+    surfaces: [],
+  };
+}
+
+export function createEmptyMachineContainer(): MachineContainerConfig {
+  return {
+    id: "",
     name: "",
+    kind: "managed",
     label: "",
     description: "",
     ipv4: "",
@@ -242,27 +289,32 @@ export function createEmptyManualContainer(): ManualContainerConfig {
   };
 }
 
-export function createEmptyServer(profileId = ""): RemoteServerConfig {
+export function createEmptyMachine(profileId = ""): MachineConfig {
   return {
     id: "",
     label: "",
+    transport: "ssh",
     host: "",
+    port: 22,
     description: "",
     managerType: "lxd",
     discoveryMode: "auto",
     discoveryCommand: "",
     sshUser: "ubuntu",
-    sshOptions: "-o StrictHostKeyChecking=accept-new",
+    identityFiles: [],
+    jumpChain: [],
+    knownHostsPath: "~/.univers/known_hosts",
+    strictHostKeyChecking: true,
     containerNameSuffix: "-dev",
     includeStopped: false,
     targetLabelTemplate: "",
-    targetHostTemplate: "{serverHost}",
+    targetHostTemplate: "{machineHost}",
     targetDescriptionTemplate: "",
     terminalCommandTemplate: "",
     notes: [],
     workspace: createEmptyWorkspace(profileId),
     services: [],
     surfaces: [],
-    manualContainers: [],
+    containers: [createHostContainer(profileId)],
   };
 }

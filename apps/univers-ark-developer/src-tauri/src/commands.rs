@@ -92,10 +92,7 @@ fn execute_command_service_inner(
         }
     };
 
-    let is_local_target = matches!(
-        target.host.trim(),
-        "" | "localhost" | "127.0.0.1" | "::1"
-    );
+    let is_local_target = matches!(target.transport, crate::models::MachineTransport::Local);
 
     if let Some(app) = app {
         emit_command_service_status(
@@ -193,6 +190,7 @@ pub(crate) async fn load_bootstrap(
             config_path: config_path.display().to_string(),
             selected_target_id: targets_file.selected_target_id,
             targets: hydrated_targets_file.targets,
+            machines: servers.clone(),
             servers,
         })
     })
@@ -216,6 +214,7 @@ pub(crate) async fn refresh_bootstrap(
             config_path: config_path.display().to_string(),
             selected_target_id: targets_file.selected_target_id,
             targets: hydrated_targets_file.targets,
+            machines: servers.clone(),
             servers,
         })
     })
