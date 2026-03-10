@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ManagedServer } from "../types";
-import { loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
+import { loadTargetsConfig, scanServerInventory, updateTargetsConfig } from "../lib/tauri";
 import {
   createEmptyManualContainer,
   createEmptyServer,
@@ -38,6 +38,7 @@ export function ServerDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   const isCreateMode = !server;
 
@@ -154,6 +155,8 @@ export function ServerDialog({
         (entry) => entry.id === originalId,
       );
 
+      const isNewServer = existingIndex < 0;
+
       if (existingIndex >= 0) {
         nextConfig.remoteServers[existingIndex] = nextServer;
       } else {
@@ -164,12 +167,42 @@ export function ServerDialog({
       setConfig(nextConfig);
       setOriginalId(nextServer.id);
       setForm(nextServer);
-      setSaveMessage("Saved successfully.");
+
+      if (isNewServer && nextServer.discoveryMode === "auto") {
+        setIsScanning(true);
+        await scanServerInventory(nextServer.id);
+        setSaveMessage("Saved and scanned successfully.");
+      } else {
+        setSaveMessage("Saved successfully.");
+      }
       onSaved();
     } catch (saveError) {
       setError(String(saveError));
     } finally {
+      setIsScanning(false);
       setIsSaving(false);
+    }
+  };
+
+  const handleScan = async () => {
+    const serverId = form.id.trim();
+    if (!serverId) {
+      setError("Save the server first so it has an ID.");
+      return;
+    }
+
+    setIsScanning(true);
+    setError(null);
+    setSaveMessage(null);
+
+    try {
+      await scanServerInventory(serverId);
+      setSaveMessage("Scanned containers successfully.");
+      onSaved();
+    } catch (scanError) {
+      setError(String(scanError));
+    } finally {
+      setIsScanning(false);
     }
   };
 
@@ -354,10 +387,14 @@ export function ServerDialog({
                       )}
                     </div>
                   ) : server ? (
-                    <ContainersTable server={server} />
+                    <ContainersTable
+                      isScanning={isScanning}
+                      onScan={() => void handleScan()}
+                      server={server}
+                    />
                   ) : (
                     <div className="dialog-tab-content">
-                      <p className="dialog-empty">Save the server first, then refresh inventory to view discovered containers.</p>
+                      <p className="dialog-empty">Save the server first. Auto-discovery will run once after creation.</p>
                     </div>
                   )}
                 </TabsContent>
@@ -369,8 +406,8 @@ export function ServerDialog({
         </Tabs>
 
         <footer className="dialog-footer">
-          <Button disabled={isLoading || isSaving} onClick={() => void handleSave()}>
-            {isSaving ? "Saving…" : "Save"}
+          <Button disabled={isLoading || isSaving || isScanning} onClick={() => void handleSave()}>
+            {isSaving ? "Saving…" : isScanning ? "Scanning…" : "Save"}
           </Button>
           <Button onClick={onClose} variant="outline">
             Close
@@ -381,10 +418,23 @@ export function ServerDialog({
   );
 }
 
-function ContainersTable({ server }: { server: ManagedServer }) {
+function ContainersTable({
+  isScanning,
+  onScan,
+  server,
+}: {
+  isScanning: boolean;
+  onScan: () => void;
+  server: ManagedServer;
+}) {
   if (server.containers.length === 0) {
     return (
       <div className="dialog-tab-content">
+        <div className="dialog-section-actions">
+          <Button disabled={isScanning} onClick={onScan} size="sm" variant="outline">
+            {isScanning ? "Scanning…" : "Scan containers"}
+          </Button>
+        </div>
         <p className="dialog-empty">No containers discovered on this server.</p>
       </div>
     );
@@ -392,6 +442,11 @@ function ContainersTable({ server }: { server: ManagedServer }) {
 
   return (
     <div className="dialog-tab-content">
+      <div className="dialog-section-actions">
+        <Button disabled={isScanning} onClick={onScan} size="sm" variant="outline">
+          {isScanning ? "Scanning…" : "Scan containers"}
+        </Button>
+      </div>
       <table className="dialog-table">
         <thead>
           <tr>

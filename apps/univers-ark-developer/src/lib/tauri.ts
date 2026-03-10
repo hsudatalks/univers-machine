@@ -409,6 +409,18 @@ export async function refreshServerInventory(): Promise<ManagedServer[]> {
   return invoke<ManagedServer[]>("refresh_server_inventory");
 }
 
+export async function scanServerInventory(serverId: string): Promise<ManagedServer> {
+  if (!isTauri()) {
+    const server = fallbackBootstrap.servers.find((item) => item.id === serverId);
+    if (!server) {
+      throw new Error(`Unknown server ${serverId}`);
+    }
+    return server;
+  }
+
+  return invoke<ManagedServer>("scan_server_inventory", { serverId });
+}
+
 export async function restartContainer(
   serverId: string,
   containerName: string,

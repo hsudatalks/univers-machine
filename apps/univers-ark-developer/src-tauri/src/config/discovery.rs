@@ -406,7 +406,7 @@ pub(super) fn parse_discovered_containers(
     Ok(containers)
 }
 
-fn discover_server_containers(
+pub(super) fn scan_server_containers(
     server: &RemoteContainerServer,
 ) -> Result<Vec<DiscoveredContainer>, String> {
     if matches!(server.discovery_mode, ContainerDiscoveryMode::Manual) {
@@ -415,6 +415,12 @@ fn discover_server_containers(
 
     let output = discover_server_containers_output(server)?;
     parse_discovered_containers(server, &output)
+}
+
+pub(super) fn cached_server_containers(
+    server: &RemoteContainerServer,
+) -> Vec<DiscoveredContainer> {
+    discover_manual_containers(server)
 }
 
 pub(super) fn build_target_from_container(
@@ -496,12 +502,20 @@ pub(super) fn build_target_from_container(
 fn build_managed_container(
     server: &RemoteContainerServer,
     container: &DiscoveredContainer,
+    probe_ssh: bool,
 ) -> (ManagedContainer, Option<DeveloperTarget>) {
     let target = build_target_from_container(server, container);
     let ssh_command = target.terminal_command.clone();
     let ssh_dest = ssh_destination(server, &container.ipv4);
-    let (ssh_reachable, ssh_state, ssh_message) =
-        probe_managed_container_ssh(server, &container.ipv4, &container.name);
+    let (ssh_reachable, ssh_state, ssh_message) = if probe_ssh {
+        probe_managed_container_ssh(server, &container.ipv4, &container.name)
+    } else {
+        (
+            true,
+            String::from("cached"),
+            String::from("Using cached container snapshot."),
+        )
+    };
 
     (
         ManagedContainer {
@@ -519,7 +533,7 @@ fn build_managed_container(
             ssh_message,
             ssh_reachable,
         },
-        ssh_reachable.then_some(target),
+        Some(target),
     )
 }
 
@@ -563,38 +577,46 @@ pub(super) fn server_state_for_containers(containers: &[ManagedContainer]) -> (S
     )
 }
 
+fn build_server_inventory(
+    server: &RemoteContainerServer,
+    containers: Vec<DiscoveredContainer>,
+    probe_ssh: bool,
+) -> DiscoveredServerInventory {
+    let mut managed_containers = Vec::new();
+    let mut available_targets = Vec::new();
+
+    for container in containers {
+        let (managed_container, available_target) =
+            build_managed_container(server, &container, probe_ssh);
+        managed_containers.push(managed_container);
+
+        if let Some(available_target) = available_target {
+            available_targets.push(available_target);
+        }
+    }
+
+    let (state, message) = server_state_for_containers(&managed_containers);
+
+    DiscoveredServerInventory {
+        server: ManagedServer {
+            id: server.id.clone(),
+            label: server.label.clone(),
+            host: server.host.clone(),
+            description: server.description.clone(),
+            state,
+            message,
+            containers: managed_containers,
+        },
+        available_targets,
+    }
+}
+
 pub(super) fn discover_remote_server_inventory(
     server: &RemoteContainerServer,
 ) -> DiscoveredServerInventory {
-    match discover_server_containers(server) {
+    match scan_server_containers(server) {
         Ok(containers) => {
-            let mut managed_containers = Vec::new();
-            let mut available_targets = Vec::new();
-
-            for container in containers {
-                let (managed_container, available_target) =
-                    build_managed_container(server, &container);
-                managed_containers.push(managed_container);
-
-                if let Some(available_target) = available_target {
-                    available_targets.push(available_target);
-                }
-            }
-
-            let (state, message) = server_state_for_containers(&managed_containers);
-
-            DiscoveredServerInventory {
-                server: ManagedServer {
-                    id: server.id.clone(),
-                    label: server.label.clone(),
-                    host: server.host.clone(),
-                    description: server.description.clone(),
-                    state,
-                    message,
-                    containers: managed_containers,
-                },
-                available_targets,
-            }
+            build_server_inventory(server, containers, true)
         }
         Err(error) => DiscoveredServerInventory {
             server: ManagedServer {
@@ -609,4 +631,11 @@ pub(super) fn discover_remote_server_inventory(
             available_targets: Vec::new(),
         },
     }
+}
+
+pub(super) fn cached_remote_server_inventory(
+    server: &RemoteContainerServer,
+) -> DiscoveredServerInventory {
+    let containers = cached_server_containers(server);
+    build_server_inventory(server, containers, false)
 }

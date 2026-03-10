@@ -6,6 +6,7 @@ use crate::models::{
     BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget, ManagedServer,
     TargetsFile,
 };
+use serde_json::{Value, json};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -17,7 +18,7 @@ use std::{
 use tauri::{path::BaseDirectory, AppHandle, Manager, Runtime};
 
 use self::{
-    discovery::discover_remote_server_inventory,
+    discovery::{cached_remote_server_inventory, discover_remote_server_inventory, scan_server_containers},
     profiles::{
         ContainerProfileConfig, ContainerProfiles, apply_profile_defaults_to_remote_server,
         apply_profile_defaults_to_target,
@@ -29,6 +30,7 @@ use self::{
 #[serde(rename_all = "camelCase")]
 struct RawTargetsFile {
     selected_target_id: Option<String>,
+    default_profile: Option<String>,
     #[serde(default)]
     profiles: HashMap<String, ContainerProfileConfig>,
     #[serde(default)]
@@ -275,22 +277,35 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
 
     let mut raw_targets_file = read_raw_targets_file()?;
     let profiles: ContainerProfiles = raw_targets_file.profiles.clone();
+    let default_profile = raw_targets_file.default_profile.clone();
     let mut targets = raw_targets_file.targets;
     targets
         .iter_mut()
-        .for_each(|target| apply_profile_defaults_to_target(target, &profiles));
+        .for_each(|target| {
+            apply_profile_defaults_to_target(target, &profiles, default_profile.as_deref())
+        });
     let mut servers = Vec::new();
 
     raw_targets_file
         .remote_servers
         .iter_mut()
-        .for_each(|server| apply_profile_defaults_to_remote_server(server, &profiles));
+        .for_each(|server| {
+            apply_profile_defaults_to_remote_server(server, &profiles, default_profile.as_deref())
+        });
 
     let discovered: Vec<_> = std::thread::scope(|scope| {
         let handles: Vec<_> = raw_targets_file
             .remote_servers
             .iter()
-            .map(|server| scope.spawn(|| discover_remote_server_inventory(server)))
+            .map(|server| {
+                scope.spawn(|| {
+                    if force_refresh {
+                        discover_remote_server_inventory(server)
+                    } else {
+                        cached_remote_server_inventory(server)
+                    }
+                })
+            })
             .collect();
 
         handles.into_iter().map(|handle| handle.join().unwrap()).collect()
@@ -304,6 +319,7 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
     let inventory = ResolvedInventory {
         targets_file: TargetsFile {
             selected_target_id: raw_targets_file.selected_target_id,
+            default_profile,
             targets,
         },
         servers,
@@ -316,6 +332,106 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
     }
 
     Ok(inventory)
+}
+
+fn discovered_container_to_manual_value(
+    container: &DiscoveredContainer,
+    existing: Option<&ManualContainerConfig>,
+) -> Value {
+    let label = container
+        .label
+        .as_ref()
+        .cloned()
+        .or_else(|| existing.map(|item| item.label.clone()))
+        .unwrap_or_default();
+    let description = container
+        .description
+        .as_ref()
+        .cloned()
+        .or_else(|| existing.map(|item| item.description.clone()))
+        .unwrap_or_default();
+    let workspace = existing
+        .map(|item| serde_json::to_value(&item.workspace).unwrap_or_else(|_| json!({})))
+        .unwrap_or_else(|| json!({}));
+    let services = existing
+        .map(|item| serde_json::to_value(&item.services).unwrap_or_else(|_| json!([])))
+        .unwrap_or_else(|| json!([]));
+    let surfaces = existing
+        .map(|item| serde_json::to_value(&item.surfaces).unwrap_or_else(|_| json!([])))
+        .unwrap_or_else(|| json!([]));
+
+    json!({
+        "name": container.name,
+        "label": label,
+        "description": description,
+        "ipv4": container.ipv4,
+        "status": container.status,
+        "workspace": workspace,
+        "services": services,
+        "surfaces": surfaces
+    })
+}
+
+pub(crate) fn scan_and_store_server_inventory(server_id: &str) -> Result<ManagedServer, String> {
+    let config_path = targets_file_path();
+    let raw_content = fs::read_to_string(&config_path)
+        .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))?;
+    let mut raw_json: Value = serde_json::from_str(&raw_content)
+        .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))?;
+    let mut raw_targets_file: RawTargetsFile = serde_json::from_str(&raw_content)
+        .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))?;
+
+    let profiles: ContainerProfiles = raw_targets_file.profiles.clone();
+    let default_profile = raw_targets_file.default_profile.clone();
+    raw_targets_file
+        .remote_servers
+        .iter_mut()
+        .for_each(|server| {
+            apply_profile_defaults_to_remote_server(server, &profiles, default_profile.as_deref())
+        });
+
+    let Some(server_index) = raw_targets_file
+        .remote_servers
+        .iter()
+        .position(|server| server.id == server_id) else {
+        return Err(format!("Unknown server: {}", server_id));
+    };
+
+    let server = raw_targets_file.remote_servers[server_index].clone();
+    let discovered = scan_server_containers(&server)?;
+    let inventory = discover_remote_server_inventory(&server);
+    let existing_manual = raw_targets_file.remote_servers[server_index]
+        .manual_containers
+        .clone();
+    let manual_values = discovered
+        .iter()
+        .map(|container| {
+            let existing = existing_manual
+                .iter()
+                .find(|item| item.name == container.name);
+            discovered_container_to_manual_value(container, existing)
+        })
+        .collect::<Vec<_>>();
+
+    let Some(remote_servers) = raw_json
+        .get_mut("remoteServers")
+        .and_then(Value::as_array_mut) else {
+        return Err(String::from("Config is missing remoteServers."));
+    };
+
+    let Some(server_json) = remote_servers
+        .iter_mut()
+        .find(|server_json| server_json.get("id").and_then(Value::as_str) == Some(server_id))
+    else {
+        return Err(format!("Unknown server: {}", server_id));
+    };
+
+    server_json["manualContainers"] = Value::Array(manual_values);
+    let next_content = serde_json::to_string_pretty(&raw_json)
+        .map_err(|error| format!("Failed to serialize updated config: {}", error))?;
+    save_targets_config(&next_content)?;
+
+    Ok(inventory.server)
 }
 
 pub(crate) fn read_server_inventory(force_refresh: bool) -> Result<Vec<ManagedServer>, String> {

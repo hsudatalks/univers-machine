@@ -2,7 +2,7 @@ use crate::{
     config::{
         read_bootstrap_data, read_server_inventory, read_targets_config,
         resolve_raw_target, restart_container as restart_remote_container,
-        run_target_shell_command,
+        run_target_shell_command, scan_and_store_server_inventory,
         save_targets_config, targets_file_path,
     },
     dashboard::{
@@ -189,7 +189,7 @@ pub(crate) async fn refresh_bootstrap(
     let tunnel_state_inner = tunnel_state.inner().clone();
 
     async_runtime::spawn_blocking(move || {
-        let (targets_file, servers) = read_bootstrap_data(true)?;
+        let (targets_file, servers) = read_bootstrap_data(false)?;
         let hydrated_targets_file = read_runtime_targets_file(&tunnel_state_inner)?;
         let config_path = targets_file_path();
 
@@ -214,9 +214,16 @@ pub(crate) async fn load_server_inventory() -> Result<Vec<ManagedServer>, String
 
 #[tauri::command]
 pub(crate) async fn refresh_server_inventory() -> Result<Vec<ManagedServer>, String> {
-    async_runtime::spawn_blocking(|| read_server_inventory(true))
+    async_runtime::spawn_blocking(|| read_server_inventory(false))
         .await
         .map_err(|error| format!("Failed to join refresh server inventory task: {}", error))?
+}
+
+#[tauri::command]
+pub(crate) async fn scan_server_inventory(server_id: String) -> Result<ManagedServer, String> {
+    async_runtime::spawn_blocking(move || scan_and_store_server_inventory(&server_id))
+        .await
+        .map_err(|error| format!("Failed to join server scan task: {}", error))?
 }
 
 #[tauri::command]
