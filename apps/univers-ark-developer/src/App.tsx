@@ -43,7 +43,10 @@ import type {
 } from "./types";
 import {
   browserSurfaceIdFromPanel,
+  hashForActiveView,
   isBrowserToolPanel,
+  parseActiveViewFromHash,
+  sameActiveView,
   type ActiveView,
 } from "./lib/view-types";
 const DEFAULT_TERMINAL_PANEL_WIDTH_REM = 35;
@@ -148,10 +151,12 @@ function clampTerminalPanelWidth(value: number, workspaceWidth: number): number 
 }
 
 function App() {
-  const [activeView, setActiveView] = useState<ActiveView>({ kind: "dashboard" });
+  const [activeView, setActiveView] = useState<ActiveView>(
+    () => parseActiveViewFromHash(window.location.hash) ?? { kind: "dashboard" },
+  );
   const [visitedContainerIds, setVisitedContainerIds] = useState<string[]>([]);
   const [visitedMachineIds, setVisitedMachineIds] = useState<string[]>([]);
-  const previousNonSettingsViewRef = useRef<ActiveView>({ kind: "dashboard" });
+  const previousNonSettingsViewRef = useRef<ActiveView>(activeView);
   const {
     appSettings,
     resolvedTheme,
@@ -200,6 +205,68 @@ function App() {
     }
   }, [activeView]);
 
+  useEffect(() => {
+    const handleHashChange = () => {
+      const nextView =
+        parseActiveViewFromHash(window.location.hash) ?? { kind: "dashboard" as const };
+
+      setActiveView((current) =>
+        sameActiveView(current, nextView) ? current : nextView,
+      );
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const nextHash = hashForActiveView(activeView);
+
+    if (window.location.hash === nextHash) {
+      return;
+    }
+
+    if (!window.location.hash) {
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}${nextHash}`,
+      );
+      return;
+    }
+
+    window.location.hash = nextHash;
+  }, [activeView]);
+
+  useEffect(() => {
+    if (!bootstrap) {
+      return;
+    }
+
+    let nextView = activeView;
+
+    if (
+      activeView.kind === "machine" &&
+      !bootstrap.machines.some((machine) => machine.id === activeView.machineId)
+    ) {
+      nextView = { kind: "dashboard" };
+    }
+
+    if (
+      activeView.kind === "container" &&
+      !bootstrap.targets.some((target) => target.id === activeView.targetId)
+    ) {
+      nextView = { kind: "dashboard" };
+    }
+
+    if (!sameActiveView(activeView, nextView)) {
+      setActiveView(nextView);
+    }
+  }, [activeView, bootstrap]);
+
   const {
     browserFrameVersions,
     containerTerminalCollapsed,
@@ -223,6 +290,44 @@ function App() {
     tunnelStatuses,
     targetById,
   });
+
+  useEffect(() => {
+    if (activeView.kind !== "machine") {
+      return;
+    }
+
+    setVisitedMachineIds((current) =>
+      current.includes(activeView.machineId)
+        ? current
+        : uniqueStrings([...current, activeView.machineId]),
+    );
+    setExpandedMachineIds((current) =>
+      current.includes(activeView.machineId)
+        ? current
+        : [...current, activeView.machineId],
+    );
+  }, [activeView, setExpandedMachineIds]);
+
+  useEffect(() => {
+    if (activeView.kind !== "container") {
+      return;
+    }
+
+    const nextTarget = targetById.get(activeView.targetId);
+
+    if (!nextTarget) {
+      return;
+    }
+
+    const isVisited = visitedContainerIds.includes(activeView.targetId);
+
+    if (!isVisited) {
+      setVisitedContainerIds((current) =>
+        uniqueStrings([...current, activeView.targetId]),
+      );
+      prepareContainerView(nextTarget);
+    }
+  }, [activeView, prepareContainerView, targetById, visitedContainerIds]);
 
   function setContainerView(targetId: string) {
     const nextTarget = targetById.get(targetId);

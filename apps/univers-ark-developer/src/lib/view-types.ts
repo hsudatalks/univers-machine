@@ -5,6 +5,73 @@ export type ActiveView =
   | { kind: "machine"; machineId: string }
   | { kind: "container"; targetId: string };
 
+function decodeRouteSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+export function parseActiveViewFromHash(hash: string): ActiveView | null {
+  const normalized = hash.replace(/^#/, "").trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const [route, ...rest] = normalized.replace(/^\/+/, "").split("/");
+
+  switch (route) {
+    case "dashboard":
+      return { kind: "dashboard" };
+    case "overview":
+      return { kind: "overview" };
+    case "settings":
+      return { kind: "settings" };
+    case "machine": {
+      const machineId = decodeRouteSegment(rest.join("/"));
+      return machineId ? { kind: "machine", machineId } : null;
+    }
+    case "container": {
+      const targetId = decodeRouteSegment(rest.join("/"));
+      return targetId ? { kind: "container", targetId } : null;
+    }
+    default:
+      return null;
+  }
+}
+
+export function hashForActiveView(view: ActiveView): string {
+  switch (view.kind) {
+    case "dashboard":
+      return "#/dashboard";
+    case "overview":
+      return "#/overview";
+    case "settings":
+      return "#/settings";
+    case "machine":
+      return `#/machine/${encodeURIComponent(view.machineId)}`;
+    case "container":
+      return `#/container/${encodeURIComponent(view.targetId)}`;
+  }
+}
+
+export function sameActiveView(left: ActiveView, right: ActiveView): boolean {
+  switch (left.kind) {
+    case "dashboard":
+      return right.kind === "dashboard";
+    case "overview":
+      return right.kind === "overview";
+    case "settings":
+      return right.kind === "settings";
+    case "machine":
+      return right.kind === "machine" && left.machineId === right.machineId;
+    case "container":
+      return right.kind === "container" && left.targetId === right.targetId;
+  }
+}
+
 export type ContainerToolPanel =
   | "dashboard"
   | "services"
