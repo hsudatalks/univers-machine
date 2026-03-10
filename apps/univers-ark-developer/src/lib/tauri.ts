@@ -55,9 +55,9 @@ const fallbackBootstrapSeed: AppBootstrap = {
         {
           id: "development",
           label: "Development",
-          kind: "browser",
+          kind: "web",
           description: "Primary Vite development surface.",
-          browser: {
+          web: {
             id: "development",
             label: "Development",
             serviceType: "vite",
@@ -69,9 +69,9 @@ const fallbackBootstrapSeed: AppBootstrap = {
         {
           id: "preview",
           label: "Preview",
-          kind: "browser",
+          kind: "web",
           description: "Preview surface.",
-          browser: {
+          web: {
             id: "preview",
             label: "Preview",
             serviceType: "http",
@@ -267,9 +267,9 @@ function resolveFallbackTarget(target: DeveloperTarget): DeveloperTarget {
     target.services.length > 0
       ? target.services.map((service) => ({
           ...service,
-          browser: service.browser
-            ? resolveFallbackSurface(target.id, service.browser)
-            : service.browser,
+          web: service.web
+            ? resolveFallbackSurface(target.id, service.web)
+            : service.web,
         }))
       : resolvedSurfacesToServices(resolvedSurfaces);
 
@@ -295,9 +295,9 @@ function resolvedSurfacesToServices(
   return surfaces.map((surface) => ({
     id: surface.id,
     label: surface.label,
-    kind: "browser",
+    kind: "web",
     description: "",
-    browser: surface,
+    web: surface,
   }));
 }
 

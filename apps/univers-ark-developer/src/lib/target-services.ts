@@ -7,9 +7,9 @@ import type {
 } from "../types";
 import type { ContainerToolPanel } from "./view-types";
 
-export type BrowserDeveloperService = DeveloperService & {
-  kind: "browser";
-  browser: DeveloperSurface;
+export type WebDeveloperService = DeveloperService & {
+  kind: "web";
+  web: DeveloperSurface;
 };
 
 export type EndpointDeveloperService = DeveloperService & {
@@ -22,20 +22,20 @@ export type CommandDeveloperService = DeveloperService & {
   command: CommandService;
 };
 
-export function browserServices(target: DeveloperTarget): BrowserDeveloperService[] {
+export function webServices(target: DeveloperTarget): WebDeveloperService[] {
   if (target.services.length > 0) {
     return target.services.filter(
-      (service): service is BrowserDeveloperService =>
-        service.kind === "browser" && Boolean(service.browser),
+      (service): service is WebDeveloperService =>
+        service.kind === "web" && Boolean(service.web),
     );
   }
 
   return target.surfaces.map((surface) => ({
     id: surface.id,
     label: surface.label,
-    kind: "browser" as const,
+    kind: "web" as const,
     description: "",
-    browser: surface,
+    web: surface,
   }));
 }
 
@@ -53,11 +53,11 @@ export function commandServices(target: DeveloperTarget): CommandDeveloperServic
   );
 }
 
-export function browserServiceById(
+export function webServiceById(
   target: DeveloperTarget,
   serviceId: string,
-): BrowserDeveloperService | undefined {
-  return browserServices(target).find((service) => service.id === serviceId);
+): WebDeveloperService | undefined {
+  return webServices(target).find((service) => service.id === serviceId);
 }
 
 export function endpointServiceById(
@@ -74,33 +74,29 @@ export function commandServiceById(
   return commandServices(target).find((service) => service.id === serviceId);
 }
 
-export function browserSurfaceById(
+export function webSurfaceById(
   target: DeveloperTarget,
   serviceId: string,
 ): DeveloperSurface | undefined {
-  return browserServiceById(target, serviceId)?.browser;
+  return webServiceById(target, serviceId)?.web;
 }
 
-export function primaryBrowserService(
-  target: DeveloperTarget,
-): BrowserDeveloperService | undefined {
+export function primaryWebService(target: DeveloperTarget): WebDeveloperService | undefined {
   const preferredId = target.workspace?.primaryBrowserServiceId?.trim();
 
   if (preferredId) {
-    const preferred = browserServiceById(target, preferredId);
+    const preferred = webServiceById(target, preferredId);
 
     if (preferred) {
       return preferred;
     }
   }
 
-  return browserServiceById(target, "development") ?? browserServices(target)[0];
+  return webServiceById(target, "development") ?? webServices(target)[0];
 }
 
-export function primaryBrowserSurface(
-  target: DeveloperTarget,
-): DeveloperSurface | undefined {
-  return primaryBrowserService(target)?.browser;
+export function primaryWebSurface(target: DeveloperTarget): DeveloperSurface | undefined {
+  return primaryWebService(target)?.web;
 }
 
 export function tmuxCommandService(
@@ -127,20 +123,26 @@ export function resolveDefaultToolPanel(target: DeveloperTarget): ContainerToolP
   }
 
   if (defaultTool === "browser") {
-    const primary = primaryBrowserService(target);
+    const primary = primaryWebService(target);
     return primary ? (`browser:${primary.id}` as const) : "dashboard";
   }
 
   if (defaultTool?.startsWith("browser:")) {
     const serviceId = defaultTool.slice("browser:".length);
-    return browserServiceById(target, serviceId)
+    return webServiceById(target, serviceId)
       ? (`browser:${serviceId}` as const)
       : "dashboard";
   }
 
-  if (defaultTool && browserServiceById(target, defaultTool)) {
+  if (defaultTool && webServiceById(target, defaultTool)) {
     return `browser:${defaultTool}`;
   }
 
   return "dashboard";
 }
+
+export const browserServices = webServices;
+export const browserServiceById = webServiceById;
+export const browserSurfaceById = webSurfaceById;
+export const primaryBrowserService = primaryWebService;
+export const primaryBrowserSurface = primaryWebSurface;

@@ -17,6 +17,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Runtime, State};
+use url::Url;
 use univers_ark_russh::{execute_chain, ClientOptions as RusshClientOptions, ResolvedEndpoint, SshConfigResolver};
 
 const DEFAULT_PROJECT_PATH: &str = "~/repos";
@@ -121,20 +122,40 @@ fn declared_dashboard_services(target: &DeveloperTarget) -> Vec<DeclaredDashboar
         .services
         .iter()
         .filter_map(|service| {
-            let endpoint = service.endpoint.as_ref()?;
+            if let Some(endpoint) = service.endpoint.as_ref() {
+                return Some(DeclaredDashboardService {
+                    id: service.id.clone(),
+                    label: service.label.clone(),
+                    probe_type: endpoint.probe_type,
+                    host: if endpoint.host.trim().is_empty() {
+                        String::from("127.0.0.1")
+                    } else {
+                        endpoint.host.clone()
+                    },
+                    port: endpoint.port,
+                    path: endpoint.path.clone(),
+                    url: endpoint.url.clone(),
+                });
+            }
+
+            let web = service.web.as_ref()?;
+            let parsed = Url::parse(&web.remote_url).ok()?;
+            let host = parsed.host_str().unwrap_or("127.0.0.1").to_string();
+            let port = parsed.port_or_known_default()?;
+            let mut path = parsed.path().to_string();
+
+            if path == "/" {
+                path.clear();
+            }
 
             Some(DeclaredDashboardService {
                 id: service.id.clone(),
                 label: service.label.clone(),
-                probe_type: endpoint.probe_type,
-                host: if endpoint.host.trim().is_empty() {
-                    String::from("127.0.0.1")
-                } else {
-                    endpoint.host.clone()
-                },
-                port: endpoint.port,
-                path: endpoint.path.clone(),
-                url: endpoint.url.clone(),
+                probe_type: EndpointProbeType::Http,
+                host,
+                port,
+                path,
+                url: web.remote_url.clone(),
             })
         })
         .collect()

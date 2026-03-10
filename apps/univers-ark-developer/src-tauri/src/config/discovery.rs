@@ -1,6 +1,6 @@
 use crate::models::{
     BrowserServiceType, BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget,
-    ManagedContainer, ManagedServer, browser_service,
+    ManagedContainer, ManagedServer, web_service,
 };
 use csv::ReaderBuilder;
 
@@ -161,8 +161,8 @@ fn render_service(
     rendered.id = replace_remote_placeholders(&service.id, context);
     rendered.label = replace_remote_placeholders(&service.label, context);
     rendered.description = replace_remote_placeholders(&service.description, context);
-    rendered.browser = service
-        .browser
+    rendered.web = service
+        .web
         .as_ref()
         .map(|surface| render_surface(surface, context));
     rendered.endpoint = service.endpoint.as_ref().map(|endpoint| {
@@ -314,7 +314,7 @@ pub(super) fn build_target_from_container(
         server
             .surfaces
             .iter()
-            .map(|surface| browser_service(&render_surface(surface, &context)))
+            .map(|surface| web_service(&render_surface(surface, &context)))
             .collect::<Vec<_>>()
     } else {
         server
@@ -325,7 +325,7 @@ pub(super) fn build_target_from_container(
     };
     let surfaces = services
         .iter()
-        .filter_map(|service| service.browser.clone())
+        .filter_map(|service| service.web.clone())
         .collect::<Vec<_>>();
 
     DeveloperTarget {

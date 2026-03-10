@@ -21,9 +21,10 @@ use crate::{
         open_external_url,
     },
     models::{
-        AppBootstrap, AppSettings, ContainerDashboard, DashboardState, DeveloperServiceKind,
+        AppBootstrap, AppSettings, ContainerDashboard, DashboardState,
         GithubProjectState, GithubPullRequestDetail, ManagedServer, RemoteDirectoryListing,
         RemoteFilePreview, TerminalSnapshot, TerminalState, TunnelState, TunnelStatus,
+        tmux_command_service,
     },
     runtime::{read_runtime_targets_file, resolve_runtime_surface, surface_key},
     settings::{load_app_settings as read_app_settings, save_app_settings as write_app_settings},
@@ -479,33 +480,7 @@ pub(crate) async fn restart_container(
 pub(crate) async fn restart_tmux(target_id: String) -> Result<(), String> {
     async_runtime::spawn_blocking(move || {
         let target = resolve_raw_target(&target_id)?;
-        let preferred_command_service_id = target.workspace.tmux_command_service_id.trim();
-        let restart_command = target
-            .services
-            .iter()
-            .find(|service| {
-                matches!(service.kind, DeveloperServiceKind::Command)
-                    && service
-                        .command
-                        .as_ref()
-                        .map(|command| !command.restart.trim().is_empty())
-                        .unwrap_or(false)
-                    && if preferred_command_service_id.is_empty() {
-                        service.id == "tmux-developer"
-                    } else {
-                        service.id == preferred_command_service_id
-                    }
-            })
-            .or_else(|| {
-                target.services.iter().find(|service| {
-                    matches!(service.kind, DeveloperServiceKind::Command)
-                        && service
-                            .command
-                            .as_ref()
-                            .map(|command| !command.restart.trim().is_empty())
-                            .unwrap_or(false)
-                })
-            })
+        let restart_command = tmux_command_service(&target)
             .and_then(|service| service.command.as_ref())
             .map(|command| command.restart.clone())
             .unwrap_or_else(|| {

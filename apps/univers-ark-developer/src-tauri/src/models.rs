@@ -23,8 +23,9 @@ pub(crate) enum BrowserServiceType {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum DeveloperServiceKind {
+    #[serde(alias = "browser")]
     #[default]
-    Browser,
+    Web,
     Endpoint,
     Command,
 }
@@ -61,7 +62,8 @@ pub(crate) struct DeveloperService {
     #[serde(default)]
     pub(crate) description: String,
     #[serde(default)]
-    pub(crate) browser: Option<BrowserSurface>,
+    #[serde(alias = "browser")]
+    pub(crate) web: Option<BrowserSurface>,
     #[serde(default)]
     pub(crate) endpoint: Option<EndpointService>,
     #[serde(default)]
@@ -124,21 +126,62 @@ pub(crate) struct DeveloperTarget {
     pub(crate) surfaces: Vec<BrowserSurface>,
 }
 
-pub(crate) fn browser_service(surface: &BrowserSurface) -> DeveloperService {
+pub(crate) fn web_service(surface: &BrowserSurface) -> DeveloperService {
     DeveloperService {
         id: surface.id.clone(),
         label: surface.label.clone(),
-        kind: DeveloperServiceKind::Browser,
+        kind: DeveloperServiceKind::Web,
         description: String::new(),
-        browser: Some(surface.clone()),
+        web: Some(surface.clone()),
         endpoint: None,
         command: None,
     }
 }
 
+pub(crate) fn tmux_command_service(target: &DeveloperTarget) -> Option<&DeveloperService> {
+    let preferred_id = target.workspace.tmux_command_service_id.trim();
+
+    if !preferred_id.is_empty() {
+        if let Some(service) = target.services.iter().find(|service| {
+            matches!(service.kind, DeveloperServiceKind::Command)
+                && service.id == preferred_id
+                && service
+                    .command
+                    .as_ref()
+                    .map(|command| !command.restart.trim().is_empty())
+                    .unwrap_or(false)
+        }) {
+            return Some(service);
+        }
+    }
+
+    target
+        .services
+        .iter()
+        .find(|service| {
+            matches!(service.kind, DeveloperServiceKind::Command)
+                && service.id == "tmux-developer"
+                && service
+                    .command
+                    .as_ref()
+                    .map(|command| !command.restart.trim().is_empty())
+                    .unwrap_or(false)
+        })
+        .or_else(|| {
+            target.services.iter().find(|service| {
+                matches!(service.kind, DeveloperServiceKind::Command)
+                    && service
+                        .command
+                        .as_ref()
+                        .map(|command| !command.restart.trim().is_empty())
+                        .unwrap_or(false)
+            })
+        })
+}
+
 pub(crate) fn sync_target_services(target: &mut DeveloperTarget) {
     if target.services.is_empty() && !target.surfaces.is_empty() {
-        target.services = target.surfaces.iter().map(browser_service).collect();
+        target.services = target.surfaces.iter().map(web_service).collect();
         return;
     }
 
@@ -146,7 +189,7 @@ pub(crate) fn sync_target_services(target: &mut DeveloperTarget) {
         target.surfaces = target
             .services
             .iter()
-            .filter_map(|service| service.browser.clone())
+            .filter_map(|service| service.web.clone())
             .collect();
     }
 }

@@ -20,8 +20,8 @@
         {
           "id": "development",
           "label": "Development",
-          "kind": "browser",
-          "browser": {
+          "kind": "web",
+          "web": {
             "id": "development",
             "label": "Development",
             "serviceType": "vite",
@@ -33,8 +33,8 @@
         {
           "id": "preview",
           "label": "Preview",
-          "kind": "browser",
-          "browser": {
+          "kind": "web",
+          "web": {
             "id": "preview",
             "label": "Preview",
             "serviceType": "http",

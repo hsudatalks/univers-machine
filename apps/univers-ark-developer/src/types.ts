@@ -1,5 +1,5 @@
 export type BrowserServiceType = "http" | "vite";
-export type DeveloperServiceKind = "browser" | "endpoint" | "command";
+export type DeveloperServiceKind = "web" | "endpoint" | "command";
 export type EndpointProbeType = "http" | "tcp";
 
 export interface DeveloperSurface {
@@ -17,7 +17,7 @@ export interface DeveloperService {
   label: string;
   kind: DeveloperServiceKind;
   description: string;
-  browser?: DeveloperSurface | null;
+  web?: DeveloperSurface | null;
   endpoint?: EndpointService | null;
   command?: CommandService | null;
 }
