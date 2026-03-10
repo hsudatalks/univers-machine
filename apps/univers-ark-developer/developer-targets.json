@@ -18,9 +18,9 @@
       "workspace": {
         "profile": "ark-workbench",
         "defaultTool": "dashboard",
-        "projectPath": "~/repos/hvac-workbench",
-        "filesRoot": "~/repos/hvac-workbench",
-        "primaryWebServiceId": "development",
+        "projectPath": "",
+        "filesRoot": "",
+        "primaryBrowserServiceId": "development",
         "tmuxCommandServiceId": "tmux-developer"
       },
       "services": [
