@@ -1,4 +1,6 @@
 export type BrowserServiceType = "http" | "vite";
+export type DeveloperServiceKind = "browser" | "endpoint" | "command";
+export type EndpointProbeType = "http" | "tcp";
 
 export interface DeveloperSurface {
   id: string;
@@ -10,6 +12,37 @@ export interface DeveloperSurface {
   viteHmrTunnelCommand?: string;
 }
 
+export interface DeveloperService {
+  id: string;
+  label: string;
+  kind: DeveloperServiceKind;
+  description: string;
+  browser?: DeveloperSurface | null;
+  endpoint?: EndpointService | null;
+  command?: CommandService | null;
+}
+
+export interface EndpointService {
+  probeType: EndpointProbeType;
+  host: string;
+  port: number;
+  path: string;
+  url: string;
+}
+
+export interface CommandService {
+  restart: string;
+}
+
+export interface ContainerWorkspace {
+  profile: string;
+  defaultTool: string;
+  projectPath: string;
+  filesRoot: string;
+  primaryBrowserServiceId: string;
+  tmuxCommandServiceId: string;
+}
+
 export interface DeveloperTarget {
   id: string;
   label: string;
@@ -17,6 +50,8 @@ export interface DeveloperTarget {
   description: string;
   terminalCommand: string;
   notes: string[];
+  workspace: ContainerWorkspace;
+  services: DeveloperService[];
   surfaces: DeveloperSurface[];
 }
 

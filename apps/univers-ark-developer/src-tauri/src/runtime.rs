@@ -4,7 +4,10 @@ use crate::{
         INTERNAL_TUNNEL_PORT_END, INTERNAL_TUNNEL_PORT_START, SURFACE_HOST, SURFACE_PORT_END,
         SURFACE_PORT_START,
     },
-    models::{BrowserSurface, DeveloperTarget, TargetsFile, TunnelState},
+    models::{
+        BrowserSurface, DeveloperService, DeveloperTarget, TargetsFile, TunnelState,
+        browser_service,
+    },
 };
 use std::net::TcpListener;
 use url::Url;
@@ -262,16 +265,51 @@ fn hydrate_target(
     target: &DeveloperTarget,
     tunnel_state: &TunnelState,
 ) -> Result<DeveloperTarget, String> {
-    let surfaces = target
-        .surfaces
+    let services = if target.services.is_empty() {
+        target
+            .surfaces
+            .iter()
+            .map(|surface| {
+                hydrate_surface(&target.id, surface, tunnel_state).map(|hydrated_surface| {
+                    browser_service(&hydrated_surface)
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        target
+            .services
+            .iter()
+            .map(|service| hydrate_service(target, service, tunnel_state))
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    let surfaces = services
         .iter()
-        .map(|surface| hydrate_surface(&target.id, surface, tunnel_state))
-        .collect::<Result<Vec<_>, _>>()?;
+        .filter_map(|service| service.browser.clone())
+        .collect();
 
     Ok(DeveloperTarget {
+        services,
         surfaces,
         ..target.clone()
     })
+}
+
+fn hydrate_service(
+    target: &DeveloperTarget,
+    service: &DeveloperService,
+    tunnel_state: &TunnelState,
+) -> Result<DeveloperService, String> {
+    let mut hydrated_service = service.clone();
+
+    if let Some(browser_surface) = &service.browser {
+        hydrated_service.browser = Some(hydrate_surface(
+            &target.id,
+            browser_surface,
+            tunnel_state,
+        )?);
+    }
+
+    Ok(hydrated_service)
 }
 
 pub(crate) fn read_runtime_targets_file(tunnel_state: &TunnelState) -> Result<TargetsFile, String> {

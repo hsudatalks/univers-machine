@@ -1,5 +1,6 @@
 use crate::models::{
-    BrowserServiceType, BrowserSurface, DeveloperTarget, ManagedContainer, ManagedServer,
+    BrowserServiceType, BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget,
+    ManagedContainer, ManagedServer, browser_service,
 };
 use csv::ReaderBuilder;
 
@@ -152,6 +153,48 @@ fn render_surface(
     }
 }
 
+fn render_service(
+    service: &DeveloperService,
+    context: &RemoteContainerContext<'_>,
+) -> DeveloperService {
+    let mut rendered = service.clone();
+    rendered.id = replace_remote_placeholders(&service.id, context);
+    rendered.label = replace_remote_placeholders(&service.label, context);
+    rendered.description = replace_remote_placeholders(&service.description, context);
+    rendered.browser = service
+        .browser
+        .as_ref()
+        .map(|surface| render_surface(surface, context));
+    rendered.endpoint = service.endpoint.as_ref().map(|endpoint| {
+        let mut rendered_endpoint = endpoint.clone();
+        rendered_endpoint.host = replace_remote_placeholders(&endpoint.host, context);
+        rendered_endpoint.path = replace_remote_placeholders(&endpoint.path, context);
+        rendered_endpoint.url = replace_remote_placeholders(&endpoint.url, context);
+        rendered_endpoint
+    });
+    rendered
+}
+
+fn render_workspace(
+    workspace: &ContainerWorkspace,
+    context: &RemoteContainerContext<'_>,
+) -> ContainerWorkspace {
+    ContainerWorkspace {
+        profile: replace_remote_placeholders(&workspace.profile, context),
+        default_tool: replace_remote_placeholders(&workspace.default_tool, context),
+        project_path: replace_remote_placeholders(&workspace.project_path, context),
+        files_root: replace_remote_placeholders(&workspace.files_root, context),
+        primary_browser_service_id: replace_remote_placeholders(
+            &workspace.primary_browser_service_id,
+            context,
+        ),
+        tmux_command_service_id: replace_remote_placeholders(
+            &workspace.tmux_command_service_id,
+            context,
+        ),
+    }
+}
+
 fn discover_server_containers_output(server: &RemoteContainerServer) -> Result<String, String> {
     let command = if server.discovery_command.trim().is_empty() {
         default_discovery_command(server)
@@ -266,10 +309,23 @@ pub(super) fn build_target_from_container(
         .iter()
         .map(|note| replace_remote_placeholders(note, &context))
         .collect::<Vec<_>>();
-    let surfaces = server
-        .surfaces
+    let workspace = render_workspace(&server.workspace, &context);
+    let services = if server.services.is_empty() {
+        server
+            .surfaces
+            .iter()
+            .map(|surface| browser_service(&render_surface(surface, &context)))
+            .collect::<Vec<_>>()
+    } else {
+        server
+            .services
+            .iter()
+            .map(|service| render_service(service, &context))
+            .collect::<Vec<_>>()
+    };
+    let surfaces = services
         .iter()
-        .map(|surface| render_surface(surface, &context))
+        .filter_map(|service| service.browser.clone())
         .collect::<Vec<_>>();
 
     DeveloperTarget {
@@ -279,6 +335,8 @@ pub(super) fn build_target_from_container(
         description,
         terminal_command,
         notes,
+        workspace,
+        services,
         surfaces,
     }
 }

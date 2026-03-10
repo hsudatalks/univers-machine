@@ -1,7 +1,10 @@
 mod discovery;
 mod ssh;
 
-use crate::models::{BrowserSurface, DeveloperTarget, ManagedServer, TargetsFile};
+use crate::models::{
+    BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget, ManagedServer,
+    TargetsFile, sync_target_services,
+};
 use serde::Deserialize;
 use std::{
     fs,
@@ -52,6 +55,11 @@ pub(super) struct RemoteContainerServer {
     pub(super) terminal_command_template: String,
     #[serde(default)]
     pub(super) notes: Vec<String>,
+    #[serde(default)]
+    pub(super) workspace: ContainerWorkspace,
+    #[serde(default)]
+    pub(super) services: Vec<DeveloperService>,
+    #[serde(default)]
     pub(super) surfaces: Vec<BrowserSurface>,
 }
 
@@ -181,6 +189,7 @@ fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, String> {
 
     let raw_targets_file = read_raw_targets_file()?;
     let mut targets = raw_targets_file.targets;
+    targets.iter_mut().for_each(sync_target_services);
     let mut servers = Vec::new();
 
     let discovered: Vec<_> = std::thread::scope(|scope| {
@@ -244,6 +253,8 @@ fn resolve_server_terminal_target(target_id: &str) -> Result<Option<DeveloperTar
         description: format!("Interactive shell on {}.", server.host),
         terminal_command: format!("ssh {}", server.host),
         notes: vec![format!("Server shell for {}.", server.host)],
+        workspace: ContainerWorkspace::default(),
+        services: vec![],
         surfaces: vec![],
     }))
 }
@@ -397,6 +408,8 @@ mod tests {
             notes: vec![String::from(
                 "SSH target: {sshUser}@{containerIp} via {serverHost}.",
             )],
+            workspace: ContainerWorkspace::default(),
+            services: vec![],
             surfaces: vec![BrowserSurface {
                 id: String::from("development"),
                 label: String::from("Development"),

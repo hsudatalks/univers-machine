@@ -1,12 +1,13 @@
 use crate::{
-    config::{read_server_inventory, run_target_shell_command},
+    config::{read_server_inventory, resolve_raw_target, run_target_shell_command},
     models::{
         ContainerAgentInfo, ContainerDashboard, ContainerDashboardUpdate, ContainerProjectInfo,
         ContainerRuntimeInfo, ContainerServiceInfo, ContainerTmuxInfo,
-        ContainerTmuxSessionInfo, DashboardMonitor, DashboardState,
+        ContainerTmuxSessionInfo, DashboardMonitor, DashboardState, DeveloperTarget,
+        EndpointProbeType,
     },
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -18,7 +19,7 @@ use std::{
 use tauri::{AppHandle, Emitter, Runtime, State};
 use univers_ark_russh::{execute_chain, ClientOptions as RusshClientOptions, ResolvedEndpoint, SshConfigResolver};
 
-const DEFAULT_PROJECT_PATH: &str = "~/repos/hvac-workbench";
+const DEFAULT_PROJECT_PATH: &str = "~/repos";
 pub(crate) const DASHBOARD_UPDATED_EVENT: &str = "container-dashboard-updated";
 
 #[derive(Debug, Deserialize)]
@@ -99,13 +100,67 @@ struct DashboardTmuxPayload {
     sessions: Vec<DashboardTmuxSessionPayload>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeclaredDashboardService {
+    id: String,
+    label: String,
+    probe_type: EndpointProbeType,
+    host: String,
+    port: u16,
+    path: String,
+    url: String,
+}
+
 fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
-fn dashboard_command() -> String {
-    format!(
-        r##"UNIVERS_ARK_PROJECT_PATH={} python3 - <<'PY'
+fn declared_dashboard_services(target: &DeveloperTarget) -> Vec<DeclaredDashboardService> {
+    target
+        .services
+        .iter()
+        .filter_map(|service| {
+            let endpoint = service.endpoint.as_ref()?;
+
+            Some(DeclaredDashboardService {
+                id: service.id.clone(),
+                label: service.label.clone(),
+                probe_type: endpoint.probe_type,
+                host: if endpoint.host.trim().is_empty() {
+                    String::from("127.0.0.1")
+                } else {
+                    endpoint.host.clone()
+                },
+                port: endpoint.port,
+                path: endpoint.path.clone(),
+                url: endpoint.url.clone(),
+            })
+        })
+        .collect()
+}
+
+fn target_project_path(target: &DeveloperTarget) -> &str {
+    let project_path = target.workspace.project_path.trim();
+    if !project_path.is_empty() {
+        return project_path;
+    }
+
+    let files_root = target.workspace.files_root.trim();
+    if !files_root.is_empty() {
+        return files_root;
+    }
+
+    DEFAULT_PROJECT_PATH
+}
+
+fn dashboard_command(target: &DeveloperTarget) -> Result<String, String> {
+    let declared_services = serde_json::to_string(&declared_dashboard_services(target))
+        .map_err(|error| format!("Failed to serialize declared services: {}", error))?;
+    let project_path = target_project_path(target);
+
+    Ok(format!(
+        r##"UNIVERS_ARK_PROJECT_PATH={} UNIVERS_ARK_DECLARED_SERVICES={} python3 - <<'PY'
 import json
 import os
 import socket
@@ -115,6 +170,7 @@ import time
 from urllib.parse import urlparse
 
 project_path = os.path.abspath(os.path.expanduser(os.environ.get("UNIVERS_ARK_PROJECT_PATH") or "{default_project}"))
+declared_services_json = os.environ.get("UNIVERS_ARK_DECLARED_SERVICES") or "[]"
 repo_found = os.path.isdir(project_path)
 env_path = os.path.join(project_path, ".env")
 
@@ -123,6 +179,14 @@ is_dirty = False
 changed_files = 0
 head_summary = None
 services = []
+declared_service_defs = []
+
+try:
+    parsed_declared = json.loads(declared_services_json)
+    if isinstance(parsed_declared, list):
+        declared_service_defs = parsed_declared
+except Exception:
+    declared_service_defs = []
 
 if repo_found and os.path.isdir(os.path.join(project_path, ".git")):
     def run_git(*args):
@@ -197,43 +261,70 @@ def http_service_status(label, host, port, path="/health", url=None):
         "url": target_url,
     }}
 
-database_url = env_values.get("DATABASE_URL", "memory").strip()
-if database_url.lower() == "memory":
-    services.append(
-        {{
-            "id": "surrealdb",
-            "label": "SurrealDB",
-            "status": "embedded",
-            "detail": "Embedded memory database",
-            "url": None,
-        }}
-    )
+if declared_service_defs:
+    for definition in declared_service_defs:
+        host = (definition.get("host") or "127.0.0.1").strip() or "127.0.0.1"
+        port = int(definition.get("port") or 0)
+        if port <= 0:
+            continue
+        label = (definition.get("label") or definition.get("id") or f"service-{{port}}").strip()
+        service_id = (definition.get("id") or label.lower().replace(" ", "-")).strip()
+        probe_type = (definition.get("probeType") or "http").strip().lower()
+        path = definition.get("path") or ""
+        url = definition.get("url") or (f"http://{{host}}:{{port}}" if probe_type == "http" else "")
+
+        if probe_type == "tcp":
+            ready = tcp_reachable(host, port)
+            services.append(
+                {{
+                    "id": service_id,
+                    "label": label,
+                    "status": "running" if ready else "down",
+                    "detail": f"tcp://{{host}}:{{port}}",
+                    "url": url or None,
+                }}
+            )
+        else:
+            services.append(http_service_status(label, host, port, path=path, url=url or None))
+            services[-1]["id"] = service_id
 else:
-    parsed = urlparse(database_url)
-    db_host = parsed.hostname or "127.0.0.1"
-    db_port = parsed.port or 8000
-    db_ready = tcp_reachable(db_host, db_port)
-    services.append(
-        {{
-            "id": "surrealdb",
-            "label": "SurrealDB",
-            "status": "running" if db_ready else "down",
-            "detail": f"{{parsed.scheme or 'tcp'}}://{{db_host}}:{{db_port}}",
-            "url": f"http://{{db_host}}:{{db_port}}" if db_ready else None,
-        }}
+    database_url = env_values.get("DATABASE_URL", "memory").strip()
+    if database_url.lower() == "memory":
+        services.append(
+            {{
+                "id": "surrealdb",
+                "label": "SurrealDB",
+                "status": "embedded",
+                "detail": "Embedded memory database",
+                "url": None,
+            }}
+        )
+    else:
+        parsed = urlparse(database_url)
+        db_host = parsed.hostname or "127.0.0.1"
+        db_port = parsed.port or 8000
+        db_ready = tcp_reachable(db_host, db_port)
+        services.append(
+            {{
+                "id": "surrealdb",
+                "label": "SurrealDB",
+                "status": "running" if db_ready else "down",
+                "detail": f"{{parsed.scheme or 'tcp'}}://{{db_host}}:{{db_port}}",
+                "url": f"http://{{db_host}}:{{db_port}}" if db_ready else None,
+            }}
+        )
+
+    server_port = int(env_values.get("SERVER_PORT", "3003") or "3003")
+    agents_port = int(
+        env_values.get("AGENTS_PORT")
+        or env_values.get("COPILOT_PORT")
+        or str(server_port + 1)
     )
+    web_port = 3432
 
-server_port = int(env_values.get("SERVER_PORT", "3003") or "3003")
-agents_port = int(
-    env_values.get("AGENTS_PORT")
-    or env_values.get("COPILOT_PORT")
-    or str(server_port + 1)
-)
-web_port = 3432
-
-services.append(http_service_status("Workbench API", "127.0.0.1", server_port))
-services.append(http_service_status("Agents API", "127.0.0.1", agents_port))
-services.append(http_service_status("Web UI", "127.0.0.1", web_port, path=""))
+    services.append(http_service_status("Workbench API", "127.0.0.1", server_port))
+    services.append(http_service_status("Agents API", "127.0.0.1", agents_port))
+    services.append(http_service_status("Web UI", "127.0.0.1", web_port, path=""))
 
 def iso_timestamp(epoch_seconds):
     if not epoch_seconds:
@@ -510,9 +601,10 @@ print(json.dumps({{
     "tmux": tmux_info,
 }}, ensure_ascii=False))
 PY"##,
-        shell_single_quote(DEFAULT_PROJECT_PATH),
-        default_project = DEFAULT_PROJECT_PATH,
-    )
+        shell_single_quote(project_path),
+        shell_single_quote(&declared_services),
+        default_project = project_path,
+    ))
 }
 
 pub(crate) fn load_container_dashboard(target_id: &str) -> Result<ContainerDashboard, String> {
@@ -585,7 +677,8 @@ pub(crate) fn load_container_dashboard(target_id: &str) -> Result<ContainerDashb
 }
 
 fn load_container_dashboard_stdout(target_id: &str) -> Result<Vec<u8>, String> {
-    let command = dashboard_command();
+    let target = resolve_raw_target(target_id)?;
+    let command = dashboard_command(&target)?;
 
     if let Ok(stdout) = load_container_dashboard_via_russh(target_id, &command) {
         return Ok(stdout);

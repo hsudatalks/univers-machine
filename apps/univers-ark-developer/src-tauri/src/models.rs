@@ -20,6 +20,23 @@ pub(crate) enum BrowserServiceType {
     Vite,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DeveloperServiceKind {
+    #[default]
+    Browser,
+    Endpoint,
+    Command,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum EndpointProbeType {
+    #[default]
+    Http,
+    Tcp,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BrowserSurface {
@@ -36,6 +53,61 @@ pub(crate) struct BrowserSurface {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct DeveloperService {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    #[serde(default)]
+    pub(crate) kind: DeveloperServiceKind,
+    #[serde(default)]
+    pub(crate) description: String,
+    #[serde(default)]
+    pub(crate) browser: Option<BrowserSurface>,
+    #[serde(default)]
+    pub(crate) endpoint: Option<EndpointService>,
+    #[serde(default)]
+    pub(crate) command: Option<CommandService>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CommandService {
+    #[serde(default)]
+    pub(crate) restart: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ContainerWorkspace {
+    #[serde(default)]
+    pub(crate) profile: String,
+    #[serde(default)]
+    pub(crate) default_tool: String,
+    #[serde(default)]
+    pub(crate) project_path: String,
+    #[serde(default)]
+    pub(crate) files_root: String,
+    #[serde(default)]
+    pub(crate) primary_browser_service_id: String,
+    #[serde(default)]
+    pub(crate) tmux_command_service_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct EndpointService {
+    #[serde(default)]
+    pub(crate) probe_type: EndpointProbeType,
+    #[serde(default)]
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    #[serde(default)]
+    pub(crate) path: String,
+    #[serde(default)]
+    pub(crate) url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct DeveloperTarget {
     pub(crate) id: String,
     pub(crate) label: String,
@@ -44,7 +116,39 @@ pub(crate) struct DeveloperTarget {
     pub(crate) terminal_command: String,
     #[serde(default)]
     pub(crate) notes: Vec<String>,
+    #[serde(default)]
+    pub(crate) workspace: ContainerWorkspace,
+    #[serde(default)]
+    pub(crate) services: Vec<DeveloperService>,
+    #[serde(default)]
     pub(crate) surfaces: Vec<BrowserSurface>,
+}
+
+pub(crate) fn browser_service(surface: &BrowserSurface) -> DeveloperService {
+    DeveloperService {
+        id: surface.id.clone(),
+        label: surface.label.clone(),
+        kind: DeveloperServiceKind::Browser,
+        description: String::new(),
+        browser: Some(surface.clone()),
+        endpoint: None,
+        command: None,
+    }
+}
+
+pub(crate) fn sync_target_services(target: &mut DeveloperTarget) {
+    if target.services.is_empty() && !target.surfaces.is_empty() {
+        target.services = target.surfaces.iter().map(browser_service).collect();
+        return;
+    }
+
+    if target.surfaces.is_empty() && !target.services.is_empty() {
+        target.surfaces = target
+            .services
+            .iter()
+            .filter_map(|service| service.browser.clone())
+            .collect();
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
