@@ -92,22 +92,7 @@
       },
       "services": [],
       "surfaces": [],
-      "containers": [
-        {
-          "id": "host",
-          "name": "host",
-          "kind": "host",
-          "label": "Host",
-          "description": "Local host workspace",
-          "ipv4": "",
-          "status": "RUNNING",
-          "workspace": {
-            "profile": "ark-workbench"
-          },
-          "services": [],
-          "surfaces": []
-        }
-      ]
+      "containers": []
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { LayoutDashboard, SquareTerminal } from "lucide-react";
+import { LayoutDashboard, Settings2, SquareTerminal } from "lucide-react";
 import { useState } from "react";
 import type { DeveloperTarget, ManagedMachine } from "../types";
 import { TerminalPane } from "./TerminalPane";
@@ -7,6 +7,7 @@ import { ServerDashboardPane } from "./ServerDashboardPane";
 import { ServerTerminalsPane } from "./ServerTerminalsPane";
 
 interface ServerPageProps {
+  onOpenSettings: () => void;
   onOpenWorkspace: (targetId: string) => void;
   pageVisible: boolean;
   resolveTarget: (targetId: string) => DeveloperTarget | undefined;
@@ -16,30 +17,36 @@ interface ServerPageProps {
 type ServerToolPanel = "dashboard" | "terminals";
 
 export function ServerPage({
+  onOpenSettings,
   onOpenWorkspace,
   pageVisible,
   resolveTarget,
   server,
 }: ServerPageProps) {
   const [activeTool, setActiveTool] = useState<ServerToolPanel>("dashboard");
-  const reachableContainers = server.containers.filter(
-    (container) => container.sshReachable,
-  ).length;
-  const hostContainer = server.containers.find((container) => container.kind === "host");
-  const terminalTarget = hostContainer
-    ? resolveTarget(hostContainer.targetId)
-    : undefined;
+  const terminalTarget = resolveTarget(server.hostTargetId);
 
   return (
     <>
       <header className="content-header">
         <div className="content-header-copy">
           <span className="panel-title">Machine</span>
-          <h1 className="content-title content-title-container">{server.label}</h1>
-          <p className="panel-description">{server.description}</p>
+          <div className="content-title-row">
+            <h1 className="content-title content-title-container">{server.label}</h1>
+            <span className="content-chip">{server.host}</span>
+          </div>
         </div>
 
         <div className="content-header-tools">
+          <Button
+            aria-label={`Open ${server.label} settings`}
+            onClick={onOpenSettings}
+            size="icon"
+            title="Machine settings"
+            variant="ghost"
+          >
+            <Settings2 size={16} />
+          </Button>
           <Button
             aria-label="Machine dashboard"
             isActive={activeTool === "dashboard"}
@@ -66,12 +73,6 @@ export function ServerPage({
           </Button>
         </div>
       </header>
-
-      <div className="content-meta-row">
-          <span className="content-chip">{server.host}</span>
-          <span className="content-chip">{server.containers.length} container(s)</span>
-          <span className="content-chip">{reachableContainers} SSH ready</span>
-      </div>
 
       <section className="page-section">
         <div className="server-workspace">

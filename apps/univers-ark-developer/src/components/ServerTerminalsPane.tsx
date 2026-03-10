@@ -1,3 +1,4 @@
+import { visibleContainers } from "../lib/container-visibility";
 import { TerminalCard } from "./TerminalCard";
 import type { DeveloperTarget, ManagedContainer, ManagedMachine } from "../types";
 
@@ -34,11 +35,13 @@ export function ServerTerminalsPane({
   resolveTarget,
   server,
 }: ServerTerminalsPaneProps) {
+  const managedContainers = visibleContainers(server.containers);
+
   return (
     <article className="panel tool-panel server-terminals-panel">
       <div className="server-terminal-grid">
-        {server.containers.length ? (
-          server.containers.map((container) => {
+        {managedContainers.length ? (
+          managedContainers.map((container) => {
             const target = resolveTarget(container.targetId);
 
             return target && container.sshReachable ? (

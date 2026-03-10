@@ -4,6 +4,7 @@ import type {
   ManagedMachine,
   ThemeMode,
 } from "../types";
+import { visibleContainers } from "../lib/container-visibility";
 import { loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
 import { parseTargetsConfig, stringifyTargetsConfig } from "../lib/targets-config";
 import { ProfileDialog } from "./ProfileDialog";
@@ -189,7 +190,7 @@ export function SettingsPage({
             <div className="settings-field">
               <label className="settings-label">Container count</label>
               <span className="settings-value">
-                {machines.reduce((sum, machine) => sum + machine.containers.length, 0)} container(s)
+                {machines.reduce((sum, machine) => sum + visibleContainers(machine.containers).length, 0)} container(s)
               </span>
             </div>
             </section>
@@ -231,7 +232,7 @@ export function SettingsPage({
                     </div>
                     <div className="settings-server-footer">
                       <span className="settings-server-containers">
-                        {machine.containers.length} container(s)
+                        {visibleContainers(machine.containers).length} container(s)
                       </span>
                       {machine.message ? (
                         <span className="settings-server-message">{machine.message}</span>

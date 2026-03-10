@@ -144,10 +144,8 @@ pub(super) fn ssh_destination(container_ip: &str, ssh_user: &str) -> String {
     format!("{}@{}", ssh_user, container_ip)
 }
 
-fn default_container_terminal_remote_command() -> String {
-    String::from(
-        "tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l",
-    )
+pub(super) fn default_terminal_startup_command() -> String {
+    String::from("exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l")
 }
 
 pub(super) fn build_ssh_command(
@@ -227,7 +225,7 @@ pub(super) fn terminal_command_for_server(
     context: &RemoteContainerContext<'_>,
 ) -> String {
     super::discovery::render_template(&server.terminal_command_template, context, || {
-        let remote_command = default_container_terminal_remote_command();
+        let remote_command = default_terminal_startup_command();
 
         build_ssh_command(
             server,

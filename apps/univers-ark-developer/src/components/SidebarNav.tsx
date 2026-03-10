@@ -1,4 +1,5 @@
 import type { AppBootstrap } from "../types";
+import { isMachineHostTarget, visibleContainers } from "../lib/container-visibility";
 import { Badge } from "./ui/badge";
 import {
   Sidebar,
@@ -80,7 +81,7 @@ export function SidebarNav({
     ),
   );
   const standaloneTargets = bootstrap.targets.filter(
-    (target) => !managedTargetIds.has(target.id),
+    (target) => !managedTargetIds.has(target.id) && !isMachineHostTarget(target),
   );
 
   return (
@@ -124,17 +125,12 @@ export function SidebarNav({
             {bootstrap.machines.map((machine) => {
               const isExpanded = expandedMachineIds.includes(machine.id);
               const isMachineActive = activeMachineId === machine.id;
-              const hostContainer = machine.containers.find(
-                (container) => container.kind === "host",
-              );
-              const hostTargetId = hostContainer?.targetId;
-              const isHostActive = activeTargetId === hostTargetId;
-              const branchHasActiveTarget = machine.containers.some(
-                (container) => container.targetId === activeTargetId,
-              );
-              const managedContainers = machine.containers.filter(
-                (container) => container.kind !== "host",
-              );
+              const branchHasActiveTarget =
+                activeTargetId === machine.hostTargetId ||
+                machine.containers.some(
+                  (container) => container.targetId === activeTargetId,
+                );
+              const managedContainers = visibleContainers(machine.containers);
 
               return (
                 <SidebarMenuItem className="sidebar-branch" key={machine.id}>
@@ -170,28 +166,6 @@ export function SidebarNav({
 
                   {isExpanded ? (
                     <SidebarMenuSub className="sidebar-children">
-                      <SidebarMenuButton
-                        className="sidebar-node-leaf"
-                        disabled={!hostTargetId || !availableTargetSet.has(hostTargetId)}
-                        isActive={isHostActive}
-                        onClick={() => {
-                          if (hostTargetId) {
-                            onSelectContainer(hostTargetId);
-                          }
-                        }}
-                        type="button"
-                      >
-                        <span className="sidebar-node-copy">
-                          <Server size={14} />
-                          <span className="sidebar-node-label">Host</span>
-                        </span>
-
-                        <StatusBadge
-                          state={hostContainer?.sshReachable ? "success" : inventoryStateTone(machine.state)}
-                          title={hostContainer?.sshState ?? titleCase(machine.state)}
-                        />
-                      </SidebarMenuButton>
-
                       {managedContainers.map((container) => {
                         const isActive = activeTargetId === container.targetId;
                         const isAvailable = availableTargetSet.has(container.targetId);

@@ -179,7 +179,9 @@ function normalizeMachine(
       user: jump.user ?? "",
       identityFiles: jump.identityFiles ?? [],
     })),
-    containers: (machine?.containers ?? []).map(normalizeMachineContainer),
+    containers: (machine?.containers ?? [])
+      .filter((container) => container?.kind !== "host")
+      .map(normalizeMachineContainer),
   };
 }
 
@@ -296,25 +298,6 @@ export function createDefaultCommandService(
   };
 }
 
-export function createHostContainer(profileId = ""): MachineContainerConfig {
-  return {
-    id: "host",
-    name: "host",
-    kind: "host",
-    enabled: true,
-    source: "host",
-    sshUser: "",
-    sshUserCandidates: [],
-    label: "Host",
-    description: "",
-    ipv4: "",
-    status: "RUNNING",
-    workspace: createEmptyWorkspace(profileId),
-    services: [],
-    surfaces: [],
-  };
-}
-
 export function createEmptyMachineContainer(): MachineContainerConfig {
   return {
     id: "",
@@ -361,6 +344,6 @@ export function createEmptyMachine(profileId = ""): MachineConfig {
     workspace: createEmptyWorkspace(profileId),
     services: [],
     surfaces: [],
-    containers: [createHostContainer(profileId)],
+    containers: [],
   };
 }

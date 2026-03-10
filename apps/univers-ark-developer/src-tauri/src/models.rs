@@ -280,6 +280,7 @@ pub(crate) struct ManagedContainer {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ManagedServer {
     pub(crate) id: String,
+    pub(crate) host_target_id: String,
     pub(crate) label: String,
     pub(crate) transport: MachineTransport,
     pub(crate) host: String,

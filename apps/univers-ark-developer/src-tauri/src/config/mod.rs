@@ -656,6 +656,17 @@ pub(crate) fn resolve_target_ssh_chain(target_id: &str) -> Result<ResolvedEndpoi
     if matches!(target.transport, MachineTransport::Local) {
         return Err(format!("Target {} uses local transport", target_id));
     }
+    let raw_targets_file = read_raw_targets_file()?;
+    let server = raw_targets_file
+        .machines
+        .iter()
+        .find(|server| server.id == target.machine_id)
+        .ok_or_else(|| format!("Unknown machine for {}", target_id))?;
+
+    if matches!(target.container_kind, ManagedContainerKind::Host) {
+        return resolved_machine_chain(server);
+    }
+
     let inventory = load_inventory(false)?;
 
     if let Some(container) = inventory
@@ -664,23 +675,14 @@ pub(crate) fn resolve_target_ssh_chain(target_id: &str) -> Result<ResolvedEndpoi
         .flat_map(|server| server.containers.iter())
         .find(|container| container.target_id == target_id)
     {
-        let raw_targets_file = read_raw_targets_file()?;
-        let server = raw_targets_file
-            .machines
-            .iter()
-            .find(|server| server.id == container.server_id)
-            .ok_or_else(|| format!("Unknown machine for {}", target_id))?;
         let mut chain = resolved_machine_chain(server)?;
-
-        if !matches!(container.kind, ManagedContainerKind::Host) {
-            chain.push(ResolvedEndpoint::new(
-                format!("{}::{}", server.id, container.name),
-                container.ipv4.clone(),
-                container.ssh_user.clone(),
-                22,
-                Vec::new(),
-            ));
-        }
+        chain.push(ResolvedEndpoint::new(
+            format!("{}::{}", server.id, container.name),
+            container.ipv4.clone(),
+            container.ssh_user.clone(),
+            22,
+            Vec::new(),
+        ));
 
         return Ok(chain);
     }
@@ -711,6 +713,25 @@ pub(crate) fn run_target_shell_command(
     target_id: &str,
     remote_command: &str,
 ) -> Result<Output, String> {
+    let target = resolve_raw_target(target_id)?;
+
+    if matches!(target.transport, MachineTransport::Local) {
+        return run_target_shell_command_internal(target_id, remote_command);
+    }
+
+    let raw_targets_file = read_raw_targets_file()?;
+    let server = raw_targets_file
+        .machines
+        .iter()
+        .find(|server| server.id == target.machine_id)
+        .ok_or_else(|| format!("Unknown machine for {}", target_id))?;
+
+    if matches!(target.container_kind, ManagedContainerKind::Host) {
+        let quoted_remote_command = shell_single_quote(remote_command);
+        let ssh_command = build_host_ssh_command(server, &[], Some(&quoted_remote_command));
+        return run_target_shell_command_internal(target_id, &ssh_command);
+    }
+
     let inventory = load_inventory(false)?;
 
     if let Some(container) = inventory
@@ -719,28 +740,15 @@ pub(crate) fn run_target_shell_command(
         .flat_map(|server| server.containers.iter())
         .find(|container| container.target_id == target_id)
     {
-        let raw_targets_file = read_raw_targets_file()?;
-        let server = raw_targets_file
-            .machines
-            .iter()
-            .find(|server| server.id == container.server_id)
-            .ok_or_else(|| format!("Unknown machine for {}", target_id))?;
-        if matches!(container.transport, MachineTransport::Local) {
-            return run_target_shell_command_internal(target_id, remote_command);
-        }
         let quoted_remote_command = shell_single_quote(remote_command);
-        let ssh_command = if matches!(container.kind, ManagedContainerKind::Host) {
-            build_host_ssh_command(server, &[], Some(&quoted_remote_command))
-        } else {
-            build_ssh_command(
-                server,
-                &container.ipv4,
-                &container.name,
-                &container.ssh_user,
-                &[],
-                Some(&quoted_remote_command),
-            )
-        };
+        let ssh_command = build_ssh_command(
+            server,
+            &container.ipv4,
+            &container.name,
+            &container.ssh_user,
+            &[],
+            Some(&quoted_remote_command),
+        );
 
         return run_target_shell_command_internal(target_id, &ssh_command);
     }
@@ -990,7 +998,7 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
         };
         let expected_known_hosts_file = format!("{}/.ssh/univers-ark-developer-known_hosts", home);
         let expected_terminal_command = format!(
-            "ssh -o UserKnownHostsFile={kh} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -o StrictHostKeyChecking=no -tt -J david@mechanism-dev -p 22 ubuntu@10.211.82.202 'tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l'",
+            "ssh -o UserKnownHostsFile={kh} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -o StrictHostKeyChecking=no -tt -J david@mechanism-dev -p 22 ubuntu@10.211.82.202 'exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l'",
             kh = expected_known_hosts_file
         );
         assert_eq!(target.terminal_command, expected_terminal_command);

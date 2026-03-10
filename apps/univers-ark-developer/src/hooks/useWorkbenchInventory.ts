@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { AppBootstrap, DeveloperTarget, ManagedMachine } from "../types";
 import type { ActiveView } from "../lib/view-types";
+import { isMachineHostTarget, visibleContainers } from "../lib/container-visibility";
 
 type OverviewContainerEntry = {
   container: ManagedMachine["containers"][number];
@@ -12,8 +13,10 @@ function machineForTargetId(
   machines: ManagedMachine[],
   targetId: string,
 ): ManagedMachine | undefined {
-  return machines.find((machine) =>
-    machine.containers.some((container) => container.targetId === targetId),
+  return machines.find(
+    (machine) =>
+      machine.hostTargetId === targetId ||
+      machine.containers.some((container) => container.targetId === targetId),
   );
 }
 
@@ -45,14 +48,17 @@ export function useWorkbenchInventory(
 
   const standaloneTargets = useMemo(
     () =>
-      bootstrap?.targets.filter((target) => !managedTargetIds.has(target.id)) ?? [],
+      bootstrap?.targets.filter(
+        (target) =>
+          !managedTargetIds.has(target.id) && !isMachineHostTarget(target),
+      ) ?? [],
     [bootstrap, managedTargetIds],
   );
 
   const overviewContainers = useMemo<OverviewContainerEntry[]>(
     () =>
       bootstrap?.machines.flatMap((machine) =>
-        machine.containers.map((container) => ({
+        visibleContainers(machine.containers).map((container) => ({
           container,
           machine,
           target: targetById.get(container.targetId),

@@ -84,6 +84,7 @@ export interface ManagedContainer {
 
 export interface ManagedMachine {
   id: string;
+  hostTargetId: string;
   label: string;
   transport: MachineTransport;
   host: string;

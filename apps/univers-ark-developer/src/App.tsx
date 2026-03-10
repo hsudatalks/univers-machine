@@ -59,8 +59,15 @@ function resolvePreferredTarget(
   bootstrap: AppBootstrap,
   preferredTargetId?: string,
 ): DeveloperTarget | undefined {
+  const hiddenHostTargetIds = new Set(
+    bootstrap.machines.map((machine) => machine.hostTargetId),
+  );
+  const visibleTargets = bootstrap.targets.filter(
+    (target) => !hiddenHostTargetIds.has(target.id),
+  );
+
   if (preferredTargetId) {
-    const preferredTarget = bootstrap.targets.find(
+    const preferredTarget = visibleTargets.find(
       (target) => target.id === preferredTargetId,
     );
 
@@ -70,9 +77,9 @@ function resolvePreferredTarget(
   }
 
   return (
-    bootstrap.targets.find(
+    visibleTargets.find(
       (target) => target.id === bootstrap.selectedTargetId,
-    ) ?? bootstrap.targets[0]
+    ) ?? visibleTargets[0]
   );
 }
 
@@ -118,6 +125,19 @@ function fallbackTunnelStatus(
   };
 }
 
+function containerViewRefreshKey(target: DeveloperTarget): string {
+  return JSON.stringify({
+    label: target.label,
+    description: target.description,
+    notes: target.notes,
+    services: target.services,
+    surfaces: target.surfaces,
+    terminalCommand: target.terminalCommand,
+    terminalStartupCommand: target.terminalStartupCommand,
+    workspace: target.workspace,
+  });
+}
+
 function rootFontSizePx(): number {
   if (typeof window === "undefined") {
     return 16;
@@ -158,6 +178,7 @@ function App() {
   );
   const [isAddMachineDialogOpen, setIsAddMachineDialogOpen] = useState(false);
   const [isCreatingMachine, setIsCreatingMachine] = useState(false);
+  const [editingMachineId, setEditingMachineId] = useState<string | null>(null);
   const [visitedContainerIds, setVisitedContainerIds] = useState<string[]>([]);
   const [visitedMachineIds, setVisitedMachineIds] = useState<string[]>([]);
   const previousNonSettingsViewRef = useRef<ActiveView>(activeView);
@@ -184,6 +205,9 @@ function App() {
     targetById,
     visitedMachines,
   } = useWorkbenchInventory(bootstrap, activeView, visitedMachineIds);
+  const editingMachine = editingMachineId && bootstrap
+    ? bootstrap.machines.find((machine) => machine.id === editingMachineId) ?? null
+    : null;
   const {
     activeOverviewFocusedTargetId,
     registerOverviewCardElement,
@@ -526,6 +550,9 @@ function App() {
               className={`content-page ${activeView.kind === "machine" && activeView.machineId === machine.id ? "" : "is-hidden"}`}
             >
               <ServerPage
+                onOpenSettings={() => {
+                  setEditingMachineId(machine.id);
+                }}
                 onOpenWorkspace={setContainerView}
                 pageVisible={
                   activeView.kind === "machine" && activeView.machineId === machine.id
@@ -646,6 +673,7 @@ function App() {
                     pageVisible={isVisible}
                     serviceStatuses={serviceStatuses}
                     target={target}
+                    key={`${target.id}:${containerViewRefreshKey(target)}`}
                     workspaceStyle={{
                       "--container-terminal-width": `${containerTerminalWidths[target.id] ?? defaultTerminalPanelWidthPx()}px`,
                     } as CSSProperties}
@@ -723,6 +751,19 @@ function App() {
             setIsCreatingMachine(false);
             void refreshInventory();
           }}
+        />
+      ) : null}
+
+      {editingMachine ? (
+        <ServerDialog
+          onClose={() => {
+            setEditingMachineId(null);
+          }}
+          onSaved={() => {
+            setEditingMachineId(null);
+            void refreshInventory();
+          }}
+          server={editingMachine}
         />
       ) : null}
     </main>

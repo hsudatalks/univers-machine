@@ -41,32 +41,14 @@ const fallbackBootstrapSeed: AppBootstrap = {
   machines: [
     {
       id: "local",
+      hostTargetId: "local::host",
       label: "Local",
       transport: "local",
       host: "localhost",
       description: "Local machine.",
       state: "ready",
       message: "Local host workspace is ready.",
-      containers: [
-        {
-          machineId: "local",
-          machineLabel: "Local",
-          containerId: "host",
-          kind: "host",
-          transport: "local",
-          targetId: "local::host",
-          name: "host",
-          label: "Host",
-          status: "RUNNING",
-          ipv4: "",
-          sshUser: "",
-          sshDestination: "",
-          sshCommand: "exec /bin/zsh -l",
-          sshState: "ready",
-          sshMessage: "Local host workspace is ready.",
-          sshReachable: true,
-        },
-      ],
+      containers: [],
     },
   ],
   targets: [
@@ -189,6 +171,7 @@ function normalizeManagedContainer(container: RawManagedContainer): ManagedConta
 function normalizeManagedMachine(machine: RawManagedMachine): ManagedMachine {
   return {
     ...machine,
+    hostTargetId: machine.hostTargetId ?? `${machine.id}::host`,
     containers: machine.containers.map(normalizeManagedContainer),
   };
 }

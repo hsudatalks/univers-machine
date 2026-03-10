@@ -1,4 +1,5 @@
 import { Activity, HardDrive, Server, SquareTerminal } from "lucide-react";
+import { visibleContainers } from "../lib/container-visibility";
 import type { DeveloperTarget, ManagedMachine } from "../types";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -37,10 +38,11 @@ export function ServerDashboardPane({
   resolveTarget,
   server,
 }: ServerDashboardPaneProps) {
-  const reachableContainers = server.containers.filter(
+  const managedContainers = visibleContainers(server.containers);
+  const reachableContainers = managedContainers.filter(
     (container) => container.sshReachable,
   ).length;
-  const unreachableContainers = server.containers.length - reachableContainers;
+  const unreachableContainers = managedContainers.length - reachableContainers;
 
   return (
     <article className="panel tool-panel dashboard-panel server-dashboard-panel">
@@ -55,13 +57,13 @@ export function ServerDashboardPane({
               <div className="dashboard-summary-item">
                 <span className="dashboard-meta-label">Inventory</span>
                 <span className="dashboard-meta-value">
-                  {server.containers.length} container(s)
+                  {managedContainers.length} container(s)
                 </span>
               </div>
               <div className="dashboard-summary-item">
                 <span className="dashboard-meta-label">SSH ready</span>
                 <span className="dashboard-meta-value">
-                  {reachableContainers} / {server.containers.length}
+                  {reachableContainers} / {managedContainers.length}
                 </span>
               </div>
             </div>
@@ -132,9 +134,9 @@ export function ServerDashboardPane({
               Containers
             </CardTitle>
           </CardHeader>
-          <CardContent className="server-dashboard-list">
-            {server.containers.length ? (
-              server.containers.map((container) => {
+            <CardContent className="server-dashboard-list">
+            {managedContainers.length ? (
+              managedContainers.map((container) => {
                 const target = resolveTarget(container.targetId);
 
                 return (
@@ -168,7 +170,7 @@ export function ServerDashboardPane({
                 );
               })
             ) : (
-              <p className="dashboard-copy">No containers discovered for this server.</p>
+              <p className="dashboard-copy">No managed containers discovered for this machine.</p>
             )}
           </CardContent>
         </Card>

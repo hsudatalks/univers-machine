@@ -6,8 +6,9 @@ use csv::ReaderBuilder;
 use std::collections::HashSet;
 
 use super::ssh::{
-    build_host_ssh_command, managed_container_ssh_user, probe_machine_host_ssh,
-    probe_managed_container_ssh, shell_single_quote, ssh_destination, terminal_command_for_server,
+    build_host_ssh_command, default_terminal_startup_command, managed_container_ssh_user,
+    probe_machine_host_ssh, probe_managed_container_ssh, shell_single_quote, ssh_destination,
+    terminal_command_for_server,
 };
 use super::{
     ContainerDiscoveryMode, ContainerManagerType, DiscoveredContainer, DiscoveredServerInventory,
@@ -16,6 +17,7 @@ use super::{
 use crate::shell;
 
 const CONTAINER_LOGIN_USERS_QUERY: &str = r#"if command -v getent >/dev/null 2>&1; then getent passwd; elif [ -r /etc/passwd ]; then cat /etc/passwd; fi | awk -F: '($1 == "root" || $3 >= 1000) && $6 ~ /^\// && $7 !~ /(nologin|false)$/ { print $1 }'"#;
+const CONTAINER_USER_DISCOVERY_TIMEOUT_SECONDS: u64 = 5;
 
 fn default_discovery_command_for_manager(
     server: &RemoteContainerServer,
@@ -407,74 +409,8 @@ fn machine_container_to_discovered(container: &MachineContainerConfig) -> Discov
     }
 }
 
-fn discover_host_container(server: &RemoteContainerServer) -> DiscoveredContainer {
-    let container = server
-        .containers
-        .iter()
-        .find(|container| {
-            matches!(container.kind, ManagedContainerKind::Host) || container.id == "host"
-        })
-        .cloned()
-        .unwrap_or_else(|| MachineContainerConfig {
-            id: String::from("host"),
-            name: String::from("host"),
-            kind: ManagedContainerKind::Host,
-            enabled: true,
-            source: String::from("host"),
-            ssh_user: server.ssh_user.clone(),
-            ssh_user_candidates: vec![server.ssh_user.clone()],
-            label: String::from("Host"),
-            description: String::new(),
-            ipv4: String::new(),
-            status: String::from("RUNNING"),
-            workspace: server.workspace.clone(),
-            services: Vec::new(),
-            surfaces: Vec::new(),
-        });
-
-    DiscoveredContainer {
-        id: if container.id.trim().is_empty() {
-            String::from("host")
-        } else {
-            container.id
-        },
-        kind: ManagedContainerKind::Host,
-        name: if container.name.trim().is_empty() {
-            String::from("host")
-        } else {
-            container.name
-        },
-        source: if container.source.trim().is_empty() {
-            String::from("host")
-        } else {
-            container.source
-        },
-        ssh_user: if container.ssh_user.trim().is_empty() {
-            server.ssh_user.clone()
-        } else {
-            container.ssh_user
-        },
-        ssh_user_candidates: if container.ssh_user_candidates.is_empty() {
-            vec![server.ssh_user.clone()]
-        } else {
-            container.ssh_user_candidates
-        },
-        status: if container.status.trim().is_empty() {
-            String::from("RUNNING")
-        } else {
-            container.status
-        },
-        ipv4: container.ipv4,
-        label: Some(if container.label.trim().is_empty() {
-            String::from("Host")
-        } else {
-            container.label
-        }),
-        description: (!container.description.trim().is_empty()).then(|| container.description),
-        workspace: Some(container.workspace),
-        services: container.services,
-        surfaces: container.surfaces,
-    }
+fn machine_host_target_id(server: &RemoteContainerServer) -> String {
+    format!("{}::host", server.id)
 }
 
 fn discover_manual_containers(server: &RemoteContainerServer) -> Vec<DiscoveredContainer> {
@@ -564,7 +500,7 @@ fn host_container_users_command(
     let manager_type = manager_type_for_container(server, container)?;
     let container_name = shell_single_quote(&container.name);
     let query = shell_single_quote(CONTAINER_LOGIN_USERS_QUERY);
-    let remote_command = match manager_type {
+    let exec_command = match manager_type {
         ContainerManagerType::Lxd => {
             format!("lxc exec {} -- sh -lc {}", container_name, query)
         }
@@ -576,6 +512,11 @@ fn host_container_users_command(
         }
         ContainerManagerType::None => return None,
     };
+    let remote_command = format!(
+        "if command -v timeout >/dev/null 2>&1; then timeout {seconds} {command}; elif command -v gtimeout >/dev/null 2>&1; then gtimeout {seconds} {command}; else {command}; fi",
+        seconds = CONTAINER_USER_DISCOVERY_TIMEOUT_SECONDS,
+        command = exec_command,
+    );
 
     Some(build_host_ssh_command(
         server,
@@ -984,20 +925,21 @@ pub(super) fn scan_server_containers(
     server: &RemoteContainerServer,
 ) -> Result<Vec<DiscoveredContainer>, String> {
     if matches!(server.transport, MachineTransport::Local) {
-        return Ok(vec![discover_host_container(server)]);
+        return Ok(Vec::new());
     }
 
     if matches!(server.discovery_mode, ContainerDiscoveryMode::HostOnly) {
-        return Ok(vec![discover_host_container(server)]);
+        return Ok(Vec::new());
     }
 
     if matches!(server.discovery_mode, ContainerDiscoveryMode::Manual) {
-        let mut containers = vec![discover_host_container(server)];
-        containers.extend(discover_manual_containers(server));
-        return Ok(enrich_discovered_container_ssh_users(server, containers));
+        return Ok(enrich_discovered_container_ssh_users(
+            server,
+            discover_manual_containers(server),
+        ));
     }
 
-    let mut containers = vec![discover_host_container(server)];
+    let mut containers = Vec::new();
 
     if !server.discovery_command.trim().is_empty() {
         let output = run_discovery_command(server, &server.discovery_command)?;
@@ -1010,9 +952,84 @@ pub(super) fn scan_server_containers(
 }
 
 pub(super) fn cached_server_containers(server: &RemoteContainerServer) -> Vec<DiscoveredContainer> {
-    let mut containers = vec![discover_host_container(server)];
-    containers.extend(discover_manual_containers(server));
-    containers
+    discover_manual_containers(server)
+}
+
+fn build_machine_host_target(server: &RemoteContainerServer) -> DeveloperTarget {
+    let container_ip = if matches!(server.transport, MachineTransport::Local) {
+        "127.0.0.1"
+    } else {
+        server.host.as_str()
+    };
+    let context = RemoteContainerContext {
+        container_ip,
+        container_label: "Host",
+        container_name: "host",
+        ssh_user: &server.ssh_user,
+        server,
+    };
+    let label = render_template(&server.target_label_template, &context, || {
+        String::from("Host")
+    });
+    let host = if matches!(server.transport, MachineTransport::Local) {
+        String::from("localhost")
+    } else {
+        render_template(&server.target_host_template, &context, || {
+            server.host.clone()
+        })
+    };
+    let description = render_template(&server.target_description_template, &context, || {
+        format!("Host workspace on {}.", server.label)
+    });
+    let terminal_command = if matches!(server.transport, MachineTransport::Local) {
+        String::from("exec /bin/zsh -l")
+    } else {
+        build_host_ssh_command(
+            server,
+            &["-tt"],
+            Some(&shell_single_quote(&default_terminal_startup_command())),
+        )
+    };
+    let notes = server
+        .notes
+        .iter()
+        .map(|note| replace_remote_placeholders(note, &context))
+        .collect::<Vec<_>>();
+    let workspace = render_workspace(&server.workspace, &context);
+    let services = if server.services.is_empty() {
+        server
+            .surfaces
+            .iter()
+            .map(|surface| web_service(&render_surface(surface, &context)))
+            .collect::<Vec<_>>()
+    } else {
+        server
+            .services
+            .iter()
+            .map(|service| render_service(service, &context))
+            .collect::<Vec<_>>()
+    };
+    let surfaces = services
+        .iter()
+        .filter_map(|service| service.web.clone())
+        .collect::<Vec<_>>();
+
+    DeveloperTarget {
+        id: machine_host_target_id(server),
+        machine_id: server.id.clone(),
+        container_id: String::from("host"),
+        transport: server.transport,
+        container_kind: ManagedContainerKind::Host,
+        label,
+        host,
+        description,
+        terminal_command,
+        terminal_startup_command: default_terminal_startup_command(),
+        notes,
+        workspace,
+        services,
+        surfaces,
+    }
 }
 
 pub(super) fn build_target_from_container(
@@ -1060,9 +1077,7 @@ pub(super) fn build_target_from_container(
         build_host_ssh_command(
             server,
             &["-tt"],
-            Some(&shell_single_quote(
-                "tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l",
-            )),
+            Some(&shell_single_quote(&default_terminal_startup_command())),
         )
     } else {
         terminal_command_for_server(server, &context)
@@ -1110,9 +1125,7 @@ pub(super) fn build_target_from_container(
         host,
         description,
         terminal_command,
-        terminal_startup_command: String::from(
-            "tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l",
-        ),
+        terminal_startup_command: default_terminal_startup_command(),
         notes,
         workspace,
         services,
@@ -1127,12 +1140,8 @@ fn build_managed_container(
 ) -> (ManagedContainer, Option<DeveloperTarget>) {
     let target = build_target_from_container(server, container);
     let ssh_command = target.terminal_command.clone();
-    let ssh_dest = if matches!(container.kind, ManagedContainerKind::Host) {
-        if matches!(server.transport, MachineTransport::Local) {
-            String::from("local")
-        } else {
-            format!("{}@{}", server.ssh_user, server.host)
-        }
+    let ssh_dest = if matches!(server.transport, MachineTransport::Local) {
+        String::from("local")
     } else {
         ssh_destination(&container.ipv4, &resolve_container_ssh_user(server, container))
     };
@@ -1144,8 +1153,6 @@ fn build_managed_container(
                 String::from("ready"),
                 String::from("Local workspace is ready."),
             )
-        } else if probe_ssh && matches!(container.kind, ManagedContainerKind::Host) {
-            probe_machine_host_ssh(server)
         } else if probe_ssh {
             probe_managed_container_ssh(server, &container.ipv4, &container.name, &ssh_user)
         } else {
@@ -1179,6 +1186,30 @@ fn build_managed_container(
     )
 }
 
+fn machine_host_state(
+    server: &RemoteContainerServer,
+    probe_ssh: bool,
+) -> (bool, String, String) {
+    if matches!(server.transport, MachineTransport::Local) {
+        return (
+            true,
+            String::from("ready"),
+            String::from("Local machine is ready."),
+        );
+    }
+
+    if probe_ssh {
+        return probe_machine_host_ssh(server);
+    }
+
+    (
+        true,
+        String::from("cached"),
+        String::from("Using cached machine snapshot."),
+    )
+}
+
+#[cfg(test)]
 pub(super) fn server_state_for_containers(containers: &[ManagedContainer]) -> (String, String) {
     if containers.is_empty() {
         return (
@@ -1219,13 +1250,74 @@ pub(super) fn server_state_for_containers(containers: &[ManagedContainer]) -> (S
     )
 }
 
+fn server_state_for_machine(
+    host_reachable: bool,
+    host_message: &str,
+    containers: &[ManagedContainer],
+) -> (String, String) {
+    if containers.is_empty() {
+        if host_reachable {
+            let message = if host_message == "Using cached machine snapshot." {
+                String::from("Using cached machine snapshot. No managed containers detected.")
+            } else {
+                String::from("Machine host is ready. No managed containers detected.")
+            };
+            return (String::from("ready"), message);
+        }
+
+        return (
+            String::from("error"),
+            format!("Machine host is unreachable: {}", host_message),
+        );
+    }
+
+    let reachable = containers
+        .iter()
+        .filter(|container| container.ssh_reachable)
+        .count();
+    let total = containers.len();
+
+    if host_reachable && reachable == total {
+        return (
+            String::from("ready"),
+            format!("Machine host is ready. {} managed container(s) are SSH reachable.", total),
+        );
+    }
+
+    if host_reachable || reachable > 0 {
+        let host_prefix = if host_reachable {
+            String::from("Machine host is ready.")
+        } else {
+            format!("Machine host is unreachable: {}", host_message)
+        };
+
+        return (
+            String::from("degraded"),
+            format!(
+                "{} {} of {} managed container(s) are SSH reachable.",
+                host_prefix, reachable, total
+            ),
+        );
+    }
+
+    (
+        String::from("error"),
+        format!(
+            "Machine host is unreachable: {} Detected {} managed container(s), but none are SSH reachable.",
+            host_message, total
+        ),
+    )
+}
+
 fn build_server_inventory(
     server: &RemoteContainerServer,
     containers: Vec<DiscoveredContainer>,
     probe_ssh: bool,
 ) -> DiscoveredServerInventory {
     let mut managed_containers = Vec::new();
-    let mut available_targets = Vec::new();
+    let host_target = build_machine_host_target(server);
+    let (host_reachable, _, host_message) = machine_host_state(server, probe_ssh);
+    let mut available_targets = vec![host_target.clone()];
 
     for container in containers {
         let (managed_container, available_target) =
@@ -1237,11 +1329,13 @@ fn build_server_inventory(
         }
     }
 
-    let (state, message) = server_state_for_containers(&managed_containers);
+    let (state, message) =
+        server_state_for_machine(host_reachable, &host_message, &managed_containers);
 
     DiscoveredServerInventory {
         server: ManagedServer {
             id: server.id.clone(),
+            host_target_id: host_target.id.clone(),
             label: server.label.clone(),
             transport: server.transport,
             host: server.host.clone(),
@@ -1266,19 +1360,37 @@ pub(super) fn discover_remote_server_inventory(
 ) -> DiscoveredServerInventory {
     match scan_server_containers(server) {
         Ok(containers) => build_server_inventory(server, containers, true),
-        Err(error) => DiscoveredServerInventory {
-            server: ManagedServer {
-                id: server.id.clone(),
-                label: server.label.clone(),
-                transport: server.transport,
-                host: server.host.clone(),
-                description: server.description.clone(),
-                state: String::from("error"),
-                message: error,
-                containers: Vec::new(),
-            },
-            available_targets: Vec::new(),
-        },
+        Err(error) => {
+            let host_target = build_machine_host_target(server);
+            let (host_reachable, _, host_message) = machine_host_state(server, true);
+            let message = if host_reachable {
+                format!("Machine host is ready, but container discovery failed: {}", error)
+            } else {
+                format!(
+                    "Machine host is unreachable: {} Container discovery failed: {}",
+                    host_message, error
+                )
+            };
+
+            DiscoveredServerInventory {
+                server: ManagedServer {
+                    id: server.id.clone(),
+                    host_target_id: host_target.id.clone(),
+                    label: server.label.clone(),
+                    transport: server.transport,
+                    host: server.host.clone(),
+                    description: server.description.clone(),
+                    state: if host_reachable {
+                        String::from("degraded")
+                    } else {
+                        String::from("error")
+                    },
+                    message,
+                    containers: Vec::new(),
+                },
+                available_targets: vec![host_target],
+            }
+        }
     }
 }
 
