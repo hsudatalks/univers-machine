@@ -306,15 +306,6 @@ export function useContainerWorkspace({
         return;
       }
 
-      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        event.preventDefault();
-        event.stopPropagation();
-        navigateContainerFromShortcut(
-          event.key === "ArrowLeft" ? "previous" : "next",
-        );
-        return;
-      }
-
       let nextPanel: ContainerToolPanel | null = null;
 
       switch (event.key) {

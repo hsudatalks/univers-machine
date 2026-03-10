@@ -19,8 +19,10 @@ const TOGGLE_SIDEBAR_MENU_ID: &str = "toggle_sidebar";
 const TOGGLE_SIDEBAR_EVENT: &str = "toggle-sidebar-requested";
 const PREVIOUS_CONTAINER_MENU_ID: &str = "previous_container";
 const NEXT_CONTAINER_MENU_ID: &str = "next_container";
+const PARENT_VIEW_MENU_ID: &str = "parent_view";
 const PREVIOUS_CONTAINER_EVENT: &str = "previous-container-requested";
 const NEXT_CONTAINER_EVENT: &str = "next-container-requested";
+const PARENT_VIEW_EVENT: &str = "parent-view-requested";
 
 #[cfg(target_os = "macos")]
 fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
@@ -54,6 +56,13 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
         "Next Container",
         true,
         Some("Cmd+Alt+Right"),
+    )?;
+    let parent_view = MenuItem::with_id(
+        app_handle,
+        PARENT_VIEW_MENU_ID,
+        "Parent View",
+        true,
+        Some("Cmd+Alt+Up"),
     )?;
 
     let app_menu = Submenu::with_items(
@@ -101,6 +110,7 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
         &[
             &previous_container,
             &next_container,
+            &parent_view,
             &PredefinedMenuItem::separator(app_handle)?,
             &PredefinedMenuItem::fullscreen(app_handle, None)?,
         ],
@@ -158,6 +168,13 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
         true,
         Some("Ctrl+Alt+Right"),
     )?;
+    let parent_view = MenuItem::with_id(
+        app_handle,
+        PARENT_VIEW_MENU_ID,
+        "Parent View",
+        true,
+        Some("Ctrl+Alt+Up"),
+    )?;
 
     let file_menu = Submenu::with_items(
         app_handle,
@@ -177,6 +194,7 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
         &[
             &previous_container,
             &next_container,
+            &parent_view,
             &PredefinedMenuItem::separator(app_handle)?,
             &PredefinedMenuItem::fullscreen(app_handle, None)?,
         ],
@@ -191,8 +209,8 @@ pub(crate) fn run() {
         .manage(TunnelState::default())
         .manage(ServiceState::default())
         .manage(DashboardState::default())
-        // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right
-        // on Windows, Cmd+Alt+Left/Right on macOS) are handled by the menu
+        // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right/Up
+        // on Windows, Cmd+Alt+Left/Right/Up on macOS) are handled by the menu
         // accelerators in build_app_menu, not by global shortcuts.
         .menu(build_app_menu)
         .on_menu_event(|app_handle, event| {
@@ -202,6 +220,8 @@ pub(crate) fn run() {
                 let _ = app_handle.emit(PREVIOUS_CONTAINER_EVENT, ());
             } else if event.id().as_ref() == NEXT_CONTAINER_MENU_ID {
                 let _ = app_handle.emit(NEXT_CONTAINER_EVENT, ());
+            } else if event.id().as_ref() == PARENT_VIEW_MENU_ID {
+                let _ = app_handle.emit(PARENT_VIEW_EVENT, ());
             }
         })
         .setup(|app| {

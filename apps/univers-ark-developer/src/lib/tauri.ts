@@ -30,6 +30,7 @@ const DASHBOARD_UPDATED_EVENT = "container-dashboard-updated";
 const SERVICE_STATUS_EVENT = "service-status";
 const PREVIOUS_CONTAINER_REQUESTED_EVENT = "previous-container-requested";
 const NEXT_CONTAINER_REQUESTED_EVENT = "next-container-requested";
+const PARENT_VIEW_REQUESTED_EVENT = "parent-view-requested";
 
 const fallbackBootstrapSeed: AppBootstrap = {
   appName: "Univers Ark Developer",
@@ -666,6 +667,18 @@ export async function listenNextContainerRequested(
   }
 
   return listen(NEXT_CONTAINER_REQUESTED_EVENT, () => {
+    handler();
+  });
+}
+
+export async function listenParentViewRequested(
+  handler: () => void,
+): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => undefined;
+  }
+
+  return listen(PARENT_VIEW_REQUESTED_EVENT, () => {
     handler();
   });
 }

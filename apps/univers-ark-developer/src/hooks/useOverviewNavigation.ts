@@ -93,7 +93,7 @@ function adjacentOverviewTargetId(
 }
 
 interface UseOverviewNavigationOptions {
-  activeViewKind: "overview" | "settings" | "server" | "container";
+  activeViewKind: "dashboard" | "overview" | "settings" | "server" | "container";
   onOpenWorkspace: (targetId: string) => void;
   targetIds: string[];
 }
@@ -147,7 +147,7 @@ export function useOverviewNavigation({
     const fallbackTargetId = targetIds[0];
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isPlatformModifier(event) || event.altKey || event.shiftKey) {
+      if (!isPlatformModifier(event) || event.shiftKey) {
         return;
       }
 
@@ -168,15 +168,27 @@ export function useOverviewNavigation({
 
       switch (event.key) {
         case "ArrowLeft":
+          if (!event.altKey) {
+            return;
+          }
           direction = "left";
           break;
         case "ArrowRight":
+          if (!event.altKey) {
+            return;
+          }
           direction = "right";
           break;
         case "ArrowUp":
+          if (!event.altKey) {
+            return;
+          }
           direction = "up";
           break;
         case "ArrowDown":
+          if (!event.altKey) {
+            return;
+          }
           direction = "down";
           break;
         default:

@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { BrowserFrameInstance } from "./components/BrowserPane";
 import { ContainerPage } from "./components/ContainerPage";
+import { GlobalDashboardPage } from "./components/GlobalDashboardPage";
 import { OverviewPage } from "./components/OverviewPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { ShellState } from "./components/ShellState";
 import { ServerPage } from "./components/ServerPage";
 import { SidebarNav } from "./components/SidebarNav";
 import { StatusBar } from "./components/StatusBar";
-import { executeCommandService, restartContainer } from "./lib/tauri";
+import {
+  executeCommandService,
+  listenParentViewRequested,
+  restartContainer,
+} from "./lib/tauri";
 import {
   browserSurfaceById,
   primaryBrowserSurface,
@@ -144,10 +149,10 @@ function clampTerminalPanelWidth(value: number, workspaceWidth: number): number 
 }
 
 function App() {
-  const [activeView, setActiveView] = useState<ActiveView>({ kind: "overview" });
+  const [activeView, setActiveView] = useState<ActiveView>({ kind: "dashboard" });
   const [visitedContainerIds, setVisitedContainerIds] = useState<string[]>([]);
   const [visitedServerIds, setVisitedServerIds] = useState<string[]>([]);
-  const previousNonSettingsViewRef = useRef<ActiveView>({ kind: "overview" });
+  const previousNonSettingsViewRef = useRef<ActiveView>({ kind: "dashboard" });
   const {
     appSettings,
     resolvedTheme,
@@ -241,6 +246,67 @@ function App() {
     );
   };
 
+  const openServerView = (serverId: string) => {
+    setActiveView({ kind: "server", serverId });
+    setVisitedServerIds((current) => uniqueStrings([...current, serverId]));
+    setExpandedServerIds((current) =>
+      current.includes(serverId) ? current : [...current, serverId],
+    );
+  };
+
+  useEffect(() => {
+    let unlistenParentView: (() => void) | undefined;
+
+    void listenParentViewRequested(() => {
+      const resolveServerForTarget = (targetId: string) => {
+        if (!bootstrap) {
+          return undefined;
+        }
+
+        return bootstrap.servers.find((server) => {
+          const hostTarget = hostTargets.find((target) => target.id === targetId);
+          if (hostTarget) {
+            return server.id === hostTarget.id.replace(/^server-host::/, "");
+          }
+
+          return server.containers.some(
+            (container) => container.targetId === targetId,
+          );
+        });
+      };
+
+      setActiveView((current) => {
+        if (current.kind === "container") {
+          const server = resolveServerForTarget(current.targetId);
+
+          if (server) {
+            setVisitedServerIds((visited) =>
+              uniqueStrings([...visited, server.id]),
+            );
+            setExpandedServerIds((expanded) =>
+              expanded.includes(server.id) ? expanded : [...expanded, server.id],
+            );
+            return { kind: "server", serverId: server.id };
+          }
+
+          return { kind: "dashboard" };
+        }
+
+        if (current.kind === "server" || current.kind === "overview") {
+          return { kind: "dashboard" };
+        }
+
+        return current;
+      });
+    }).then((dispose) => {
+      unlistenParentView = dispose;
+    });
+
+    return () => {
+      unlistenParentView?.();
+    };
+  }, [bootstrap, hostTargets, setExpandedServerIds]);
+
   if (error) {
     return <ShellState label="Error" message={error} />;
   }
@@ -249,15 +315,18 @@ function App() {
     return <ShellState label="Loading" message="Preparing target definitions." />;
   }
 
-  const isOverviewView = activeView.kind === "overview" || activeView.kind === "settings";
+  const isOverviewView =
+    activeView.kind === "overview" || activeView.kind === "settings";
   const activeStatusLabel =
-    activeView.kind === "overview"
-      ? "Overview"
-      : activeView.kind === "settings"
-        ? "Settings"
-        : activeView.kind === "server"
-          ? `Server ${visitedServers.find((server) => server.id === activeView.serverId)?.label ?? activeView.serverId}`
-          : `Container ${activeContainerTarget?.label ?? activeView.targetId}`;
+    activeView.kind === "dashboard"
+      ? "Dashboard"
+      : activeView.kind === "overview"
+        ? "Overview"
+        : activeView.kind === "settings"
+          ? "Settings"
+          : activeView.kind === "server"
+            ? `Server ${visitedServers.find((server) => server.id === activeView.serverId)?.label ?? activeView.serverId}`
+            : `Container ${activeContainerTarget?.label ?? activeView.targetId}`;
 
   return (
     <main className={`shell ${isOverviewView ? "shell-overview" : ""} ${isSidebarHidden ? "shell-sidebar-hidden" : ""}`}>
@@ -277,19 +346,17 @@ function App() {
             availableTargetIds={[...bootstrap.targets, ...hostTargets].map((target) => target.id)}
           bootstrap={bootstrap}
           expandedServerIds={expandedServerIds}
+          isDashboardActive={activeView.kind === "dashboard"}
           isOverviewActive={activeView.kind === "overview"}
           isOverviewLayout={isOverviewView}
           onSelectContainer={setContainerView}
+          onSelectDashboard={() => {
+            setActiveView({ kind: "dashboard" });
+          }}
           onSelectOverview={() => {
             setActiveView({ kind: "overview" });
             }}
-            onSelectServer={(serverId) => {
-              setActiveView({ kind: "server", serverId });
-              setVisitedServerIds((current) => uniqueStrings([...current, serverId]));
-              setExpandedServerIds((current) =>
-                current.includes(serverId) ? current : [...current, serverId],
-              );
-            }}
+            onSelectServer={openServerView}
             onToggleServer={toggleServerExpansion}
           />
         ) : null}
@@ -297,6 +364,22 @@ function App() {
         <section
           className={`content-shell ${isOverviewView ? "content-shell-overview" : ""} ${activeView.kind === "container" ? "content-shell-container" : ""}`}
         >
+        <section
+          className={`content-page ${activeView.kind === "dashboard" ? "" : "is-hidden"}`}
+        >
+          <GlobalDashboardPage
+            onOpenOverview={() => {
+              setActiveView({ kind: "overview" });
+            }}
+            onOpenServer={openServerView}
+            onOpenWorkspace={setContainerView}
+            overviewContainers={overviewContainers}
+            serviceStatuses={serviceStatuses}
+            servers={bootstrap.servers}
+            standaloneTargets={standaloneTargets}
+          />
+        </section>
+
         <section
           className={`content-page content-page-overview ${activeView.kind === "overview" ? "" : "is-hidden"}`}
         >

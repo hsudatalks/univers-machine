@@ -10,7 +10,7 @@ import {
   SidebarMenuItem,
   SidebarMenuSub,
 } from "./ui/sidebar";
-import { ChevronRight, LayoutGrid, Server, SquareTerminal } from "lucide-react";
+import { ChevronRight, LayoutDashboard, LayoutGrid, Server, SquareTerminal } from "lucide-react";
 import { serverHostTargetId } from "../lib/server-targets";
 
 interface SidebarNavProps {
@@ -19,9 +19,11 @@ interface SidebarNavProps {
   availableTargetIds: string[];
   bootstrap: AppBootstrap;
   expandedServerIds: string[];
+  isDashboardActive: boolean;
   isOverviewActive: boolean;
   isOverviewLayout?: boolean;
   onSelectContainer: (targetId: string) => void;
+  onSelectDashboard: () => void;
   onSelectOverview: () => void;
   onSelectServer: (serverId: string) => void;
   onToggleServer: (serverId: string) => void;
@@ -63,9 +65,11 @@ export function SidebarNav({
   availableTargetIds,
   bootstrap,
   expandedServerIds,
+  isDashboardActive,
   isOverviewActive,
   isOverviewLayout = false,
   onSelectContainer,
+  onSelectDashboard,
   onSelectOverview,
   onSelectServer,
   onToggleServer,
@@ -85,6 +89,19 @@ export function SidebarNav({
       <SidebarContent className="sidebar-nav" aria-label="Workspace navigation">
         <SidebarGroup>
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                className="sidebar-node-root"
+                isActive={isDashboardActive}
+                onClick={onSelectDashboard}
+                type="button"
+              >
+                <span className="sidebar-node-copy">
+                  <LayoutDashboard size={14} />
+                  <span className="sidebar-node-label">Dashboard</span>
+                </span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 className="sidebar-node-root"
