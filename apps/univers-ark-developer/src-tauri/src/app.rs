@@ -3,7 +3,7 @@ use crate::{
     commands,
     config::initialize_targets_file_path,
     dashboard::stop_all_dashboard_monitors,
-    models::{DashboardState, TerminalState, TunnelState},
+    models::{DashboardState, ServiceState, TerminalState, TunnelState},
     tunnel::{start_tunnel_supervisor, stop_all_tunnels},
 };
 use tauri::{
@@ -189,6 +189,7 @@ pub(crate) fn run() {
     tauri::Builder::default()
         .manage(TerminalState::default())
         .manage(TunnelState::default())
+        .manage(ServiceState::default())
         .manage(DashboardState::default())
         // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right
         // on Windows, Cmd+Alt+Left/Right on macOS) are handled by the menu
@@ -247,6 +248,7 @@ pub(crate) fn run() {
             commands::resize_terminal,
             commands::restart_container,
             commands::restart_tmux,
+            commands::execute_command_service,
             commands::clipboard_write,
             commands::clipboard_read,
             commands::load_targets_config,

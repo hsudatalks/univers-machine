@@ -6,6 +6,7 @@ use crate::{
         ContainerTmuxSessionInfo, DashboardMonitor, DashboardState, DeveloperTarget,
         EndpointProbeType,
     },
+    service_registry::emit_dashboard_service_statuses,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -793,6 +794,10 @@ fn emit_dashboard_update<R: Runtime>(
     refresh_seconds: u64,
     result: Result<ContainerDashboard, String>,
 ) {
+    if let Ok(dashboard) = result.as_ref() {
+        emit_dashboard_service_statuses(app, target_id, dashboard);
+    }
+
     let payload = match result {
         Ok(dashboard) => ContainerDashboardUpdate {
             target_id: target_id.to_string(),

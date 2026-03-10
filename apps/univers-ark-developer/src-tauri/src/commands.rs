@@ -24,9 +24,13 @@ use crate::{
         AppBootstrap, AppSettings, ContainerDashboard, DashboardState,
         GithubProjectState, GithubPullRequestDetail, ManagedServer, RemoteDirectoryListing,
         RemoteFilePreview, TerminalSnapshot, TerminalState, TunnelState, TunnelStatus,
-        tmux_command_service,
+        command_service, tmux_command_service,
     },
     runtime::{read_runtime_targets_file, resolve_runtime_web_surface, surface_key},
+    service_registry::{
+        emit_command_service_status, emit_dashboard_service_statuses,
+        emit_tunnel_service_status, sync_registered_web_services,
+    },
     settings::{load_app_settings as read_app_settings, save_app_settings as write_app_settings},
     terminal::{snapshot_for, spawn_terminal_session},
     tunnel::{
@@ -46,6 +50,86 @@ pub(crate) struct TunnelRestartSpec {
     pub(crate) target_id: String,
     #[serde(alias = "surfaceId")]
     pub(crate) service_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CommandServiceActionSpec {
+    pub(crate) target_id: String,
+    pub(crate) service_id: String,
+    pub(crate) action: String,
+}
+
+fn execute_command_service_inner(
+    app: Option<&AppHandle>,
+    target_id: &str,
+    service_id: &str,
+    action: &str,
+) -> Result<(), String> {
+    let target = resolve_raw_target(target_id)?;
+    let service = command_service(&target, service_id)
+        .ok_or_else(|| format!("Unknown command service {} for target {}", service_id, target_id))?;
+
+    let command = match action {
+        "restart" => service
+            .command
+            .as_ref()
+            .map(|command| command.restart.trim())
+            .filter(|command| !command.is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "Command service {} does not define a restart action",
+                    service_id
+                )
+            })?,
+        other => {
+            return Err(format!(
+                "Unsupported command service action {} for {}",
+                other, service_id
+            ));
+        }
+    };
+
+    if let Some(app) = app {
+        emit_command_service_status(
+            app,
+            target_id,
+            service_id,
+            "running",
+            format!("Executing {} action.", action),
+        );
+    }
+
+    let output = run_target_shell_command(target_id, command)?;
+    if output.status.success() {
+        if let Some(app) = app {
+            emit_command_service_status(
+                app,
+                target_id,
+                service_id,
+                "ready",
+                format!("{} action finished successfully.", action),
+            );
+        }
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    let error = if !stderr.is_empty() {
+        stderr
+    } else if !stdout.is_empty() {
+        stdout
+    } else {
+        format!("Failed to execute {} action for {}", action, service_id)
+    };
+
+    if let Some(app) = app {
+        emit_command_service_status(app, target_id, service_id, "error", error.clone());
+    }
+
+    Err(error)
 }
 
 fn restart_tunnel_inner(
@@ -258,9 +342,11 @@ pub(crate) async fn sync_tunnel_registrations(
             .map(|request| (request.target_id.clone(), request.service_id.clone()))
             .collect::<Vec<_>>();
 
+        sync_registered_web_services(&app_clone, &request_pairs);
         let statuses = sync_desired_tunnels(&app_clone, &tunnel_inner, &request_pairs)?;
 
         for status in &statuses {
+            emit_tunnel_service_status(&app_clone, status);
             let _ = app_clone.emit("tunnel-status", status.clone());
         }
 
@@ -403,11 +489,16 @@ pub(crate) async fn read_remote_file_preview(
 
 #[tauri::command]
 pub(crate) async fn load_container_dashboard(
+    app: AppHandle,
     target_id: String,
 ) -> Result<ContainerDashboard, String> {
-    async_runtime::spawn_blocking(move || read_container_dashboard(&target_id))
-        .await
-        .map_err(|error| format!("Failed to join container dashboard task: {}", error))?
+    async_runtime::spawn_blocking(move || {
+        let dashboard = read_container_dashboard(&target_id)?;
+        emit_dashboard_service_statuses(&app, &target_id, &dashboard);
+        Ok(dashboard)
+    })
+    .await
+    .map_err(|error| format!("Failed to join container dashboard task: {}", error))?
 }
 
 #[tauri::command]
@@ -478,39 +569,34 @@ pub(crate) async fn restart_container(
 }
 
 #[tauri::command]
-pub(crate) async fn restart_tmux(target_id: String) -> Result<(), String> {
+pub(crate) async fn restart_tmux(app: AppHandle, target_id: String) -> Result<(), String> {
     async_runtime::spawn_blocking(move || {
         let target = resolve_raw_target(&target_id)?;
-        let restart_command = tmux_command_service(&target)
-            .and_then(|service| service.command.as_ref())
-            .map(|command| command.restart.clone())
-            .unwrap_or_else(|| {
-                String::from(
-                    "cd ~/repos/univers-container && ./.claude/skills/container-manage/bin/cm dev restart developer",
-                )
-            });
+        let service_id = tmux_command_service(&target)
+            .map(|service| service.id.clone())
+            .unwrap_or_else(|| String::from("tmux-developer"));
 
-        let output = run_target_shell_command(
-            &target_id,
-            &restart_command,
-        )?;
-        if output.status.success() {
-            return Ok(());
-        }
-
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-        Err(if !stderr.is_empty() {
-            stderr
-        } else if !stdout.is_empty() {
-            stdout
-        } else {
-            String::from("Failed to restart tmux")
-        })
+        execute_command_service_inner(Some(&app), &target_id, &service_id, "restart")
     })
     .await
     .map_err(|error| format!("Failed to join restart tmux task: {}", error))?
+}
+
+#[tauri::command]
+pub(crate) async fn execute_command_service(
+    app: AppHandle,
+    spec: CommandServiceActionSpec,
+) -> Result<(), String> {
+    async_runtime::spawn_blocking(move || {
+        execute_command_service_inner(
+            Some(&app),
+            &spec.target_id,
+            &spec.service_id,
+            &spec.action,
+        )
+    })
+    .await
+    .map_err(|error| format!("Failed to join command service task: {}", error))?
 }
 
 #[tauri::command]

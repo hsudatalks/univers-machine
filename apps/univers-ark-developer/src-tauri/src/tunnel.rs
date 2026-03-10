@@ -10,6 +10,7 @@ use crate::{
         allocate_internal_tunnel_port, internal_probe_url, resolve_runtime_web_surface,
         resolve_runtime_vite_hmr_tunnel_command, service_key, surface_key, surface_local_port,
     },
+    service_registry::emit_tunnel_service_status,
 };
 use std::{
     collections::HashMap,
@@ -438,6 +439,7 @@ pub(crate) fn reconcile_registered_tunnel(
     if surface.tunnel_command.trim().is_empty() {
         let status = direct_tunnel_status(target_id, &surface);
         if emit_status_event {
+            emit_tunnel_service_status(app, &status);
             let _ = app.emit("tunnel-status", status.clone());
         }
         return Ok(status);
@@ -455,6 +457,7 @@ pub(crate) fn reconcile_registered_tunnel(
                 if tunnel_session_is_alive(&session)? {
                     let status = active_tunnel_status(target_id, &surface, &session);
                     if emit_status_event {
+                        emit_tunnel_service_status(app, &status);
                         let _ = app.emit("tunnel-status", status.clone());
                     }
                     return Ok(status);
@@ -474,6 +477,7 @@ pub(crate) fn reconcile_registered_tunnel(
     match start_tunnel(app, tunnel_state, target_id, &surface) {
         Ok(status) => {
             if emit_status_event {
+                emit_tunnel_service_status(app, &status);
                 let _ = app.emit("tunnel-status", status.clone());
             }
             Ok(status)
@@ -488,6 +492,7 @@ pub(crate) fn reconcile_registered_tunnel(
                 error.clone(),
             );
             if emit_status_event {
+                emit_tunnel_service_status(app, &status);
                 let _ = app.emit("tunnel-status", status);
             }
             Err(error)

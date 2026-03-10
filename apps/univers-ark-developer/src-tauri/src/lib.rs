@@ -9,6 +9,7 @@ mod github;
 mod models;
 mod proxy;
 mod runtime;
+mod service_registry;
 mod settings;
 mod shell;
 mod terminal;

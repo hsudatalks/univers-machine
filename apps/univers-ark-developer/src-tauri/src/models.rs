@@ -179,6 +179,21 @@ pub(crate) fn tmux_command_service(target: &DeveloperTarget) -> Option<&Develope
         })
 }
 
+pub(crate) fn command_service<'a>(
+    target: &'a DeveloperTarget,
+    service_id: &str,
+) -> Option<&'a DeveloperService> {
+    target.services.iter().find(|service| {
+        matches!(service.kind, DeveloperServiceKind::Command)
+            && service.id == service_id
+            && service
+                .command
+                .as_ref()
+                .map(|command| !command.restart.trim().is_empty())
+                .unwrap_or(false)
+    })
+}
+
 pub(crate) fn sync_target_services(target: &mut DeveloperTarget) {
     if target.services.is_empty() && !target.surfaces.is_empty() {
         target.services = target.surfaces.iter().map(web_service).collect();
@@ -409,6 +424,22 @@ pub(crate) struct TunnelStatus {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct ServiceStatus {
+    pub(crate) target_id: String,
+    pub(crate) service_id: String,
+    pub(crate) kind: DeveloperServiceKind,
+    pub(crate) state: String,
+    pub(crate) message: String,
+    pub(crate) local_url: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ServiceRegistration {
+    pub(crate) kind: DeveloperServiceKind,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct GithubPullRequestSummary {
     pub(crate) number: u64,
     pub(crate) title: String,
@@ -561,6 +592,12 @@ pub(crate) struct DashboardMonitor {
 #[derive(Clone, Default)]
 pub(crate) struct DashboardState {
     pub(crate) sessions: Arc<Mutex<HashMap<String, DashboardMonitor>>>,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct ServiceState {
+    pub(crate) registrations: Arc<Mutex<HashMap<String, ServiceRegistration>>>,
+    pub(crate) statuses: Arc<Mutex<HashMap<String, ServiceStatus>>>,
 }
 
 impl Clone for TunnelState {
