@@ -1,5 +1,5 @@
 import { Activity, HardDrive, Server, SquareTerminal } from "lucide-react";
-import type { DeveloperTarget, ManagedServer } from "../types";
+import type { DeveloperTarget, ManagedMachine } from "../types";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 interface ServerDashboardPaneProps {
   onOpenWorkspace: (targetId: string) => void;
   resolveTarget: (targetId: string) => DeveloperTarget | undefined;
-  server: ManagedServer;
+  server: ManagedMachine;
 }
 
 function inventoryStateVariant(

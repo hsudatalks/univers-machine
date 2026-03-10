@@ -1,6 +1,6 @@
 import { LayoutDashboard, SquareTerminal } from "lucide-react";
 import { useState } from "react";
-import type { DeveloperTarget, ManagedServer } from "../types";
+import type { DeveloperTarget, ManagedMachine } from "../types";
 import { TerminalPane } from "./TerminalPane";
 import { Button } from "./ui/button";
 import { ServerDashboardPane } from "./ServerDashboardPane";
@@ -10,7 +10,7 @@ interface ServerPageProps {
   onOpenWorkspace: (targetId: string) => void;
   pageVisible: boolean;
   resolveTarget: (targetId: string) => DeveloperTarget | undefined;
-  server: ManagedServer;
+  server: ManagedMachine;
 }
 
 type ServerToolPanel = "dashboard" | "terminals";

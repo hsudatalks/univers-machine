@@ -13,19 +13,19 @@ import {
 import { ChevronRight, LayoutDashboard, LayoutGrid, Server, SquareTerminal } from "lucide-react";
 
 interface SidebarNavProps {
-  activeServerId?: string;
+  activeMachineId?: string;
   activeTargetId?: string;
   availableTargetIds: string[];
   bootstrap: AppBootstrap;
-  expandedServerIds: string[];
+  expandedMachineIds: string[];
   isDashboardActive: boolean;
   isOverviewActive: boolean;
   isOverviewLayout?: boolean;
   onSelectContainer: (targetId: string) => void;
   onSelectDashboard: () => void;
   onSelectOverview: () => void;
-  onSelectServer: (serverId: string) => void;
-  onToggleServer: (serverId: string) => void;
+  onSelectMachine: (machineId: string) => void;
+  onToggleMachine: (machineId: string) => void;
 }
 
 function titleCase(value: string): string {
@@ -59,24 +59,24 @@ function StatusBadge({ state, title }: { state: string; title: string }) {
 }
 
 export function SidebarNav({
-  activeServerId,
+  activeMachineId,
   activeTargetId,
   availableTargetIds,
   bootstrap,
-  expandedServerIds,
+  expandedMachineIds,
   isDashboardActive,
   isOverviewActive,
   isOverviewLayout = false,
   onSelectContainer,
   onSelectDashboard,
   onSelectOverview,
-  onSelectServer,
-  onToggleServer,
+  onSelectMachine,
+  onToggleMachine,
 }: SidebarNavProps) {
   const availableTargetSet = new Set(availableTargetIds);
   const managedTargetIds = new Set(
-    bootstrap.servers.flatMap((server) =>
-      server.containers.map((container) => container.targetId),
+    bootstrap.machines.flatMap((machine) =>
+      machine.containers.map((container) => container.targetId),
     ),
   );
   const standaloneTargets = bootstrap.targets.filter(
@@ -121,27 +121,27 @@ export function SidebarNav({
           <SidebarGroupLabel>Machines</SidebarGroupLabel>
 
           <SidebarMenu className="sidebar-tree">
-            {bootstrap.servers.map((server) => {
-              const isExpanded = expandedServerIds.includes(server.id);
-              const isServerActive = activeServerId === server.id;
-              const hostContainer = server.containers.find(
+            {bootstrap.machines.map((machine) => {
+              const isExpanded = expandedMachineIds.includes(machine.id);
+              const isMachineActive = activeMachineId === machine.id;
+              const hostContainer = machine.containers.find(
                 (container) => container.kind === "host",
               );
               const hostTargetId = hostContainer?.targetId;
               const isHostActive = activeTargetId === hostTargetId;
-              const branchHasActiveTarget = server.containers.some(
+              const branchHasActiveTarget = machine.containers.some(
                 (container) => container.targetId === activeTargetId,
               );
-              const managedContainers = server.containers.filter(
+              const managedContainers = machine.containers.filter(
                 (container) => container.kind !== "host",
               );
 
               return (
-                <SidebarMenuItem className="sidebar-branch" key={server.id}>
+                <SidebarMenuItem className="sidebar-branch" key={machine.id}>
                   <div className="sidebar-branch-header">
                     <button
                       className="sidebar-branch-toggle"
-                      onClick={() => onToggleServer(server.id)}
+                      onClick={() => onToggleMachine(machine.id)}
                       type="button"
                     >
                       <ChevronRight
@@ -152,18 +152,18 @@ export function SidebarNav({
 
                     <SidebarMenuButton
                       className={branchHasActiveTarget ? "is-branch-active" : ""}
-                      isActive={isServerActive}
-                      onClick={() => onSelectServer(server.id)}
+                      isActive={isMachineActive}
+                      onClick={() => onSelectMachine(machine.id)}
                       type="button"
                     >
                       <span className="sidebar-node-copy">
                         <Server size={14} />
-                        <span className="sidebar-node-label">{server.label}</span>
+                        <span className="sidebar-node-label">{machine.label}</span>
                       </span>
 
                       <StatusBadge
-                        state={inventoryStateTone(server.state)}
-                        title={titleCase(server.state)}
+                        state={inventoryStateTone(machine.state)}
+                        title={titleCase(machine.state)}
                       />
                     </SidebarMenuButton>
                   </div>
@@ -187,8 +187,8 @@ export function SidebarNav({
                         </span>
 
                         <StatusBadge
-                          state={hostContainer?.sshReachable ? "success" : inventoryStateTone(server.state)}
-                          title={hostContainer?.sshState ?? titleCase(server.state)}
+                          state={hostContainer?.sshReachable ? "success" : inventoryStateTone(machine.state)}
+                          title={hostContainer?.sshState ?? titleCase(machine.state)}
                         />
                       </SidebarMenuButton>
 

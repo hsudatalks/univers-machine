@@ -1,11 +1,11 @@
 import { TerminalCard } from "./TerminalCard";
-import type { DeveloperTarget, ManagedContainer, ManagedServer } from "../types";
+import type { DeveloperTarget, ManagedContainer, ManagedMachine } from "../types";
 
 interface ServerTerminalsPaneProps {
   onOpenWorkspace: (targetId: string) => void;
   pageVisible: boolean;
   resolveTarget: (targetId: string) => DeveloperTarget | undefined;
-  server: ManagedServer;
+  server: ManagedMachine;
 }
 
 function UnavailableTerminalCard({ container }: { container: ManagedContainer }) {
@@ -59,7 +59,7 @@ export function ServerTerminalsPane({
           <section className="server-empty-state">
             <span className="state-label">No containers</span>
             <p className="state-copy">
-              This server does not currently expose any managed containers.
+              This machine does not currently expose any managed containers.
             </p>
           </section>
         )}

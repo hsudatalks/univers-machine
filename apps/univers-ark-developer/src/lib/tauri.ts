@@ -11,7 +11,8 @@ import type {
   GithubMergeMethod,
   GithubPullRequestDetail,
   GithubProjectState,
-  ManagedServer,
+  ManagedContainer,
+  ManagedMachine,
   RemoteDirectoryListing,
   RemoteFilePreview,
   ServiceStatus,
@@ -47,39 +48,8 @@ const fallbackBootstrapSeed: AppBootstrap = {
       message: "Local host workspace is ready.",
       containers: [
         {
-          serverId: "local",
-          serverLabel: "Local",
-          containerId: "host",
-          kind: "host",
-          transport: "local",
-          targetId: "local::host",
-          name: "host",
-          label: "Host",
-          status: "RUNNING",
-          ipv4: "",
-          sshUser: "",
-          sshDestination: "",
-          sshCommand: "exec /bin/zsh -l",
-          sshState: "ready",
-          sshMessage: "Local host workspace is ready.",
-          sshReachable: true,
-        },
-      ],
-    },
-  ],
-  servers: [
-    {
-      id: "local",
-      label: "Local",
-      transport: "local",
-      host: "localhost",
-      description: "Local machine.",
-      state: "ready",
-      message: "Local host workspace is ready.",
-      containers: [
-        {
-          serverId: "local",
-          serverLabel: "Local",
+          machineId: "local",
+          machineLabel: "Local",
           containerId: "host",
           kind: "host",
           transport: "local",
@@ -184,8 +154,6 @@ const fallbackBootstrapSeed: AppBootstrap = {
 
 const fallbackBootstrap: AppBootstrap = {
   ...fallbackBootstrapSeed,
-  machines: fallbackBootstrapSeed.machines,
-  servers: fallbackBootstrapSeed.servers,
   targets: fallbackBootstrapSeed.targets.map(resolveFallbackTarget),
 };
 
@@ -193,6 +161,51 @@ const fallbackAppSettings: AppSettings = {
   themeMode: "system",
   dashboardRefreshSeconds: 30,
 };
+
+type RawManagedContainer = Omit<ManagedContainer, "machineId" | "machineLabel"> & {
+  machineId?: string;
+  machineLabel?: string;
+  serverId?: string;
+  serverLabel?: string;
+};
+
+type RawManagedMachine = Omit<ManagedMachine, "containers"> & {
+  containers: RawManagedContainer[];
+};
+
+type RawAppBootstrap = Omit<AppBootstrap, "machines"> & {
+  machines?: RawManagedMachine[];
+  servers?: RawManagedMachine[];
+};
+
+function normalizeManagedContainer(container: RawManagedContainer): ManagedContainer {
+  return {
+    ...container,
+    machineId: container.machineId ?? container.serverId ?? "",
+    machineLabel: container.machineLabel ?? container.serverLabel ?? "",
+  };
+}
+
+function normalizeManagedMachine(machine: RawManagedMachine): ManagedMachine {
+  return {
+    ...machine,
+    containers: machine.containers.map(normalizeManagedContainer),
+  };
+}
+
+function normalizeBootstrap(bootstrap: RawAppBootstrap): AppBootstrap {
+  const machines = (bootstrap.machines ?? bootstrap.servers ?? []).map(
+    normalizeManagedMachine,
+  );
+
+  return {
+    appName: bootstrap.appName,
+    configPath: bootstrap.configPath,
+    selectedTargetId: bootstrap.selectedTargetId,
+    targets: bootstrap.targets,
+    machines,
+  };
+}
 
 function surfaceKey(targetId: string, surfaceId: string): string {
   return `${targetId}::${surfaceId}`;
@@ -427,7 +440,7 @@ function fallbackTunnelStatus(
 
 export async function loadBootstrap(): Promise<AppBootstrap> {
   try {
-    return await invoke<AppBootstrap>("load_bootstrap");
+    return normalizeBootstrap(await invoke<RawAppBootstrap>("load_bootstrap"));
   } catch (error) {
     console.warn(
       "Falling back to bundled developer targets because the Tauri backend is not available yet.",
@@ -442,7 +455,7 @@ export async function refreshBootstrap(): Promise<AppBootstrap> {
     return fallbackBootstrap;
   }
 
-  return invoke<AppBootstrap>("refresh_bootstrap");
+  return normalizeBootstrap(await invoke<RawAppBootstrap>("refresh_bootstrap"));
 }
 
 export async function loadAppSettings(): Promise<AppSettings> {
@@ -461,36 +474,42 @@ export async function saveAppSettings(settings: AppSettings): Promise<AppSetting
   return invoke<AppSettings>("save_app_settings", { settings });
 }
 
-export async function loadServerInventory(): Promise<ManagedServer[]> {
+export async function loadMachineInventory(): Promise<ManagedMachine[]> {
   if (!isTauri()) {
-    return fallbackBootstrap.servers;
+    return fallbackBootstrap.machines;
   }
 
-  return invoke<ManagedServer[]>("load_server_inventory");
+  return (await invoke<RawManagedMachine[]>("load_server_inventory")).map(
+    normalizeManagedMachine,
+  );
 }
 
-export async function refreshServerInventory(): Promise<ManagedServer[]> {
+export async function refreshMachineInventory(): Promise<ManagedMachine[]> {
   if (!isTauri()) {
-    return fallbackBootstrap.servers;
+    return fallbackBootstrap.machines;
   }
 
-  return invoke<ManagedServer[]>("refresh_server_inventory");
+  return (await invoke<RawManagedMachine[]>("refresh_server_inventory")).map(
+    normalizeManagedMachine,
+  );
 }
 
-export async function scanServerInventory(serverId: string): Promise<ManagedServer> {
+export async function scanMachineInventory(machineId: string): Promise<ManagedMachine> {
   if (!isTauri()) {
-    const server = fallbackBootstrap.servers.find((item) => item.id === serverId);
-    if (!server) {
-      throw new Error(`Unknown server ${serverId}`);
+    const machine = fallbackBootstrap.machines.find((item) => item.id === machineId);
+    if (!machine) {
+      throw new Error(`Unknown machine ${machineId}`);
     }
-    return server;
+    return machine;
   }
 
-  return invoke<ManagedServer>("scan_server_inventory", { serverId });
+  return normalizeManagedMachine(
+    await invoke<RawManagedMachine>("scan_server_inventory", { serverId: machineId }),
+  );
 }
 
 export async function restartContainer(
-  serverId: string,
+  machineId: string,
   containerName: string,
 ): Promise<void> {
   if (!isTauri()) {
@@ -498,9 +517,21 @@ export async function restartContainer(
   }
 
   return invoke<void>("restart_container", {
-    serverId,
+    serverId: machineId,
     containerName,
   });
+}
+
+export async function loadServerInventory(): Promise<ManagedMachine[]> {
+  return loadMachineInventory();
+}
+
+export async function refreshServerInventory(): Promise<ManagedMachine[]> {
+  return refreshMachineInventory();
+}
+
+export async function scanServerInventory(serverId: string): Promise<ManagedMachine> {
+  return scanMachineInventory(serverId);
 }
 
 export async function restartTmux(targetId: string): Promise<void> {

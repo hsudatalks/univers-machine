@@ -150,7 +150,7 @@ function clampTerminalPanelWidth(value: number, workspaceWidth: number): number 
 function App() {
   const [activeView, setActiveView] = useState<ActiveView>({ kind: "dashboard" });
   const [visitedContainerIds, setVisitedContainerIds] = useState<string[]>([]);
-  const [visitedServerIds, setVisitedServerIds] = useState<string[]>([]);
+  const [visitedMachineIds, setVisitedMachineIds] = useState<string[]>([]);
   const previousNonSettingsViewRef = useRef<ActiveView>({ kind: "dashboard" });
   const {
     appSettings,
@@ -158,7 +158,7 @@ function App() {
     updateDashboardRefreshSeconds,
     updateThemeMode,
   } = useAppearance();
-  const { bootstrap, error, expandedServerIds, isRefreshing, refreshInventory, setExpandedServerIds } =
+  const { bootstrap, error, expandedMachineIds, isRefreshing, refreshInventory, setExpandedMachineIds } =
     useWorkbenchBootstrap();
   const { isSidebarHidden, setIsSidebarHidden } = useSidebarState();
   const { overviewZoom, setOverviewZoom, clampOverviewZoom, roundOverviewZoom } =
@@ -166,15 +166,15 @@ function App() {
   const { tunnelStatuses, setTunnelStatus } = useTunnelStatuses();
   const { serviceStatuses } = useServiceStatuses();
   const {
-    activeContainerServer,
+    activeContainerMachine,
     activeContainerTarget,
     overviewContainers,
     overviewTerminalTargets,
     reachableContainerCount,
     standaloneTargets,
     targetById,
-    visitedServers,
-  } = useWorkbenchInventory(bootstrap, activeView, visitedServerIds);
+    visitedMachines,
+  } = useWorkbenchInventory(bootstrap, activeView, visitedMachineIds);
   const {
     activeOverviewFocusedTargetId,
     registerOverviewCardElement,
@@ -236,19 +236,19 @@ function App() {
     prepareContainerView(nextTarget);
   }
 
-  const toggleServerExpansion = (serverId: string) => {
-    setExpandedServerIds((current) =>
-      current.includes(serverId)
-        ? current.filter((entry) => entry !== serverId)
-        : [...current, serverId],
+  const toggleMachineExpansion = (machineId: string) => {
+    setExpandedMachineIds((current) =>
+      current.includes(machineId)
+        ? current.filter((entry) => entry !== machineId)
+        : [...current, machineId],
     );
   };
 
-  const openServerView = (serverId: string) => {
-    setActiveView({ kind: "server", serverId });
-    setVisitedServerIds((current) => uniqueStrings([...current, serverId]));
-    setExpandedServerIds((current) =>
-      current.includes(serverId) ? current : [...current, serverId],
+  const openMachineView = (machineId: string) => {
+    setActiveView({ kind: "machine", machineId });
+    setVisitedMachineIds((current) => uniqueStrings([...current, machineId]));
+    setExpandedMachineIds((current) =>
+      current.includes(machineId) ? current : [...current, machineId],
     );
   };
 
@@ -256,34 +256,34 @@ function App() {
     let unlistenParentView: (() => void) | undefined;
 
     void listenParentViewRequested(() => {
-      const resolveServerForTarget = (targetId: string) => {
+      const resolveMachineForTarget = (targetId: string) => {
         if (!bootstrap) {
           return undefined;
         }
 
-        return bootstrap.servers.find((server) =>
-          server.containers.some((container) => container.targetId === targetId),
+        return bootstrap.machines.find((machine) =>
+          machine.containers.some((container) => container.targetId === targetId),
         );
       };
 
       setActiveView((current) => {
         if (current.kind === "container") {
-          const server = resolveServerForTarget(current.targetId);
+          const machine = resolveMachineForTarget(current.targetId);
 
-          if (server) {
-            setVisitedServerIds((visited) =>
-              uniqueStrings([...visited, server.id]),
+          if (machine) {
+            setVisitedMachineIds((visited) =>
+              uniqueStrings([...visited, machine.id]),
             );
-            setExpandedServerIds((expanded) =>
-              expanded.includes(server.id) ? expanded : [...expanded, server.id],
+            setExpandedMachineIds((expanded) =>
+              expanded.includes(machine.id) ? expanded : [...expanded, machine.id],
             );
-            return { kind: "server", serverId: server.id };
+            return { kind: "machine", machineId: machine.id };
           }
 
           return { kind: "dashboard" };
         }
 
-        if (current.kind === "server" || current.kind === "overview") {
+        if (current.kind === "machine" || current.kind === "overview") {
           return { kind: "dashboard" };
         }
 
@@ -296,7 +296,7 @@ function App() {
     return () => {
       unlistenParentView?.();
     };
-  }, [bootstrap, setExpandedServerIds]);
+  }, [bootstrap, setExpandedMachineIds]);
 
   if (error) {
     return <ShellState label="Error" message={error} />;
@@ -315,8 +315,8 @@ function App() {
         ? "Overview"
         : activeView.kind === "settings"
           ? "Settings"
-          : activeView.kind === "server"
-            ? `Machine ${visitedServers.find((server) => server.id === activeView.serverId)?.label ?? activeView.serverId}`
+          : activeView.kind === "machine"
+            ? `Machine ${visitedMachines.find((machine) => machine.id === activeView.machineId)?.label ?? activeView.machineId}`
             : `Container ${activeContainerTarget?.label ?? activeView.targetId}`;
 
   return (
@@ -326,17 +326,17 @@ function App() {
       >
         {!isSidebarHidden ? (
         <SidebarNav
-          activeServerId={
-            activeView.kind === "server"
-              ? activeView.serverId
+          activeMachineId={
+            activeView.kind === "machine"
+              ? activeView.machineId
               : activeView.kind === "container"
-                  ? activeContainerServer?.id
+                  ? activeContainerMachine?.id
                   : undefined
             }
             activeTargetId={activeView.kind === "container" ? activeView.targetId : undefined}
             availableTargetIds={bootstrap.targets.map((target) => target.id)}
           bootstrap={bootstrap}
-          expandedServerIds={expandedServerIds}
+          expandedMachineIds={expandedMachineIds}
           isDashboardActive={activeView.kind === "dashboard"}
           isOverviewActive={activeView.kind === "overview"}
           isOverviewLayout={isOverviewView}
@@ -347,8 +347,8 @@ function App() {
           onSelectOverview={() => {
             setActiveView({ kind: "overview" });
             }}
-            onSelectServer={openServerView}
-            onToggleServer={toggleServerExpansion}
+            onSelectMachine={openMachineView}
+            onToggleMachine={toggleMachineExpansion}
           />
         ) : null}
 
@@ -362,11 +362,11 @@ function App() {
             onOpenOverview={() => {
               setActiveView({ kind: "overview" });
             }}
-            onOpenServer={openServerView}
+            onOpenMachine={openMachineView}
             onOpenWorkspace={setContainerView}
             overviewContainers={overviewContainers}
             serviceStatuses={serviceStatuses}
-            servers={bootstrap.servers}
+            machines={bootstrap.machines}
             standaloneTargets={standaloneTargets}
           />
         </section>
@@ -403,22 +403,22 @@ function App() {
               onConfigSaved={refreshInventory}
               onThemeModeChange={updateThemeMode}
               resolvedTheme={resolvedTheme}
-              servers={bootstrap.servers}
+              machines={bootstrap.machines}
             />
           </section>
 
-          {visitedServers.map((server) => (
+          {visitedMachines.map((machine) => (
             <section
-              key={server.id}
-              className={`content-page ${activeView.kind === "server" && activeView.serverId === server.id ? "" : "is-hidden"}`}
+              key={machine.id}
+              className={`content-page ${activeView.kind === "machine" && activeView.machineId === machine.id ? "" : "is-hidden"}`}
             >
               <ServerPage
                 onOpenWorkspace={setContainerView}
                 pageVisible={
-                  activeView.kind === "server" && activeView.serverId === server.id
+                  activeView.kind === "machine" && activeView.machineId === machine.id
                 }
                 resolveTarget={(targetId) => targetById.get(targetId)}
-                server={server}
+                server={machine}
               />
             </section>
           ))}
@@ -584,7 +584,7 @@ function App() {
         overviewZoomMax={OVERVIEW_ZOOM_MAX}
         overviewZoomMin={OVERVIEW_ZOOM_MIN}
         reachableContainerCount={reachableContainerCount}
-        serverCount={bootstrap.servers.length}
+        serverCount={bootstrap.machines.length}
       />
     </main>
   );

@@ -5,7 +5,7 @@ import type { AppBootstrap } from "../types";
 export function useWorkbenchBootstrap() {
   const [bootstrap, setBootstrap] = useState<AppBootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expandedServerIds, setExpandedServerIds] = useState<string[]>([]);
+  const [expandedMachineIds, setExpandedMachineIds] = useState<string[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
@@ -18,7 +18,7 @@ export function useWorkbenchBootstrap() {
         }
 
         setBootstrap(nextBootstrap);
-        setExpandedServerIds(nextBootstrap.servers.map((server) => server.id));
+        setExpandedMachineIds(nextBootstrap.machines.map((machine) => machine.id));
         setError(null);
       })
       .catch((loadError) => {
@@ -44,7 +44,7 @@ export function useWorkbenchBootstrap() {
     void refreshBootstrap()
       .then((nextBootstrap) => {
         setBootstrap(nextBootstrap);
-        setExpandedServerIds(nextBootstrap.servers.map((server) => server.id));
+        setExpandedMachineIds(nextBootstrap.machines.map((machine) => machine.id));
         setError(null);
       })
       .catch((loadError) => {
@@ -62,9 +62,9 @@ export function useWorkbenchBootstrap() {
   return {
     bootstrap,
     error,
-    expandedServerIds,
+    expandedMachineIds,
     isRefreshing,
     refreshInventory,
-    setExpandedServerIds,
+    setExpandedMachineIds,
   };
 }

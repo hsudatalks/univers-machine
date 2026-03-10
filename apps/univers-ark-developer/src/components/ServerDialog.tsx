@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ManagedServer } from "../types";
-import { loadTargetsConfig, scanServerInventory, updateTargetsConfig } from "../lib/tauri";
+import type { ManagedMachine } from "../types";
+import { loadTargetsConfig, scanMachineInventory, updateTargetsConfig } from "../lib/tauri";
 import {
   createEmptyMachine,
   createEmptyMachineContainer,
@@ -20,7 +20,7 @@ type ServerDialogTab = "general" | "connection" | "discovery" | "containers";
 interface ServerDialogProps {
   onClose: () => void;
   onSaved: () => void;
-  server?: ManagedServer | null;
+  server?: ManagedMachine | null;
   defaultProfileId?: string;
 }
 
@@ -182,7 +182,7 @@ export function ServerDialog({
 
       if (isNewServer && nextServer.discoveryMode === "auto") {
         setIsScanning(true);
-        await scanServerInventory(nextServer.id);
+        await scanMachineInventory(nextServer.id);
         setSaveMessage("Saved and scanned successfully.");
       } else {
         setSaveMessage("Saved successfully.");
@@ -208,7 +208,7 @@ export function ServerDialog({
     setSaveMessage(null);
 
     try {
-      await scanServerInventory(serverId);
+      await scanMachineInventory(serverId);
       setSaveMessage("Scanned containers successfully.");
       onSaved();
     } catch (scanError) {
@@ -480,7 +480,7 @@ function ContainersTable({
 }: {
   isScanning: boolean;
   onScan: () => void;
-  server: ManagedServer;
+  server: ManagedMachine;
 }) {
   if (server.containers.length === 0) {
     return (
@@ -490,7 +490,7 @@ function ContainersTable({
             {isScanning ? "Scanning…" : "Scan containers"}
           </Button>
         </div>
-        <p className="dialog-empty">No containers discovered on this server.</p>
+        <p className="dialog-empty">No containers discovered on this machine.</p>
       </div>
     );
   }

@@ -64,8 +64,8 @@ export interface DeveloperTarget {
 }
 
 export interface ManagedContainer {
-  serverId: string;
-  serverLabel: string;
+  machineId: string;
+  machineLabel: string;
   containerId: string;
   kind: ManagedContainerKind;
   transport: MachineTransport;
@@ -197,7 +197,6 @@ export interface AppBootstrap {
   selectedTargetId: string | null;
   targets: DeveloperTarget[];
   machines: ManagedMachine[];
-  servers: ManagedServer[];
 }
 
 export type ThemeMode = "system" | "light" | "dark";

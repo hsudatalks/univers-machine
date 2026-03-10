@@ -1,26 +1,26 @@
 import { useMemo } from "react";
-import type { AppBootstrap, DeveloperTarget, ManagedServer } from "../types";
+import type { AppBootstrap, DeveloperTarget, ManagedMachine } from "../types";
 import type { ActiveView } from "../lib/view-types";
 
 type OverviewContainerEntry = {
-  container: ManagedServer["containers"][number];
-  server: ManagedServer;
+  container: ManagedMachine["containers"][number];
+  machine: ManagedMachine;
   target: DeveloperTarget | undefined;
 };
 
-function serverForTargetId(
-  servers: ManagedServer[],
+function machineForTargetId(
+  machines: ManagedMachine[],
   targetId: string,
-): ManagedServer | undefined {
-  return servers.find((server) =>
-    server.containers.some((container) => container.targetId === targetId),
+): ManagedMachine | undefined {
+  return machines.find((machine) =>
+    machine.containers.some((container) => container.targetId === targetId),
   );
 }
 
 export function useWorkbenchInventory(
   bootstrap: AppBootstrap | null,
   activeView: ActiveView,
-  visitedServerIds: string[],
+  visitedMachineIds: string[],
 ) {
   const targetById = useMemo(
     () =>
@@ -36,8 +36,8 @@ export function useWorkbenchInventory(
   const managedTargetIds = useMemo(
     () =>
       new Set(
-        bootstrap?.servers.flatMap((server) =>
-          server.containers.map((container) => container.targetId),
+        bootstrap?.machines.flatMap((machine) =>
+          machine.containers.map((container) => container.targetId),
         ) ?? [],
       ),
     [bootstrap],
@@ -51,10 +51,10 @@ export function useWorkbenchInventory(
 
   const overviewContainers = useMemo<OverviewContainerEntry[]>(
     () =>
-      bootstrap?.servers.flatMap((server) =>
-        server.containers.map((container) => ({
+      bootstrap?.machines.flatMap((machine) =>
+        machine.containers.map((container) => ({
           container,
-          server,
+          machine,
           target: targetById.get(container.targetId),
         })),
       ) ?? [],
@@ -71,12 +71,12 @@ export function useWorkbenchInventory(
     [overviewContainers, standaloneTargets],
   );
 
-  const visitedServers = useMemo(
+  const visitedMachines = useMemo(
     () =>
-      visitedServerIds
-        .map((serverId) => bootstrap?.servers.find((server) => server.id === serverId))
-        .filter((server): server is ManagedServer => Boolean(server)),
-    [bootstrap, visitedServerIds],
+      visitedMachineIds
+        .map((machineId) => bootstrap?.machines.find((machine) => machine.id === machineId))
+        .filter((machine): machine is ManagedMachine => Boolean(machine)),
+    [bootstrap, visitedMachineIds],
   );
 
   const activeContainerTarget = useMemo(() => {
@@ -87,10 +87,10 @@ export function useWorkbenchInventory(
     return targetById.get(activeView.targetId);
   }, [activeView, targetById]);
 
-  const activeContainerServer = useMemo(
+  const activeContainerMachine = useMemo(
     () =>
       activeContainerTarget
-        ? serverForTargetId(bootstrap?.servers ?? [], activeContainerTarget.id)
+        ? machineForTargetId(bootstrap?.machines ?? [], activeContainerTarget.id)
         : undefined,
     [activeContainerTarget, bootstrap],
   );
@@ -102,13 +102,13 @@ export function useWorkbenchInventory(
   );
 
   return {
-    activeContainerServer,
+    activeContainerMachine,
     activeContainerTarget,
     overviewContainers,
     overviewTerminalTargets,
     reachableContainerCount,
     standaloneTargets,
     targetById,
-    visitedServers,
+    visitedMachines,
   };
 }

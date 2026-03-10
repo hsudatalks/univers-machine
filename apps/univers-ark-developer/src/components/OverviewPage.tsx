@@ -1,10 +1,10 @@
 import type { CSSProperties } from "react";
 import { TerminalCard } from "./TerminalCard";
-import type { DeveloperTarget, ManagedContainer, ManagedServer } from "../types";
+import type { DeveloperTarget, ManagedContainer, ManagedMachine } from "../types";
 
 interface OverviewEntry {
   container: ManagedContainer;
-  server: ManagedServer;
+  machine: ManagedMachine;
   target?: DeveloperTarget;
 }
 

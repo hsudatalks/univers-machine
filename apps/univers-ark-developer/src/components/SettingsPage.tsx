@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type {
   AppSettings,
-  ManagedServer,
+  ManagedMachine,
   ThemeMode,
 } from "../types";
 import { loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
@@ -12,7 +12,7 @@ import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { ServerDialog } from "./ServerDialog";
 
-type SettingsTab = "appearance" | "configuration" | "profiles" | "servers";
+type SettingsTab = "appearance" | "configuration" | "profiles" | "machines";
 
 interface SettingsPageProps {
   appSettings: AppSettings;
@@ -21,7 +21,7 @@ interface SettingsPageProps {
   onConfigSaved: () => void;
   onThemeModeChange: (themeMode: ThemeMode) => void;
   resolvedTheme: "light" | "dark";
-  servers: ManagedServer[];
+  machines: ManagedMachine[];
 }
 
 function badgeVariantForState(state: string | undefined): "neutral" | "success" | "warning" | "destructive" {
@@ -47,11 +47,11 @@ export function SettingsPage({
   onConfigSaved,
   onThemeModeChange,
   resolvedTheme,
-  servers,
+  machines,
 }: SettingsPageProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
-  const [selectedServer, setSelectedServer] = useState<ManagedServer | null>(null);
-  const [isCreatingServer, setIsCreatingServer] = useState(false);
+  const [selectedMachine, setSelectedMachine] = useState<ManagedMachine | null>(null);
+  const [isCreatingMachine, setIsCreatingMachine] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [profileIds, setProfileIds] = useState<string[]>([]);
@@ -108,7 +108,7 @@ export function SettingsPage({
               ["appearance", "Appearance"],
               ["configuration", "Configuration"],
               ["profiles", "Profiles"],
-              ["servers", "Machines"],
+              ["machines", "Machines"],
             ] as Array<[SettingsTab, string]>
           ).map(([tab, label]) => (
             <TabsTrigger className="settings-tab" key={tab} value={tab}>
@@ -188,52 +188,52 @@ export function SettingsPage({
             <div className="settings-field">
               <label className="settings-label">Container count</label>
               <span className="settings-value">
-                {servers.reduce((sum, server) => sum + server.containers.length, 0)} container(s)
+                {machines.reduce((sum, machine) => sum + machine.containers.length, 0)} container(s)
               </span>
             </div>
             </section>
           </TabsContent>
 
-          <TabsContent className="settings-tab-panel" value="servers">
+          <TabsContent className="settings-tab-panel" value="machines">
             <section className="settings-section">
             <div className="settings-section-heading">
               <h3 className="settings-section-title">
                 Machines
-                <span className="settings-count">{servers.length}</span>
+                <span className="settings-count">{machines.length}</span>
               </h3>
-              <Button onClick={() => setIsCreatingServer(true)} size="sm" variant="outline">
+              <Button onClick={() => setIsCreatingMachine(true)} size="sm" variant="outline">
                 Add machine
               </Button>
             </div>
-            {servers.length === 0 ? (
+            {machines.length === 0 ? (
               <p className="settings-empty">No machines configured.</p>
             ) : (
               <div className="settings-server-list">
-                {servers.map((server) => (
+                {machines.map((machine) => (
                   <button
                     className="settings-server-card"
-                    key={server.id}
-                    onClick={() => setSelectedServer(server)}
+                    key={machine.id}
+                    onClick={() => setSelectedMachine(machine)}
                     type="button"
                   >
                     <div className="settings-server-header">
-                      <span className="settings-server-label">{server.label}</span>
-                      <Badge variant={badgeVariantForState(server.state)}>
-                        {server.state}
+                      <span className="settings-server-label">{machine.label}</span>
+                      <Badge variant={badgeVariantForState(machine.state)}>
+                        {machine.state}
                       </Badge>
                     </div>
                     <div className="settings-server-meta">
-                      <span className="settings-server-host">{server.host}</span>
-                      {server.description ? (
-                        <span className="settings-server-desc">{server.description}</span>
+                      <span className="settings-server-host">{machine.host}</span>
+                      {machine.description ? (
+                        <span className="settings-server-desc">{machine.description}</span>
                       ) : null}
                     </div>
                     <div className="settings-server-footer">
                       <span className="settings-server-containers">
-                        {server.containers.length} container(s)
+                        {machine.containers.length} container(s)
                       </span>
-                      {server.message ? (
-                        <span className="settings-server-message">{server.message}</span>
+                      {machine.message ? (
+                        <span className="settings-server-message">{machine.message}</span>
                       ) : null}
                     </div>
                   </button>
@@ -314,22 +314,22 @@ export function SettingsPage({
         </div>
       </Tabs>
 
-      {selectedServer ? (
+      {selectedMachine ? (
         <ServerDialog
-          onClose={() => setSelectedServer(null)}
+          onClose={() => setSelectedMachine(null)}
           onSaved={() => {
             refreshProfiles();
             onConfigSaved();
           }}
-          server={selectedServer}
+          server={selectedMachine}
         />
       ) : null}
-      {isCreatingServer ? (
+      {isCreatingMachine ? (
         <ServerDialog
           defaultProfileId={defaultProfileId ?? profileIds[0] ?? ""}
-          onClose={() => setIsCreatingServer(false)}
+          onClose={() => setIsCreatingMachine(false)}
           onSaved={() => {
-            setIsCreatingServer(false);
+            setIsCreatingMachine(false);
             refreshProfiles();
             onConfigSaved();
           }}

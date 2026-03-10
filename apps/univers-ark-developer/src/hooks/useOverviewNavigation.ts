@@ -93,7 +93,7 @@ function adjacentOverviewTargetId(
 }
 
 interface UseOverviewNavigationOptions {
-  activeViewKind: "dashboard" | "overview" | "settings" | "server" | "container";
+  activeViewKind: "dashboard" | "overview" | "settings" | "machine" | "container";
   onOpenWorkspace: (targetId: string) => void;
   targetIds: string[];
 }

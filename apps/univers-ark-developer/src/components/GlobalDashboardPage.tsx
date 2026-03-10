@@ -3,7 +3,7 @@ import { primaryBrowserSurface } from "../lib/target-services";
 import type {
   DeveloperTarget,
   ManagedContainer,
-  ManagedServer,
+  ManagedMachine,
   ServiceStatus,
 } from "../types";
 import { Badge } from "./ui/badge";
@@ -12,17 +12,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 interface OverviewEntry {
   container: ManagedContainer;
-  server: ManagedServer;
+  machine: ManagedMachine;
   target?: DeveloperTarget;
 }
 
 interface GlobalDashboardPageProps {
   onOpenOverview: () => void;
-  onOpenServer: (serverId: string) => void;
+  onOpenMachine: (machineId: string) => void;
   onOpenWorkspace: (targetId: string) => void;
   overviewContainers: OverviewEntry[];
   serviceStatuses: Record<string, ServiceStatus>;
-  servers: ManagedServer[];
+  machines: ManagedMachine[];
   standaloneTargets: DeveloperTarget[];
 }
 
@@ -54,11 +54,11 @@ function serviceKey(targetId: string, serviceId: string): string {
 
 export function GlobalDashboardPage({
   onOpenOverview,
-  onOpenServer,
+  onOpenMachine,
   onOpenWorkspace,
   overviewContainers,
   serviceStatuses,
-  servers,
+  machines,
   standaloneTargets,
 }: GlobalDashboardPageProps) {
   const reachableContainerCount = overviewContainers.filter(
@@ -95,7 +95,7 @@ export function GlobalDashboardPage({
               <div className="dashboard-summary-copy">
                 <div className="dashboard-summary-item">
                   <span className="dashboard-meta-label">Machines</span>
-                  <span className="dashboard-meta-value">{servers.length}</span>
+                  <span className="dashboard-meta-value">{machines.length}</span>
                 </div>
                 <div className="dashboard-summary-item">
                   <span className="dashboard-meta-label">Agent teams</span>
@@ -130,25 +130,25 @@ export function GlobalDashboardPage({
               </CardTitle>
             </CardHeader>
             <CardContent className="server-dashboard-list">
-              {servers.map((server) => {
-                const reachable = server.containers.filter((item) => item.sshReachable).length;
+              {machines.map((machine) => {
+                const reachable = machine.containers.filter((item) => item.sshReachable).length;
 
                 return (
-                  <div className="server-dashboard-row" key={server.id}>
+                  <div className="server-dashboard-row" key={machine.id}>
                     <div className="server-dashboard-row-copy">
-                      <span className="server-dashboard-row-title">{server.label}</span>
+                      <span className="server-dashboard-row-title">{machine.label}</span>
                       <span className="server-dashboard-row-meta">
-                        {server.host} · {server.containers.length} container(s) · {reachable} ssh ready
+                        {machine.host} · {machine.containers.length} container(s) · {reachable} ssh ready
                       </span>
                     </div>
 
                     <div className="server-dashboard-row-actions">
-                      <Badge variant={inventoryStateVariant(server.state)}>
-                        {server.state}
+                      <Badge variant={inventoryStateVariant(machine.state)}>
+                        {machine.state}
                       </Badge>
                       <Button
                         onClick={() => {
-                          onOpenServer(server.id);
+                          onOpenMachine(machine.id);
                         }}
                         size="sm"
                         variant="ghost"
@@ -171,7 +171,7 @@ export function GlobalDashboardPage({
               </CardTitle>
             </CardHeader>
             <CardContent className="server-dashboard-list">
-              {overviewContainers.map(({ container, server, target }) => {
+              {overviewContainers.map(({ container, machine, target }) => {
                 const primary = target ? primaryBrowserSurface(target) : undefined;
                 const webState = primary && target
                   ? serviceStatuses[serviceKey(target.id, primary.id)]?.state
@@ -182,7 +182,7 @@ export function GlobalDashboardPage({
                     <div className="server-dashboard-row-copy">
                       <span className="server-dashboard-row-title">{container.label}</span>
                       <span className="server-dashboard-row-meta">
-                        {server.label} · {container.ipv4 || "no ip"} · web {webState ?? "unknown"}
+                        {machine.label} · {container.ipv4 || "no ip"} · web {webState ?? "unknown"}
                       </span>
                     </div>
 

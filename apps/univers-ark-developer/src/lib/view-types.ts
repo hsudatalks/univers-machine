@@ -2,7 +2,7 @@ export type ActiveView =
   | { kind: "dashboard" }
   | { kind: "overview" }
   | { kind: "settings" }
-  | { kind: "server"; serverId: string }
+  | { kind: "machine"; machineId: string }
   | { kind: "container"; targetId: string };
 
 export type ContainerToolPanel =
