@@ -17,6 +17,7 @@ type SettingsTab = "appearance" | "configuration" | "profiles" | "machines";
 interface SettingsPageProps {
   appSettings: AppSettings;
   configPath: string;
+  onAddMachine: () => void;
   onDashboardRefreshChange: (seconds: number) => void;
   onConfigSaved: () => void;
   onThemeModeChange: (themeMode: ThemeMode) => void;
@@ -43,6 +44,7 @@ function badgeVariantForState(state: string | undefined): "neutral" | "success" 
 export function SettingsPage({
   appSettings,
   configPath,
+  onAddMachine,
   onDashboardRefreshChange,
   onConfigSaved,
   onThemeModeChange,
@@ -51,7 +53,6 @@ export function SettingsPage({
 }: SettingsPageProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   const [selectedMachine, setSelectedMachine] = useState<ManagedMachine | null>(null);
-  const [isCreatingMachine, setIsCreatingMachine] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [profileIds, setProfileIds] = useState<string[]>([]);
@@ -201,7 +202,7 @@ export function SettingsPage({
                 Machines
                 <span className="settings-count">{machines.length}</span>
               </h3>
-              <Button onClick={() => setIsCreatingMachine(true)} size="sm" variant="outline">
+              <Button onClick={onAddMachine} size="sm" variant="outline">
                 Add machine
               </Button>
             </div>
@@ -322,17 +323,6 @@ export function SettingsPage({
             onConfigSaved();
           }}
           server={selectedMachine}
-        />
-      ) : null}
-      {isCreatingMachine ? (
-        <ServerDialog
-          defaultProfileId={defaultProfileId ?? profileIds[0] ?? ""}
-          onClose={() => setIsCreatingMachine(false)}
-          onSaved={() => {
-            setIsCreatingMachine(false);
-            refreshProfiles();
-            onConfigSaved();
-          }}
         />
       ) : null}
       {selectedProfileId ? (

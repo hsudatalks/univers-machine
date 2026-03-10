@@ -511,6 +511,7 @@ function App() {
             <SettingsPage
               appSettings={appSettings}
               configPath={bootstrap.configPath}
+              onAddMachine={() => setIsAddMachineDialogOpen(true)}
               onDashboardRefreshChange={updateDashboardRefreshSeconds}
               onConfigSaved={refreshInventory}
               onThemeModeChange={updateThemeMode}
