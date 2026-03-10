@@ -22,6 +22,8 @@ import type {
   TerminalOutputEvent,
   TerminalSnapshot,
   TunnelStatus,
+  LocalDockerContainer,
+  DockerContainerStats,
 } from "../types";
 import { browserSurfaceById } from "./target-services";
 
@@ -589,6 +591,23 @@ export async function updateTargetsConfig(content: string): Promise<void> {
   }
 
   return invoke<void>("update_targets_config", { content });
+}
+
+export async function listLocalDockerContainers(): Promise<LocalDockerContainer[]> {
+  if (!isTauri()) return [];
+  return invoke<LocalDockerContainer[]>("list_local_docker_containers");
+}
+
+export async function scanLocalContainers(): Promise<LocalDockerContainer[]> {
+  if (!isTauri()) return [];
+  return invoke<LocalDockerContainer[]>("scan_local_containers");
+}
+
+export async function getDockerStats(name: string): Promise<DockerContainerStats> {
+  if (!isTauri()) {
+    return { name, status: "unknown", cpuPercent: "--", memUsage: "--", memPercent: "--", netIo: "--", blockIo: "--", pids: "--" };
+  }
+  return invoke<DockerContainerStats>("get_docker_stats", { name });
 }
 
 export async function attachTerminal(

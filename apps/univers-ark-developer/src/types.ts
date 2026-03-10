@@ -117,6 +117,34 @@ export interface MachineImportCandidate {
   detail: string;
 }
 
+export interface MappedPort {
+  containerPort: number;
+  hostPort: number;
+  protocol: string;
+}
+
+export interface LocalDockerContainer {
+  name: string;
+  status: string;
+  image: string;
+  sshPort: number | null;
+  mappedPorts: MappedPort[];
+  role: string;
+  description: string;
+  runtime: string;
+}
+
+export interface DockerContainerStats {
+  name: string;
+  status: string;
+  cpuPercent: string;
+  memUsage: string;
+  memPercent: string;
+  netIo: string;
+  blockIo: string;
+  pids: string;
+}
+
 export interface RemoteFileEntry {
   name: string;
   path: string;

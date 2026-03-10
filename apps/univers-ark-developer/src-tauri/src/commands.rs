@@ -888,6 +888,153 @@ pub(crate) fn load_targets_config() -> Result<String, String> {
     read_targets_config()
 }
 
+// ── Docker local container discovery ─────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MappedPort {
+    pub container_port: u16,
+    pub host_port: u16,
+    pub protocol: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LocalDockerContainer {
+    pub name: String,
+    pub status: String,
+    pub image: String,
+    pub ssh_port: Option<u16>,
+    pub mapped_ports: Vec<MappedPort>,
+    pub role: String,
+    pub description: String,
+    pub runtime: String,
+}
+
+fn parse_docker_ports(ports_str: &str) -> (Vec<MappedPort>, Option<u16>) {
+    let mut mapped_ports = Vec::new();
+    let mut ssh_port: Option<u16> = None;
+    for part in ports_str.split(',') {
+        let part = part.trim();
+        if let Some(arrow) = part.find("->") {
+            let host_part = &part[..arrow];
+            let container_part = &part[arrow + 2..];
+            let host_port: u16 = host_part.rsplit(':').next()
+                .and_then(|p| p.parse().ok()).unwrap_or(0);
+            let (container_port, protocol) = if let Some(slash) = container_part.rfind('/') {
+                (container_part[..slash].parse().unwrap_or(0), container_part[slash + 1..].to_string())
+            } else {
+                (container_part.parse().unwrap_or(0), "tcp".to_string())
+            };
+            if host_port > 0 && container_port > 0 {
+                if container_port == 22 { ssh_port = Some(host_port); }
+                mapped_ports.push(MappedPort { container_port, host_port, protocol });
+            }
+        }
+    }
+    (mapped_ports, ssh_port)
+}
+
+fn parse_docker_labels(labels_str: &str) -> (String, String) {
+    let (mut role, mut description) = (String::new(), String::new());
+    for kv in labels_str.split(',') {
+        if let Some(eq) = kv.find('=') {
+            match &kv[..eq] {
+                "univers.role" => role = kv[eq + 1..].to_string(),
+                "univers.description" => description = kv[eq + 1..].to_string(),
+                _ => {}
+            }
+        }
+    }
+    (role, description)
+}
+
+fn parse_container_ps_output(stdout: &str, runtime: &str) -> Vec<LocalDockerContainer> {
+    let mut containers = Vec::new();
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() { continue; }
+        let raw: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let name = raw["Names"].as_str().unwrap_or("")
+            .trim_start_matches('/').to_string();
+        if name.is_empty() { continue; }
+        let status = raw["State"].as_str().unwrap_or("").to_string();
+        let image = raw["Image"].as_str().unwrap_or("").to_string();
+        let (mapped_ports, ssh_port) =
+            parse_docker_ports(raw["Ports"].as_str().unwrap_or(""));
+        let (role, description) =
+            parse_docker_labels(raw["Labels"].as_str().unwrap_or(""));
+        containers.push(LocalDockerContainer {
+            name,
+            status,
+            image,
+            ssh_port,
+            mapped_ports,
+            role,
+            description,
+            runtime: runtime.to_string(),
+        });
+    }
+    containers
+}
+
+fn run_ps_for_runtime(cli: &str, extra_args: &[&str]) -> Option<String> {
+    let mut cmd = std::process::Command::new(cli);
+    cmd.args(extra_args);
+    cmd.args(["ps", "-a", "--format", "{{json .}}"]);
+    match cmd.output() {
+        Ok(o) if o.status.success() => Some(String::from_utf8_lossy(&o.stdout).to_string()),
+        _ => None,
+    }
+}
+
+#[tauri::command]
+pub(crate) fn list_local_docker_containers() -> Result<Vec<LocalDockerContainer>, String> {
+    let stdout = scan_docker_stdout()
+        .ok_or_else(|| "docker ps failed".to_string())?;
+    Ok(parse_container_ps_output(&stdout, "docker"))
+}
+
+fn scan_docker_stdout() -> Option<String> {
+    if cfg!(windows) {
+        let pipes: &[Option<&str>] = &[
+            Some("npipe:////./pipe/docker_engine"),
+            Some("npipe:////./pipe/dockerDesktopLinuxEngine"),
+            None,
+        ];
+        pipes.iter().find_map(|host| {
+            let mut cmd = std::process::Command::new("docker");
+            if let Some(h) = host { cmd.args(["-H", h]); }
+            cmd.args(["ps", "-a", "--format", "{{json .}}"]);
+            match cmd.output() {
+                Ok(o) if o.status.success() => Some(String::from_utf8_lossy(&o.stdout).to_string()),
+                _ => None,
+            }
+        })
+    } else {
+        run_ps_for_runtime("docker", &[])
+    }
+}
+
+#[tauri::command]
+pub(crate) fn scan_local_containers() -> Result<Vec<LocalDockerContainer>, String> {
+    let mut all = Vec::new();
+
+    if let Some(stdout) = scan_docker_stdout() {
+        all.extend(parse_container_ps_output(&stdout, "docker"));
+    }
+    for &runtime in &["podman", "nerdctl"] {
+        if let Some(stdout) = run_ps_for_runtime(runtime, &[]) {
+            all.extend(parse_container_ps_output(&stdout, runtime));
+        }
+    }
+
+    Ok(all)
+}
+
 #[tauri::command]
 pub(crate) fn update_targets_config(content: String) -> Result<(), String> {
     save_targets_config(&content)
@@ -896,6 +1043,81 @@ pub(crate) fn update_targets_config(content: String) -> Result<(), String> {
 #[tauri::command]
 pub(crate) fn load_app_settings(app_handle: AppHandle) -> Result<AppSettings, String> {
     read_app_settings(&app_handle)
+}
+
+// ── Docker container stats ────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DockerContainerStats {
+    pub name: String,
+    pub status: String,
+    pub cpu_percent: String,
+    pub mem_usage: String,
+    pub mem_percent: String,
+    pub net_io: String,
+    pub block_io: String,
+    pub pids: String,
+}
+
+#[tauri::command]
+pub(crate) fn get_docker_stats(name: String) -> Result<DockerContainerStats, String> {
+    // Inspect status
+    let status = std::process::Command::new("docker")
+        .args(["inspect", "--format", "{{.State.Status}}", &name])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    // Only fetch resource stats when running (docker stats blocks on stopped containers)
+    if status != "running" {
+        return Ok(DockerContainerStats {
+            name,
+            status,
+            cpu_percent: "--".to_string(),
+            mem_usage: "--".to_string(),
+            mem_percent: "--".to_string(),
+            net_io: "--".to_string(),
+            block_io: "--".to_string(),
+            pids: "--".to_string(),
+        });
+    }
+
+    let stats_out = std::process::Command::new("docker")
+        .args([
+            "stats", "--no-stream", "--format",
+            r#"{"cpu":"{{.CPUPerc}}","mem":"{{.MemUsage}}","memPct":"{{.MemPerc}}","netIO":"{{.NetIO}}","blkIO":"{{.BlockIO}}","pids":"{{.PIDs}}"}"#,
+            &name,
+        ])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !stats_out.status.success() || stats_out.stdout.is_empty() {
+        return Ok(DockerContainerStats {
+            name,
+            status,
+            cpu_percent: "--".to_string(),
+            mem_usage: "--".to_string(),
+            mem_percent: "--".to_string(),
+            net_io: "--".to_string(),
+            block_io: "--".to_string(),
+            pids: "--".to_string(),
+        });
+    }
+
+    let raw: serde_json::Value = serde_json::from_slice(&stats_out.stdout)
+        .map_err(|e| format!("Failed to parse docker stats: {}", e))?;
+
+    Ok(DockerContainerStats {
+        name,
+        status,
+        cpu_percent: raw["cpu"].as_str().unwrap_or("--").to_string(),
+        mem_usage: raw["mem"].as_str().unwrap_or("--").to_string(),
+        mem_percent: raw["memPct"].as_str().unwrap_or("--").to_string(),
+        net_io: raw["netIO"].as_str().unwrap_or("--").to_string(),
+        block_io: raw["blkIO"].as_str().unwrap_or("--").to_string(),
+        pids: raw["pids"].as_str().unwrap_or("--").to_string(),
+    })
 }
 
 #[tauri::command]

@@ -13,6 +13,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { ServerDialog } from "./ServerDialog";
+import { DockerPickerDialog } from "./DockerPickerDialog";
 
 type SettingsTab = "appearance" | "configuration" | "profiles" | "machines";
 
@@ -43,6 +44,7 @@ export function SettingsPage({
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [profileIds, setProfileIds] = useState<string[]>([]);
   const [defaultProfileId, setDefaultProfileId] = useState<string | null>(null);
+  const [isAddingDocker, setIsAddingDocker] = useState(false);
 
   const refreshProfiles = () => {
     void loadTargetsConfig()
@@ -327,6 +329,13 @@ export function SettingsPage({
             refreshProfiles();
             onConfigSaved();
           }}
+        />
+      ) : null}
+
+      {isAddingDocker ? (
+        <DockerPickerDialog
+          onClose={() => setIsAddingDocker(false)}
+          onSaved={onConfigSaved}
         />
       ) : null}
     </div>
