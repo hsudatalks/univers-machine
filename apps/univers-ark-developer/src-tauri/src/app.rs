@@ -249,6 +249,8 @@ pub(crate) fn run() {
             commands::load_machine_inventory,
             commands::refresh_machine_inventory,
             commands::scan_machine_inventory,
+            commands::scan_ssh_config_machine_candidates,
+            commands::scan_tailscale_machine_candidates,
             commands::attach_terminal,
             commands::restart_terminal,
             commands::ensure_tunnel,

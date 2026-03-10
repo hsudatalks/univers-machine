@@ -17,6 +17,7 @@ interface OverviewEntry {
 }
 
 interface GlobalDashboardPageProps {
+  onAddMachine: () => void;
   onOpenOverview: () => void;
   onOpenMachine: (machineId: string) => void;
   onOpenWorkspace: (targetId: string) => void;
@@ -53,6 +54,7 @@ function serviceKey(targetId: string, serviceId: string): string {
 }
 
 export function GlobalDashboardPage({
+  onAddMachine,
   onOpenOverview,
   onOpenMachine,
   onOpenWorkspace,
@@ -114,6 +116,10 @@ export function GlobalDashboardPage({
               </div>
 
               <div className="dashboard-summary-actions">
+                <Button onClick={onAddMachine} size="sm">
+                  <Server size={14} />
+                  Add machine
+                </Button>
                 <Button onClick={onOpenOverview} size="sm" variant="ghost">
                   <LayoutDashboard size={14} />
                   Open overview

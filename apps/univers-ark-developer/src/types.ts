@@ -95,6 +95,26 @@ export interface ManagedMachine {
 
 export type ManagedServer = ManagedMachine;
 
+export interface ImportedMachineJump {
+  host: string;
+  port: number;
+  user: string;
+  identityFiles: string[];
+}
+
+export interface MachineImportCandidate {
+  importId: string;
+  machineId: string;
+  label: string;
+  host: string;
+  port: number;
+  sshUser: string;
+  identityFiles: string[];
+  jumpChain: ImportedMachineJump[];
+  description: string;
+  detail: string;
+}
+
 export interface RemoteFileEntry {
   name: string;
   path: string;

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { BrowserFrameInstance } from "./components/BrowserPane";
+import { AddMachineDialog } from "./components/AddMachineDialog";
 import { ContainerPage } from "./components/ContainerPage";
 import { GlobalDashboardPage } from "./components/GlobalDashboardPage";
 import { OverviewPage } from "./components/OverviewPage";
+import { ServerDialog } from "./components/ServerDialog";
 import { SettingsPage } from "./components/SettingsPage";
 import { ShellState } from "./components/ShellState";
 import { ServerPage } from "./components/ServerPage";
@@ -154,6 +156,8 @@ function App() {
   const [activeView, setActiveView] = useState<ActiveView>(
     () => parseActiveViewFromHash(window.location.hash) ?? { kind: "dashboard" },
   );
+  const [isAddMachineDialogOpen, setIsAddMachineDialogOpen] = useState(false);
+  const [isCreatingMachine, setIsCreatingMachine] = useState(false);
   const [visitedContainerIds, setVisitedContainerIds] = useState<string[]>([]);
   const [visitedMachineIds, setVisitedMachineIds] = useState<string[]>([]);
   const previousNonSettingsViewRef = useRef<ActiveView>(activeView);
@@ -464,6 +468,9 @@ function App() {
           className={`content-page ${activeView.kind === "dashboard" ? "" : "is-hidden"}`}
         >
           <GlobalDashboardPage
+            onAddMachine={() => {
+              setIsAddMachineDialogOpen(true);
+            }}
             onOpenOverview={() => {
               setActiveView({ kind: "overview" });
             }}
@@ -691,6 +698,32 @@ function App() {
         reachableContainerCount={reachableContainerCount}
         serverCount={bootstrap.machines.length}
       />
+
+      {isAddMachineDialogOpen ? (
+        <AddMachineDialog
+          onClose={() => {
+            setIsAddMachineDialogOpen(false);
+          }}
+          onImported={() => {
+            void refreshInventory();
+          }}
+          onOpenCustom={() => {
+            setIsCreatingMachine(true);
+          }}
+        />
+      ) : null}
+
+      {isCreatingMachine ? (
+        <ServerDialog
+          onClose={() => {
+            setIsCreatingMachine(false);
+          }}
+          onSaved={() => {
+            setIsCreatingMachine(false);
+            void refreshInventory();
+          }}
+        />
+      ) : null}
     </main>
   );
 }

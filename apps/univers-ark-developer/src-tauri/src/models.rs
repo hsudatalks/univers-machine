@@ -291,6 +291,30 @@ pub(crate) struct ManagedServer {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct ImportedMachineJump {
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) user: String,
+    pub(crate) identity_files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MachineImportCandidate {
+    pub(crate) import_id: String,
+    pub(crate) machine_id: String,
+    pub(crate) label: String,
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) ssh_user: String,
+    pub(crate) identity_files: Vec<String>,
+    pub(crate) jump_chain: Vec<ImportedMachineJump>,
+    pub(crate) description: String,
+    pub(crate) detail: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct RemoteFileEntry {
     pub(crate) name: String,
     pub(crate) path: String,

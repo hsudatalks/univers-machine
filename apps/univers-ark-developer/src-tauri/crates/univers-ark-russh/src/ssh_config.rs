@@ -89,6 +89,29 @@ impl SshConfigResolver {
         Ok(ResolvedEndpointChain { hops })
     }
 
+    pub fn aliases(&self) -> Vec<String> {
+        let mut aliases = HashSet::new();
+
+        for section in &self.sections {
+            for pattern in &section.patterns {
+                let normalized = pattern.trim();
+                if normalized.is_empty()
+                    || normalized == "*"
+                    || normalized.contains('*')
+                    || normalized.contains('?')
+                {
+                    continue;
+                }
+
+                aliases.insert(normalized.to_string());
+            }
+        }
+
+        let mut aliases = aliases.into_iter().collect::<Vec<_>>();
+        aliases.sort();
+        aliases
+    }
+
     fn resolve_into(
         &self,
         destination: &str,

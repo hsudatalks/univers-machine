@@ -11,6 +11,7 @@ import type {
   GithubMergeMethod,
   GithubPullRequestDetail,
   GithubProjectState,
+  MachineImportCandidate,
   ManagedContainer,
   ManagedMachine,
   RemoteDirectoryListing,
@@ -506,6 +507,22 @@ export async function scanMachineInventory(machineId: string): Promise<ManagedMa
   return normalizeManagedMachine(
     await invoke<RawManagedMachine>("scan_machine_inventory", { machineId }),
   );
+}
+
+export async function scanSshConfigMachineCandidates(): Promise<MachineImportCandidate[]> {
+  if (!isTauri()) {
+    throw new Error("SSH config scanning is only available in the desktop app.");
+  }
+
+  return invoke<MachineImportCandidate[]>("scan_ssh_config_machine_candidates");
+}
+
+export async function scanTailscaleMachineCandidates(): Promise<MachineImportCandidate[]> {
+  if (!isTauri()) {
+    throw new Error("Tailscale scanning is only available in the desktop app.");
+  }
+
+  return invoke<MachineImportCandidate[]>("scan_tailscale_machine_candidates");
 }
 
 export async function restartContainer(
