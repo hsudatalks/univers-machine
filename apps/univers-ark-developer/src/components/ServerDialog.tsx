@@ -149,6 +149,25 @@ export function ServerDialog({
     setSaveMessage(null);
   };
 
+  const clearContainerProfileOverrides = () => {
+    setForm((prev) => ({
+      ...prev,
+      containers: prev.containers.map((container) =>
+        container.kind === "managed"
+          ? {
+              ...container,
+              workspace: {
+                ...container.workspace,
+                profile: "",
+              },
+            }
+          : container,
+      ),
+    }));
+    setError(null);
+    setSaveMessage(null);
+  };
+
   const handleSave = async () => {
     if (!config) return;
 
@@ -298,9 +317,11 @@ export function ServerDialog({
                       value={form.description}
                     />
                     <SelectField
-                      label="Profile"
+                      hint="Used as the default for this machine and for containers that do not override it."
+                      label="Machine Profile"
                       onChange={(value) => updateWorkspaceField("profile", value)}
                       options={profileOptions.map((profile) => ({ value: profile, label: profile }))}
+                      emptyLabel="No profile"
                       value={form.workspace.profile}
                     />
                   </div>
@@ -453,9 +474,14 @@ export function ServerDialog({
                                 <EditField label="IPv4" mono onChange={(value) => updateContainerField(index, "ipv4", value)} value={container.ipv4} />
                                 <EditField label="SSH User" mono onChange={(value) => updateContainerField(index, "sshUser", value)} value={container.sshUser} />
                                 <SelectField
-                                  label="Profile"
+                                  label="Profile Override"
                                   onChange={(value) => updateContainerWorkspaceField(index, "profile", value)}
                                   options={profileOptions.map((profile) => ({ value: profile, label: profile }))}
+                                  emptyLabel={
+                                    form.workspace.profile
+                                      ? `Inherit machine profile (${form.workspace.profile})`
+                                      : "Inherit machine profile"
+                                  }
                                   value={container.workspace.profile}
                                 />
                                 <EditField label="Status" mono onChange={(value) => updateContainerField(index, "status", value)} value={container.status} />
@@ -474,6 +500,8 @@ export function ServerDialog({
                     <ContainersTable
                       containers={form.containers}
                       isScanning={isScanning}
+                      machineProfileId={form.workspace.profile}
+                      onClearProfileOverrides={clearContainerProfileOverrides}
                       profileOptions={profileOptions}
                       onProfileChange={(index, profile) => updateContainerWorkspaceField(index, "profile", profile)}
                       onScan={() => void handleScan()}
@@ -509,6 +537,8 @@ export function ServerDialog({
 function ContainersTable({
   containers,
   isScanning,
+  machineProfileId,
+  onClearProfileOverrides,
   profileOptions,
   onProfileChange,
   onScan,
@@ -517,6 +547,8 @@ function ContainersTable({
 }: {
   containers: MachineConfig["containers"];
   isScanning: boolean;
+  machineProfileId: string;
+  onClearProfileOverrides: () => void;
   profileOptions: string[];
   onProfileChange: (index: number, profile: string) => void;
   onScan: () => void;
@@ -526,6 +558,9 @@ function ContainersTable({
   const managedContainers = containers
     .map((container, index) => ({ container, index }))
     .filter(({ container }) => container.kind === "managed");
+  const hasProfileOverrides = managedContainers.some(
+    ({ container }) => container.workspace.profile.trim().length > 0,
+  );
 
   if (managedContainers.length === 0) {
     return (
@@ -546,7 +581,19 @@ function ContainersTable({
         <Button disabled={isScanning} onClick={onScan} size="sm" variant="outline">
           {isScanning ? "Scanning…" : "Scan containers"}
         </Button>
+        <Button
+          disabled={!hasProfileOverrides}
+          onClick={onClearProfileOverrides}
+          size="sm"
+          variant="ghost"
+        >
+          Use machine profile
+        </Button>
       </div>
+      <p className="dialog-section-copy">
+        Containers inherit the machine profile by default. Set a container profile only when it needs to override
+        {machineProfileId ? ` ${machineProfileId}` : " the machine profile"}.
+      </p>
       <div className="dialog-table-scroll">
         <table className="dialog-table">
           <thead>
@@ -556,7 +603,7 @@ function ContainersTable({
               <th>Name</th>
               <th>Status</th>
               <th>IPv4</th>
-              <th>Profile</th>
+              <th>Profile Override</th>
               <th>SSH User</th>
             </tr>
           </thead>
@@ -580,6 +627,7 @@ function ContainersTable({
                 <td className="dialog-table-mono">{container.ipv4 || "—"}</td>
                 <td>
                   <ProfileSelectInput
+                    machineProfileId={machineProfileId}
                     onChange={(profile) => onProfileChange(index, profile)}
                     options={profileOptions}
                     value={container.workspace.profile}
@@ -603,17 +651,23 @@ function ContainersTable({
 }
 
 function ProfileSelectInput({
+  machineProfileId,
   onChange,
   options,
   value,
 }: {
+  machineProfileId: string;
   onChange: (value: string) => void;
   options: string[];
   value: string;
 }) {
   return (
     <select className="dialog-input" onChange={(event) => onChange(event.target.value)} value={value}>
-      <option value="">Machine default</option>
+      <option value="">
+        {machineProfileId
+          ? `Inherit machine profile (${machineProfileId})`
+          : "Inherit machine profile"}
+      </option>
       {options.map((option) => (
         <option key={option} value={option}>
           {option}
@@ -682,27 +736,34 @@ function formatContainerSource(source: string): string {
 }
 
 function SelectField({
+  emptyLabel,
+  hint,
   label,
   onChange,
   options,
   value,
 }: {
+  emptyLabel?: string;
+  hint?: string;
   label: string;
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   value: string;
 }) {
   return (
-    <div className="dialog-field">
+    <div className="dialog-field-group">
+      <div className="dialog-field">
       <label className="dialog-field-label">{label}</label>
       <select className="dialog-input" onChange={(event) => onChange(event.target.value)} value={value}>
-        <option value="">Select…</option>
+        <option value="">{emptyLabel ?? "Select…"}</option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
         ))}
       </select>
+      </div>
+      {hint ? <p className="dialog-field-hint">{hint}</p> : null}
     </div>
   );
 }

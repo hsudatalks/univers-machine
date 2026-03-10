@@ -1174,6 +1174,11 @@
   gap: 0.75rem;
 }
 
+.dialog-field-group {
+  display: grid;
+  gap: 0.28rem;
+}
+
 .dialog-field-label {
   font-size: 0.75rem;
   font-weight: 500;
@@ -1193,6 +1198,14 @@
   font-family: "Iosevka", "SFMono-Regular", "Consolas", monospace;
   font-size: 0.8rem;
   color: var(--muted-foreground);
+}
+
+.dialog-field-hint,
+.dialog-section-copy {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.74rem;
+  line-height: 1.45;
 }
 
 .dialog-table {
