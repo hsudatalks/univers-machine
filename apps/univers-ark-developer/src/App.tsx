@@ -322,8 +322,6 @@ function App() {
               onThemeModeChange={updateThemeMode}
               resolvedTheme={resolvedTheme}
               servers={bootstrap.servers}
-              targets={bootstrap.targets}
-              tunnelStatuses={tunnelStatuses}
             />
           </section>
 
