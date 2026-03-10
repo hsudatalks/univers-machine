@@ -53,6 +53,7 @@ pub(super) enum ContainerManagerType {
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub(super) enum ContainerDiscoveryMode {
+    #[serde(rename = "host-only", alias = "hostOnly")]
     HostOnly,
     #[default]
     Auto,
