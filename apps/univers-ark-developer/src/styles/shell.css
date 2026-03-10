@@ -1098,6 +1098,39 @@
   gap: 0.75rem;
 }
 
+.dialog-section-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.dialog-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.dialog-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 0.1rem);
+  background: var(--panel-muted);
+}
+
+.dialog-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.dialog-card-title {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
 .dialog-field-grid {
   display: flex;
   flex-direction: column;

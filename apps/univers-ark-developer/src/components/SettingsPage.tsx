@@ -1,15 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   AppSettings,
   ManagedServer,
   ThemeMode,
 } from "../types";
+import { loadTargetsConfig } from "../lib/tauri";
+import { parseTargetsConfig } from "../lib/targets-config";
+import { ProfileDialog } from "./ProfileDialog";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { ServerDialog } from "./ServerDialog";
 
-type SettingsTab = "appearance" | "configuration" | "servers";
+type SettingsTab = "appearance" | "configuration" | "profiles" | "servers";
 
 interface SettingsPageProps {
   appSettings: AppSettings;
@@ -48,6 +51,20 @@ export function SettingsPage({
 }: SettingsPageProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   const [selectedServer, setSelectedServer] = useState<ManagedServer | null>(null);
+  const [isCreatingServer, setIsCreatingServer] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+  const [profileIds, setProfileIds] = useState<string[]>([]);
+
+  const refreshProfiles = () => {
+    void loadTargetsConfig()
+      .then((raw) => setProfileIds(Object.keys(parseTargetsConfig(raw).profiles).sort()))
+      .catch(() => setProfileIds([]));
+  };
+
+  useEffect(() => {
+    refreshProfiles();
+  }, [configPath]);
 
   return (
     <div className="settings-page">
@@ -70,6 +87,7 @@ export function SettingsPage({
             [
               ["appearance", "Appearance"],
               ["configuration", "Configuration"],
+              ["profiles", "Profiles"],
               ["servers", "Servers"],
             ] as Array<[SettingsTab, string]>
           ).map(([tab, label]) => (
@@ -158,10 +176,15 @@ export function SettingsPage({
 
           <TabsContent className="settings-tab-panel" value="servers">
             <section className="settings-section">
-            <h3 className="settings-section-title">
-              Servers
-              <span className="settings-count">{servers.length}</span>
-            </h3>
+            <div className="settings-section-heading">
+              <h3 className="settings-section-title">
+                Servers
+                <span className="settings-count">{servers.length}</span>
+              </h3>
+              <Button onClick={() => setIsCreatingServer(true)} size="sm" variant="outline">
+                Add server
+              </Button>
+            </div>
             {servers.length === 0 ? (
               <p className="settings-empty">No servers configured.</p>
             ) : (
@@ -199,14 +222,84 @@ export function SettingsPage({
             )}
             </section>
           </TabsContent>
+
+          <TabsContent className="settings-tab-panel" value="profiles">
+            <section className="settings-section">
+              <div className="settings-section-heading">
+                <h3 className="settings-section-title">
+                  Profiles
+                  <span className="settings-count">{profileIds.length}</span>
+                </h3>
+                <Button onClick={() => setIsCreatingProfile(true)} size="sm" variant="outline">
+                  Add profile
+                </Button>
+              </div>
+              {profileIds.length === 0 ? (
+                <p className="settings-empty">No profiles configured.</p>
+              ) : (
+                <div className="settings-server-list">
+                  {profileIds.map((profileId) => (
+                    <button
+                      className="settings-server-card"
+                      key={profileId}
+                      onClick={() => setSelectedProfileId(profileId)}
+                      type="button"
+                    >
+                      <div className="settings-server-header">
+                        <span className="settings-server-label">{profileId}</span>
+                        <Badge variant="neutral">Profile</Badge>
+                      </div>
+                      <div className="settings-server-meta">
+                        <span className="settings-server-host">Workspace and services defaults</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          </TabsContent>
         </div>
       </Tabs>
 
       {selectedServer ? (
         <ServerDialog
           onClose={() => setSelectedServer(null)}
-          onSaved={onConfigSaved}
+          onSaved={() => {
+            refreshProfiles();
+            onConfigSaved();
+          }}
           server={selectedServer}
+        />
+      ) : null}
+      {isCreatingServer ? (
+        <ServerDialog
+          defaultProfileId={profileIds[0] ?? ""}
+          onClose={() => setIsCreatingServer(false)}
+          onSaved={() => {
+            setIsCreatingServer(false);
+            refreshProfiles();
+            onConfigSaved();
+          }}
+        />
+      ) : null}
+      {selectedProfileId ? (
+        <ProfileDialog
+          onClose={() => setSelectedProfileId(null)}
+          onSaved={() => {
+            refreshProfiles();
+            onConfigSaved();
+          }}
+          profileId={selectedProfileId}
+        />
+      ) : null}
+      {isCreatingProfile ? (
+        <ProfileDialog
+          onClose={() => setIsCreatingProfile(false)}
+          onSaved={() => {
+            setIsCreatingProfile(false);
+            refreshProfiles();
+            onConfigSaved();
+          }}
         />
       ) : null}
     </div>
