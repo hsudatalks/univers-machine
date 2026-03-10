@@ -509,7 +509,10 @@ agent_info = {{
     "latestReportUpdatedAt": iso_timestamp(latest_report[1]) if latest_report else None,
 }}
 
-loadavg = os.getloadavg()
+try:
+    loadavg = os.getloadavg()
+except AttributeError:
+    loadavg = (0.0, 0.0, 0.0)
 process_count = 0
 if os.path.isdir("/proc"):
     for entry in os.listdir("/proc"):
@@ -606,7 +609,7 @@ print(json.dumps({{
         "headSummary": head_summary,
     }},
     "runtime": {{
-        "hostname": os.uname().nodename,
+        "hostname": (os.uname().nodename if hasattr(os, "uname") else socket.gethostname()),
         "uptimeSeconds": int(float(open('/proc/uptime').read().split()[0])) if os.path.exists('/proc/uptime') else 0,
         "processCount": process_count,
         "loadAverage1m": round(loadavg[0], 2),
@@ -697,12 +700,88 @@ pub(crate) fn load_container_dashboard(target_id: &str) -> Result<ContainerDashb
     })
 }
 
+/// On Windows, run the embedded Python dashboard script directly via stdin
+/// instead of through bash heredoc syntax, which the Windows shell_command
+/// path cannot handle.
+#[cfg(windows)]
+fn run_dashboard_python_windows(command: &str, target: &DeveloperTarget) -> Result<Vec<u8>, String> {
+    use std::io::Write;
+
+    // Extract the Python script body from between <<'PY'\n ... \nPY
+    let script = command
+        .split_once("<<'PY'\n")
+        .and_then(|(_, rest)| rest.rsplit_once("\nPY"))
+        .map(|(script, _)| script)
+        .ok_or_else(|| "Failed to extract Python script from dashboard command".to_string())?;
+
+    let declared_services = serde_json::to_string(&declared_dashboard_services(target))
+        .map_err(|e| format!("Failed to serialize declared services: {}", e))?;
+    let project_path = target_project_path(target);
+
+    let python_exe = if std::process::Command::new("python3")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_or(false, |s| s.success())
+    {
+        "python3"
+    } else {
+        "python"
+    };
+
+    let mut child = std::process::Command::new(python_exe)
+        .arg("-")
+        .env("UNIVERS_ARK_PROJECT_PATH", project_path)
+        .env("UNIVERS_ARK_DECLARED_SERVICES", &declared_services)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to launch Python for local dashboard: {}", e))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(script.as_bytes());
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Failed to run local dashboard: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Err(if !stderr.is_empty() {
+            stderr
+        } else if !stdout_str.is_empty() {
+            stdout_str
+        } else {
+            "Local Python dashboard script failed".to_string()
+        });
+    }
+
+    Ok(output.stdout)
+}
+
 fn load_container_dashboard_stdout(target_id: &str) -> Result<Vec<u8>, String> {
     let target = resolve_raw_target(target_id)?;
     let command = dashboard_command(&target)?;
 
     if let Ok(stdout) = load_container_dashboard_via_russh(target_id, &command) {
         return Ok(stdout);
+    }
+
+    // On Windows, bash heredoc syntax is not supported by shell_command.
+    // For standalone local targets (not SSH containers), run Python directly.
+    #[cfg(windows)]
+    {
+        let servers = read_server_inventory(false)?;
+        let is_container = servers
+            .iter()
+            .any(|s| s.containers.iter().any(|c| c.target_id == target_id));
+        if !is_container {
+            return run_dashboard_python_windows(&command, &target);
+        }
     }
 
     let output = run_target_shell_command(target_id, &command)?;
