@@ -57,8 +57,6 @@ function importedCandidateToMachine(
     host: candidate.host,
     port: candidate.port,
     description: candidate.description,
-    managerType: "none",
-    discoveryMode: "host-only",
     sshUser: candidate.sshUser || machine.sshUser,
     identityFiles: candidate.identityFiles,
     jumpChain: candidate.jumpChain,
@@ -118,7 +116,10 @@ export function AddMachineDialog({
       setCandidatesBySource((current) => ({ ...current, [source]: nextCandidates }));
       setSelectedImportIdsBySource((current) => ({
         ...current,
-        [source]: nextCandidates.map((candidate) => candidate.importId),
+        [source]:
+          source === "ssh-config"
+            ? []
+            : nextCandidates.map((candidate) => candidate.importId),
       }));
     } catch (error) {
       setCandidatesBySource((current) => ({ ...current, [source]: [] }));
@@ -151,6 +152,17 @@ export function AddMachineDialog({
           : [...selected, importId],
       };
     });
+  };
+
+  const setSelectedForActiveSource = (nextImportIds: string[]) => {
+    if (activeSource === "custom") {
+      return;
+    }
+
+    setSelectedImportIdsBySource((current) => ({
+      ...current,
+      [activeSource]: nextImportIds,
+    }));
   };
 
   const handleImport = async () => {
@@ -204,7 +216,11 @@ export function AddMachineDialog({
           </Button>
         </header>
 
-        <Tabs onValueChange={(value) => setActiveSource(value as MachineImportSource)} value={activeSource}>
+        <Tabs
+          className="dialog-tabs-root"
+          onValueChange={(value) => setActiveSource(value as MachineImportSource)}
+          value={activeSource}
+        >
           <TabsList className="dialog-tabs" aria-label="Machine import sources">
             <TabsTrigger className="dialog-tab" value="ssh-config">SSH Config</TabsTrigger>
             <TabsTrigger className="dialog-tab" value="tailscale">Tailscale</TabsTrigger>
@@ -220,7 +236,9 @@ export function AddMachineDialog({
                 isImporting={isImporting}
                 isScanning={isScanning}
                 onImport={handleImport}
+                onClearSelection={() => setSelectedForActiveSource([])}
                 onRescan={() => void handleScan("ssh-config")}
+                onSelectAll={() => setSelectedForActiveSource(candidates.map((candidate) => candidate.importId))}
                 onToggleCandidate={toggleCandidate}
                 selectedImportIds={selectedImportIds}
                 sourceLabel={sourceLabel("ssh-config")}
@@ -235,7 +253,9 @@ export function AddMachineDialog({
                 isImporting={isImporting}
                 isScanning={isScanning}
                 onImport={handleImport}
+                onClearSelection={() => setSelectedForActiveSource([])}
                 onRescan={() => void handleScan("tailscale")}
+                onSelectAll={() => setSelectedForActiveSource(candidates.map((candidate) => candidate.importId))}
                 onToggleCandidate={toggleCandidate}
                 selectedImportIds={selectedImportIds}
                 sourceLabel={sourceLabel("tailscale")}
@@ -290,8 +310,10 @@ function MachineImportTab({
   importLabel,
   isImporting,
   isScanning,
+  onClearSelection,
   onImport,
   onRescan,
+  onSelectAll,
   onToggleCandidate,
   selectedImportIds,
   sourceLabel,
@@ -301,8 +323,10 @@ function MachineImportTab({
   importLabel: string;
   isImporting: boolean;
   isScanning: boolean;
+  onClearSelection: () => void;
   onImport: () => void;
   onRescan: () => void;
+  onSelectAll: () => void;
   onToggleCandidate: (importId: string) => void;
   selectedImportIds: string[];
   sourceLabel: string;
@@ -323,6 +347,22 @@ function MachineImportTab({
         <div className="dialog-inline-actions">
           <Button disabled={isScanning} onClick={onRescan} size="sm" variant="outline">
             {isScanning ? "Scanning…" : `Scan ${sourceLabel}`}
+          </Button>
+          <Button
+            disabled={candidates.length === 0 || isScanning}
+            onClick={onSelectAll}
+            size="sm"
+            variant="ghost"
+          >
+            Select all
+          </Button>
+          <Button
+            disabled={selectedImportIds.length === 0 || isScanning}
+            onClick={onClearSelection}
+            size="sm"
+            variant="ghost"
+          >
+            Clear
           </Button>
           <Button
             disabled={isImporting || selectedImportIds.length === 0}

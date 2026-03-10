@@ -42,7 +42,7 @@ export interface ContainerWorkspace {
   projectPath: string;
   filesRoot: string;
   primaryWebServiceId?: string;
-  primaryBrowserServiceId: string;
+  primaryBrowserServiceId?: string;
   tmuxCommandServiceId: string;
 }
 

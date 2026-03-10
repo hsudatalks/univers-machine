@@ -11,6 +11,14 @@ export type MachineTransport = "local" | "ssh";
 export type ContainerManagerType = "none" | "lxd" | "docker" | "orbstack";
 export type ContainerDiscoveryMode = "host-only" | "auto" | "manual";
 export type MachineContainerKind = "host" | "managed";
+export type MachineContainerSource =
+  | "host"
+  | "manual"
+  | "orbstack"
+  | "docker"
+  | "lxd"
+  | "custom"
+  | "unknown";
 
 export interface EditableEndpointService {
   probeType: EndpointProbeType;
@@ -46,6 +54,8 @@ export interface MachineContainerConfig {
   id: string;
   name: string;
   kind: MachineContainerKind;
+  enabled: boolean;
+  source: MachineContainerSource;
   label: string;
   description: string;
   ipv4: string;
@@ -94,8 +104,13 @@ function normalizeWorkspace(
   workspace: Partial<ContainerWorkspace> | undefined,
 ): ContainerWorkspace {
   return {
-    ...createEmptyWorkspace(workspace?.profile ?? ""),
-    ...workspace,
+    profile: workspace?.profile ?? "",
+    defaultTool: workspace?.defaultTool ?? "dashboard",
+    projectPath: workspace?.projectPath ?? "",
+    filesRoot: workspace?.filesRoot ?? "",
+    primaryWebServiceId:
+      workspace?.primaryWebServiceId ?? workspace?.primaryBrowserServiceId ?? "",
+    tmuxCommandServiceId: workspace?.tmuxCommandServiceId ?? "",
   };
 }
 
@@ -119,6 +134,13 @@ function normalizeMachineContainer(
   return {
     ...createEmptyMachineContainer(),
     ...container,
+    source:
+      container?.source ??
+      (container?.kind === "host"
+        ? "host"
+        : container?.ipv4?.trim()
+          ? "unknown"
+          : "manual"),
     workspace: normalizeWorkspace(container?.workspace),
     services: container?.services ?? [],
     surfaces: container?.surfaces ?? [],
@@ -182,7 +204,6 @@ export function createEmptyWorkspace(profile = ""): ContainerWorkspace {
     projectPath: "",
     filesRoot: "",
     primaryWebServiceId: "",
-    primaryBrowserServiceId: "",
     tmuxCommandServiceId: "",
   };
 }
@@ -264,6 +285,8 @@ export function createHostContainer(profileId = ""): MachineContainerConfig {
     id: "host",
     name: "host",
     kind: "host",
+    enabled: true,
+    source: "host",
     label: "Host",
     description: "",
     ipv4: "",
@@ -279,6 +302,8 @@ export function createEmptyMachineContainer(): MachineContainerConfig {
     id: "",
     name: "",
     kind: "managed",
+    enabled: true,
+    source: "manual",
     label: "",
     description: "",
     ipv4: "",
@@ -297,7 +322,7 @@ export function createEmptyMachine(profileId = ""): MachineConfig {
     host: "",
     port: 22,
     description: "",
-    managerType: "lxd",
+    managerType: "none",
     discoveryMode: "auto",
     discoveryCommand: "",
     sshUser: "ubuntu",

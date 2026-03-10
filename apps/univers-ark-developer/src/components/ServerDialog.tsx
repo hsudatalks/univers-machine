@@ -7,7 +7,6 @@ import {
   parseTargetsConfig,
   stringifyTargetsConfig,
   type ContainerDiscoveryMode,
-  type ContainerManagerType,
   type MachineConfig,
   type TargetsConfigDocument,
 } from "../lib/targets-config";
@@ -42,32 +41,40 @@ export function ServerDialog({
 
   const isCreateMode = !server;
 
+  const loadMachineFromDisk = useCallback(
+    async (machineId?: string | null) => {
+      const raw = await loadTargetsConfig();
+      const parsed = parseTargetsConfig(raw);
+      setConfig(parsed);
+
+      if (machineId) {
+        const match = parsed.machines.find((entry) => entry.id === machineId);
+        if (!match) {
+          throw new Error(`Machine "${machineId}" not found in config.`);
+        }
+
+        setForm(match);
+        setOriginalId(match.id);
+        return;
+      }
+
+      setForm(createEmptyMachine(defaultProfileId || Object.keys(parsed.profiles)[0] || ""));
+    },
+    [defaultProfileId],
+  );
+
   const loadServerConfig = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const raw = await loadTargetsConfig();
-      const parsed = parseTargetsConfig(raw);
-      setConfig(parsed);
-
-      if (server) {
-        const match = parsed.machines.find((entry) => entry.id === server.id);
-        if (match) {
-          setForm(match);
-          setOriginalId(match.id);
-        } else {
-          setError(`Machine "${server.id}" not found in config.`);
-        }
-      } else {
-        setForm(createEmptyMachine(defaultProfileId || Object.keys(parsed.profiles)[0] || ""));
-      }
+      await loadMachineFromDisk(server?.id ?? null);
     } catch (loadError) {
       setError(String(loadError));
     } finally {
       setIsLoading(false);
     }
-  }, [defaultProfileId, server]);
+  }, [loadMachineFromDisk, server]);
 
   useEffect(() => {
     void loadServerConfig();
@@ -103,10 +110,10 @@ export function ServerDialog({
     setSaveMessage(null);
   };
 
-  const updateManualContainerField = (
+  const updateContainerField = <K extends keyof MachineConfig["containers"][number]>(
     index: number,
-    field: keyof MachineConfig["containers"][number],
-    value: string,
+    field: K,
+    value: MachineConfig["containers"][number][K],
   ) => {
     setForm((prev) => ({
       ...prev,
@@ -146,21 +153,21 @@ export function ServerDialog({
           id: "host",
           name: "host",
           kind: "host" as const,
+          enabled: true,
           label: "Host",
         };
       const nextServer: MachineConfig = {
         ...form,
         id: nextId,
-        containers:
-          form.discoveryMode === "manual"
-            ? [
-                hostContainer,
-                ...form.containers.filter(
-                  (container) =>
-                    container.kind === "managed" && container.name.trim() && container.ipv4.trim(),
-                ),
-              ]
-            : [hostContainer],
+        containers: [
+          {
+            ...hostContainer,
+            enabled: true,
+          },
+          ...form.containers.filter(
+            (container) => container.kind === "managed" && container.name.trim(),
+          ),
+        ],
       };
 
       const existingIndex = nextConfig.machines.findIndex(
@@ -183,6 +190,7 @@ export function ServerDialog({
       if (isNewServer && nextServer.discoveryMode === "auto") {
         setIsScanning(true);
         await scanMachineInventory(nextServer.id);
+        await loadMachineFromDisk(nextServer.id);
         setSaveMessage("Saved and scanned successfully.");
       } else {
         setSaveMessage("Saved successfully.");
@@ -209,6 +217,7 @@ export function ServerDialog({
 
     try {
       await scanMachineInventory(serverId);
+      await loadMachineFromDisk(serverId);
       setSaveMessage("Scanned containers successfully.");
       onSaved();
     } catch (scanError) {
@@ -244,7 +253,11 @@ export function ServerDialog({
           </Button>
         </header>
 
-        <Tabs onValueChange={(value) => setActiveTab(value as ServerDialogTab)} value={activeTab}>
+        <Tabs
+          className="dialog-tabs-root"
+          onValueChange={(value) => setActiveTab(value as ServerDialogTab)}
+          value={activeTab}
+        >
           <TabsList className="dialog-tabs" aria-label="Machine settings sections">
             <TabsTrigger className="dialog-tab" value="general">General</TabsTrigger>
             <TabsTrigger className="dialog-tab" value="connection">Connection</TabsTrigger>
@@ -335,17 +348,6 @@ export function ServerDialog({
                 <TabsContent value="discovery">
                   <div className="dialog-tab-content">
                     <SelectField
-                      label="Container manager"
-                      onChange={(value) => updateField("managerType", value as ContainerManagerType)}
-                      options={[
-                        { value: "none", label: "None" },
-                        { value: "lxd", label: "LXD" },
-                        { value: "docker", label: "Docker" },
-                        { value: "orbstack", label: "OrbStack" },
-                      ]}
-                      value={form.managerType}
-                    />
-                    <SelectField
                       label="Discovery mode"
                       onChange={(value) => updateField("discoveryMode", value as ContainerDiscoveryMode)}
                       options={[
@@ -430,11 +432,16 @@ export function ServerDialog({
                                 </Button>
                               </div>
                               <div className="dialog-field-grid">
-                                <EditField label="ID" mono onChange={(value) => updateManualContainerField(index, "id", value)} value={container.id} />
-                                <EditField label="Name" mono onChange={(value) => updateManualContainerField(index, "name", value)} value={container.name} />
-                                <EditField label="Label" onChange={(value) => updateManualContainerField(index, "label", value)} value={container.label} />
-                                <EditField label="IPv4" mono onChange={(value) => updateManualContainerField(index, "ipv4", value)} value={container.ipv4} />
-                                <EditField label="Status" mono onChange={(value) => updateManualContainerField(index, "status", value)} value={container.status} />
+                                <EditField label="ID" mono onChange={(value) => updateContainerField(index, "id", value)} value={container.id} />
+                                <EditField label="Name" mono onChange={(value) => updateContainerField(index, "name", value)} value={container.name} />
+                                <EditField label="Label" onChange={(value) => updateContainerField(index, "label", value)} value={container.label} />
+                                <EditField label="IPv4" mono onChange={(value) => updateContainerField(index, "ipv4", value)} value={container.ipv4} />
+                                <EditField label="Status" mono onChange={(value) => updateContainerField(index, "status", value)} value={container.status} />
+                                <ToggleField
+                                  checked={container.enabled}
+                                  label="Enabled"
+                                  onChange={(checked) => updateContainerField(index, "enabled", checked)}
+                                />
                               </div>
                             </div>
                           ))}
@@ -443,9 +450,10 @@ export function ServerDialog({
                     </div>
                   ) : server ? (
                     <ContainersTable
+                      containers={form.containers}
                       isScanning={isScanning}
                       onScan={() => void handleScan()}
-                      server={server}
+                      onToggleEnabled={(index, enabled) => updateContainerField(index, "enabled", enabled)}
                     />
                   ) : (
                     <div className="dialog-tab-content">
@@ -474,15 +482,21 @@ export function ServerDialog({
 }
 
 function ContainersTable({
+  containers,
   isScanning,
   onScan,
-  server,
+  onToggleEnabled,
 }: {
+  containers: MachineConfig["containers"];
   isScanning: boolean;
   onScan: () => void;
-  server: ManagedMachine;
+  onToggleEnabled: (index: number, enabled: boolean) => void;
 }) {
-  if (server.containers.length === 0) {
+  const managedContainers = containers
+    .map((container, index) => ({ container, index }))
+    .filter(({ container }) => container.kind === "managed");
+
+  if (managedContainers.length === 0) {
     return (
       <div className="dialog-tab-content">
         <div className="dialog-section-actions">
@@ -490,7 +504,7 @@ function ContainersTable({
             {isScanning ? "Scanning…" : "Scan containers"}
           </Button>
         </div>
-        <p className="dialog-empty">No containers discovered on this machine.</p>
+        <p className="dialog-empty">No containers discovered in config for this machine.</p>
       </div>
     );
   }
@@ -505,33 +519,58 @@ function ContainersTable({
       <table className="dialog-table">
         <thead>
           <tr>
+            <th>Enabled</th>
+            <th>Source</th>
             <th>Name</th>
             <th>Status</th>
             <th>IPv4</th>
-            <th>SSH</th>
           </tr>
         </thead>
         <tbody>
-          {server.containers.map((container) => (
-            <tr key={container.name}>
-              <td className="dialog-table-mono">{container.label}</td>
+          {managedContainers.map(({ container, index }) => (
+            <tr key={container.id || container.name || index}>
+              <td>
+                <input
+                  checked={container.enabled}
+                  onChange={(event) => onToggleEnabled(index, event.target.checked)}
+                  type="checkbox"
+                />
+              </td>
+              <td>{formatContainerSource(container.source)}</td>
+              <td className="dialog-table-mono">{container.name || container.label || "—"}</td>
               <td>
                 <Badge variant={container.status === "RUNNING" ? "success" : "warning"}>
                   {container.status}
                 </Badge>
               </td>
               <td className="dialog-table-mono">{container.ipv4 || "—"}</td>
-              <td>
-                <Badge variant={container.sshReachable ? "success" : "destructive"}>
-                  {container.sshState}
-                </Badge>
-              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
   );
+}
+
+function formatContainerSource(source: string): string {
+  switch (source) {
+    case "orbstack":
+      return "OrbStack";
+    case "docker":
+      return "Docker";
+    case "lxd":
+      return "LXD";
+    case "manual":
+      return "Manual";
+    case "host":
+      return "Host";
+    case "custom":
+      return "Custom";
+    case "unknown":
+      return "Unknown";
+    default:
+      return source || "Unknown";
+  }
 }
 
 function SelectField({
@@ -596,5 +635,26 @@ function EditField({
         />
       )}
     </div>
+  );
+}
+
+function ToggleField({
+  checked,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="dialog-field">
+      <span className="dialog-field-label">{label}</span>
+      <input
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+    </label>
   );
 }

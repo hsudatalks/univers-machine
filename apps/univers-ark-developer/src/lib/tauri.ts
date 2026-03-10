@@ -88,7 +88,6 @@ const fallbackBootstrapSeed: AppBootstrap = {
         projectPath: "~/repos/hvac-workbench",
         filesRoot: "~/repos/hvac-workbench",
         primaryWebServiceId: "development",
-        primaryBrowserServiceId: "development",
         tmuxCommandServiceId: "tmux-developer",
       },
       services: [
@@ -367,7 +366,6 @@ function resolveFallbackTarget(target: DeveloperTarget): DeveloperTarget {
         projectPath: "",
         filesRoot: "",
         primaryWebServiceId: "",
-        primaryBrowserServiceId: "",
         tmuxCommandServiceId: "",
       },
     services: resolvedServices,
