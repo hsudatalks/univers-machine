@@ -208,7 +208,7 @@ export function ContainerPage({
               key={`${target.id}:${dashboardRefreshSeconds}`}
               dashboardRefreshSeconds={dashboardRefreshSeconds}
               developmentStatus={developmentStatus}
-              developmentSurfaceLocalUrl={developmentSurface?.localUrl}
+              developmentSurfaceLocalUrl={developmentStatus?.localUrl ?? developmentSurface?.localUrl}
               onOpenDev={() => {
                 if (developmentPanel) {
                   onSelectTool(developmentPanel);

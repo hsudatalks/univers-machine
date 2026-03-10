@@ -1,7 +1,11 @@
-import { ensureTunnel } from "./tauri";
+import { syncTunnelRegistrations } from "./tauri";
 import type { DeveloperTarget, TunnelStatus } from "../types";
 
-const inflightWarmups = new Map<string, Promise<TunnelStatus | undefined>>();
+const desiredRegistrations = new Map<
+  string,
+  { targetId: string; surfaceId: string }
+>();
+let inflightSync: Promise<TunnelStatus[] | undefined> | null = null;
 
 function tunnelKey(targetId: string, surfaceId: string): string {
   return `${targetId}::${surfaceId}`;
@@ -26,31 +30,27 @@ export function warmTargetTunnels(
 ) {
   for (const surfaceId of surfaceIds) {
     const key = tunnelKey(target.id, surfaceId);
-
-    const existingWarmup = inflightWarmups.get(key);
-
-    if (existingWarmup) {
-      if (onStatus) {
-        void existingWarmup.then((status) => {
-          if (status) {
-            onStatus(status);
-          }
-        });
-      }
-
-      continue;
-    }
-
-    const warmup = ensureTunnel(target.id, surfaceId)
-      .then((status) => {
-        onStatus?.(status);
-        return status;
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        inflightWarmups.delete(key);
-      });
-
-    inflightWarmups.set(key, warmup);
+    desiredRegistrations.set(key, { targetId: target.id, surfaceId });
   }
+
+  if (inflightSync) {
+    void inflightSync.then((statuses) => {
+      statuses?.forEach((status) => {
+        onStatus?.(status);
+      });
+    });
+    return;
+  }
+
+  inflightSync = syncTunnelRegistrations([...desiredRegistrations.values()])
+    .then((statuses) => {
+      statuses.forEach((status) => {
+        onStatus?.(status);
+      });
+      return statuses;
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      inflightSync = null;
+    });
 }

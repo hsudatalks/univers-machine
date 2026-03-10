@@ -240,6 +240,7 @@ function fallbackTunnelStatus(
     return {
       targetId,
       surfaceId,
+      localUrl: null,
       state: "error",
       message: `Unknown browser surface: ${surfaceId}`,
     };
@@ -249,6 +250,7 @@ function fallbackTunnelStatus(
     return {
       targetId,
       surfaceId,
+      localUrl: surface.localUrl,
       state: "direct",
       message: `${surface.label} is using the local URL directly in browser mode.`,
     };
@@ -257,6 +259,7 @@ function fallbackTunnelStatus(
   return {
     targetId,
     surfaceId,
+    localUrl: surface.localUrl,
     state: "running",
     message: `Browser mode assumes the ${surface.label.toLowerCase()} tunnel is managed outside the app.`,
   };
@@ -452,6 +455,18 @@ export async function ensureTunnel(
   }
 
   return invoke<TunnelStatus>("ensure_tunnel", { targetId, surfaceId });
+}
+
+export async function syncTunnelRegistrations(
+  requests: Array<{ targetId: string; surfaceId: string }>,
+): Promise<TunnelStatus[]> {
+  if (!isTauri()) {
+    return requests.map(({ targetId, surfaceId }) =>
+      fallbackTunnelStatus(targetId, surfaceId),
+    );
+  }
+
+  return invoke<TunnelStatus[]>("sync_tunnel_registrations", { requests });
 }
 
 export async function restartTunnel(

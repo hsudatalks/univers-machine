@@ -48,6 +48,8 @@ export function BrowserPane({
   const tunnelStatusLabel = activeFrame
     ? TUNNEL_STATUS_LABELS[activeFrame.status.state] ?? activeFrame.status.state
     : "Unavailable";
+  const activeLocalUrl =
+    activeFrame?.status.localUrl ?? activeFrame?.surface.localUrl ?? null;
   const compactStatus =
     activeFrame?.status.state === "direct" || activeFrame?.status.state === "running";
   const showBrowserOverlay =
@@ -73,7 +75,7 @@ export function BrowserPane({
         cacheKey: frame.cacheKey,
         frameVersion: frame.frameVersion,
         isActive: frame.isActive,
-        src: frame.surface.localUrl,
+        src: frame.status.localUrl ?? frame.surface.localUrl,
         title: `${frame.target.label} ${frame.surface.label}`,
       })),
     );
@@ -89,7 +91,7 @@ export function BrowserPane({
     <article className={`panel browser-panel tool-panel ${isVisible ? "" : "is-hidden"}`}>
       <header className="panel-header browser-header browser-header-compact tool-panel-header">
         <code className="browser-url browser-url-compact">
-          {activeFrame?.surface.localUrl ?? "No local browser URL"}
+          {activeLocalUrl ?? "No local browser URL"}
         </code>
 
         <div className="browser-bar">
@@ -124,7 +126,9 @@ export function BrowserPane({
             <Button
               className="panel-link"
               onClick={() => {
-                void openExternalLink(activeFrame.surface.localUrl);
+                if (activeLocalUrl) {
+                  void openExternalLink(activeLocalUrl);
+                }
               }}
               size="sm"
               variant="outline"

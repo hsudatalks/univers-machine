@@ -371,6 +371,7 @@ export function useContainerWorkspace({
         onTunnelStatus({
           targetId,
           surfaceId,
+          localUrl: null,
           state: "error",
           message:
             restartError instanceof Error

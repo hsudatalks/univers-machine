@@ -83,6 +83,7 @@ function fallbackTunnelStatus(
     return {
       targetId,
       surfaceId: surface.id,
+      localUrl: surface.localUrl,
       state: "direct",
       message: `${surface.label} is available directly without a managed tunnel.`,
     };
@@ -91,6 +92,7 @@ function fallbackTunnelStatus(
   return {
     targetId,
     surfaceId: surface.id,
+    localUrl: surface.localUrl,
     state: "starting",
     message: `${surface.label} is warming in the background.`,
   };

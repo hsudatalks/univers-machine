@@ -172,6 +172,7 @@ export interface TerminalExitEvent {
 export interface TunnelStatus {
   targetId: string;
   surfaceId: string;
+  localUrl: string | null;
   state: string;
   message: string;
 }

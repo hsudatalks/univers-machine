@@ -223,7 +223,7 @@ export function SettingsPage({
           {
             cacheKey: surfaceKey(target.id, surface.id),
             frameVersion: 0,
-            src: surface.localUrl,
+            src: status.localUrl ?? surface.localUrl,
             title: `${target.label} ${surface.label}`,
           },
         ]);
@@ -435,7 +435,7 @@ export function SettingsPage({
                     </div>
                     <div className="settings-runtime-grid">
                       <span className="settings-runtime-row">
-                        <strong>Local</strong> {surface.localUrl}
+                        <strong>Local</strong> {status?.localUrl ?? surface.localUrl}
                       </span>
                       <span className="settings-runtime-row">
                         <strong>Remote</strong> {surface.remoteUrl}
