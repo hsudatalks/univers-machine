@@ -2,8 +2,7 @@ use crate::{
     config::{
         execute_target_command_via_russh, read_bootstrap_data, read_server_inventory,
         read_targets_config, resolve_raw_target, restart_container as restart_remote_container,
-        run_target_shell_command, save_targets_config, scan_and_store_server_inventory,
-        targets_file_path,
+        save_targets_config, scan_and_store_server_inventory, targets_file_path,
     },
     dashboard::{
         load_container_dashboard as read_container_dashboard, refresh_dashboard_once,
@@ -314,8 +313,6 @@ fn execute_command_service_inner(
         }
     };
 
-    let is_local_target = matches!(target.transport, crate::models::MachineTransport::Local);
-
     if let Some(app) = app {
         emit_command_service_status(
             app,
@@ -326,20 +323,8 @@ fn execute_command_service_inner(
         );
     }
 
-    let (exit_status, stdout, stderr) = if is_local_target {
-        let output = run_target_shell_command(target_id, command)?;
-        (
-            output
-                .status
-                .code()
-                .unwrap_or(if output.status.success() { 0 } else { 1 }) as u32,
-            output.stdout,
-            output.stderr,
-        )
-    } else {
-        let output = execute_target_command_via_russh(target_id, command)?;
-        (output.exit_status, output.stdout, output.stderr)
-    };
+    let output = execute_target_command_via_russh(target_id, command)?;
+    let (exit_status, stdout, stderr) = (output.exit_status, output.stdout, output.stderr);
 
     if exit_status == 0 {
         if let Some(app) = app {

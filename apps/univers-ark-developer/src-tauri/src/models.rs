@@ -1,8 +1,6 @@
-use portable_pty::MasterPty;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    io::Write,
     process::Child,
     sync::{
         atomic::{AtomicBool, AtomicU64},
@@ -571,20 +569,13 @@ pub(crate) struct GithubPullRequestDetail {
 }
 
 #[derive(Clone)]
-pub(crate) struct LocalTerminalSession {
-    pub(crate) master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
-    pub(crate) writer: Arc<Mutex<Box<dyn Write + Send>>>,
-}
-
-#[derive(Clone)]
 pub(crate) struct RusshTerminalSession {
     pub(crate) session: PtySession,
 }
 
 #[derive(Clone)]
 pub(crate) struct TerminalSession {
-    pub(crate) local: Option<LocalTerminalSession>,
-    pub(crate) russh: Option<RusshTerminalSession>,
+    pub(crate) russh: RusshTerminalSession,
     pub(crate) output: Arc<Mutex<String>>,
 }
 

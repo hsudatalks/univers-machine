@@ -31,7 +31,7 @@ pub(super) fn managed_known_hosts_file() -> String {
     }
 }
 
-fn expand_home_path(path: &str) -> String {
+pub(super) fn expand_home_path(path: &str) -> String {
     if let Some(stripped) = path.trim().strip_prefix("~/") {
         let home = if cfg!(windows) {
             std::env::var("USERPROFILE").ok()
@@ -47,6 +47,14 @@ fn expand_home_path(path: &str) -> String {
     path.trim().to_string()
 }
 
+pub(super) fn resolved_known_hosts_path(server: &RemoteContainerServer) -> PathBuf {
+    if server.known_hosts_path.trim().is_empty() {
+        PathBuf::from(managed_known_hosts_file())
+    } else {
+        PathBuf::from(expand_home_path(&server.known_hosts_path))
+    }
+}
+
 pub(super) fn container_host_key_alias(
     server: &RemoteContainerServer,
     container_name: &str,
@@ -60,11 +68,9 @@ pub(super) fn machine_host_key_alias(server: &RemoteContainerServer) -> String {
 
 fn base_ssh_flags(server: &RemoteContainerServer, host_key_alias: &str) -> Vec<String> {
     let mut flags = Vec::new();
-    let known_hosts_file = if server.known_hosts_path.trim().is_empty() {
-        managed_known_hosts_file()
-    } else {
-        expand_home_path(&server.known_hosts_path)
-    };
+    let known_hosts_file = resolved_known_hosts_path(server)
+        .to_string_lossy()
+        .to_string();
 
     flags.push(format!("-o UserKnownHostsFile={}", known_hosts_file));
     flags.push(format!("-o HostKeyAlias={}", host_key_alias));
@@ -148,6 +154,16 @@ pub(super) fn default_terminal_startup_command() -> String {
     String::from("exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l")
 }
 
+pub(super) fn profile_terminal_startup_command(profile: &str) -> String {
+    if profile.trim() == "ark-workbench" {
+        return String::from(
+            "tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l",
+        );
+    }
+
+    default_terminal_startup_command()
+}
+
 pub(super) fn build_ssh_command(
     server: &RemoteContainerServer,
     container_ip: &str,
@@ -223,17 +239,16 @@ pub(super) fn build_host_ssh_command(
 pub(super) fn terminal_command_for_server(
     server: &RemoteContainerServer,
     context: &RemoteContainerContext<'_>,
+    startup_command: &str,
 ) -> String {
     super::discovery::render_template(&server.terminal_command_template, context, || {
-        let remote_command = default_terminal_startup_command();
-
         build_ssh_command(
             server,
             context.container_ip,
             context.container_name,
             context.ssh_user,
             &["-tt"],
-            Some(&shell_single_quote(&remote_command)),
+            Some(&shell_single_quote(startup_command)),
         )
     })
 }

@@ -7,8 +7,8 @@ use std::collections::HashSet;
 
 use super::ssh::{
     build_host_ssh_command, default_terminal_startup_command, managed_container_ssh_user,
-    probe_machine_host_ssh, probe_managed_container_ssh, shell_single_quote, ssh_destination,
-    terminal_command_for_server,
+    probe_machine_host_ssh, probe_managed_container_ssh, profile_terminal_startup_command,
+    shell_single_quote, ssh_destination, terminal_command_for_server,
 };
 use super::{
     ContainerDiscoveryMode, ContainerManagerType, DiscoveredContainer, DiscoveredServerInventory,
@@ -508,7 +508,10 @@ fn host_container_users_command(
             format!("docker exec {} sh -lc {}", container_name, query)
         }
         ContainerManagerType::Orbstack => {
-            format!("/opt/homebrew/bin/orb run -m {} sh -lc {}", container_name, query)
+            format!(
+                "/opt/homebrew/bin/orb run -m {} sh -lc {}",
+                container_name, query
+            )
         }
         ContainerManagerType::None => return None,
     };
@@ -615,9 +618,13 @@ fn enrich_discovered_container_ssh_users(
                         };
                     }
 
-                    let discovered_users = discover_container_ssh_users_via_host(server, &container);
-                    let ssh_user_candidates =
-                        preferred_available_container_ssh_users(server, &container, discovered_users);
+                    let discovered_users =
+                        discover_container_ssh_users_via_host(server, &container);
+                    let ssh_user_candidates = preferred_available_container_ssh_users(
+                        server,
+                        &container,
+                        discovered_users,
+                    );
                     let ssh_user = ssh_user_candidates
                         .first()
                         .cloned()
@@ -1071,6 +1078,13 @@ pub(super) fn build_target_from_container(
             )
         })
     });
+    let workspace_source = container.workspace.as_ref().unwrap_or(&server.workspace);
+    let workspace = render_workspace(workspace_source, &context);
+    let terminal_startup_command = if matches!(container.kind, ManagedContainerKind::Managed) {
+        profile_terminal_startup_command(&workspace.profile)
+    } else {
+        default_terminal_startup_command()
+    };
     let terminal_command = if matches!(server.transport, MachineTransport::Local) {
         String::from("exec /bin/zsh -l")
     } else if matches!(container.kind, ManagedContainerKind::Host) {
@@ -1080,15 +1094,13 @@ pub(super) fn build_target_from_container(
             Some(&shell_single_quote(&default_terminal_startup_command())),
         )
     } else {
-        terminal_command_for_server(server, &context)
+        terminal_command_for_server(server, &context, &terminal_startup_command)
     };
     let notes = server
         .notes
         .iter()
         .map(|note| replace_remote_placeholders(note, &context))
         .collect::<Vec<_>>();
-    let workspace_source = container.workspace.as_ref().unwrap_or(&server.workspace);
-    let workspace = render_workspace(workspace_source, &context);
     let services_source = if !container.services.is_empty() {
         &container.services
     } else {
@@ -1125,7 +1137,7 @@ pub(super) fn build_target_from_container(
         host,
         description,
         terminal_command,
-        terminal_startup_command: default_terminal_startup_command(),
+        terminal_startup_command,
         notes,
         workspace,
         services,
@@ -1143,7 +1155,10 @@ fn build_managed_container(
     let ssh_dest = if matches!(server.transport, MachineTransport::Local) {
         String::from("local")
     } else {
-        ssh_destination(&container.ipv4, &resolve_container_ssh_user(server, container))
+        ssh_destination(
+            &container.ipv4,
+            &resolve_container_ssh_user(server, container),
+        )
     };
     let ssh_user = resolve_container_ssh_user(server, container);
     let (ssh_reachable, ssh_state, ssh_message) =
@@ -1186,10 +1201,7 @@ fn build_managed_container(
     )
 }
 
-fn machine_host_state(
-    server: &RemoteContainerServer,
-    probe_ssh: bool,
-) -> (bool, String, String) {
+fn machine_host_state(server: &RemoteContainerServer, probe_ssh: bool) -> (bool, String, String) {
     if matches!(server.transport, MachineTransport::Local) {
         return (
             true,
@@ -1280,7 +1292,10 @@ fn server_state_for_machine(
     if host_reachable && reachable == total {
         return (
             String::from("ready"),
-            format!("Machine host is ready. {} managed container(s) are SSH reachable.", total),
+            format!(
+                "Machine host is ready. {} managed container(s) are SSH reachable.",
+                total
+            ),
         );
     }
 
@@ -1364,7 +1379,10 @@ pub(super) fn discover_remote_server_inventory(
             let host_target = build_machine_host_target(server);
             let (host_reachable, _, host_message) = machine_host_state(server, true);
             let message = if host_reachable {
-                format!("Machine host is ready, but container discovery failed: {}", error)
+                format!(
+                    "Machine host is ready, but container discovery failed: {}",
+                    error
+                )
             } else {
                 format!(
                     "Machine host is unreachable: {} Container discovery failed: {}",

@@ -14,6 +14,7 @@ use std::{
     path::PathBuf,
     process::Output,
     sync::{Mutex, OnceLock},
+    time::Duration,
 };
 use tauri::{path::BaseDirectory, AppHandle, Manager, Runtime};
 use univers_ark_russh::{
@@ -30,7 +31,8 @@ use self::{
         apply_profile_defaults_to_remote_server, ContainerProfileConfig, ContainerProfiles,
     },
     ssh::{
-        build_host_ssh_command, build_ssh_command, run_target_shell_command_internal,
+        build_host_ssh_command, build_ssh_command, container_host_key_alias,
+        machine_host_key_alias, resolved_known_hosts_path, run_target_shell_command_internal,
         shell_single_quote,
     },
 };
@@ -239,6 +241,209 @@ fn default_container_source() -> String {
     String::from("unknown")
 }
 
+fn current_username() -> Option<String> {
+    std::env::var(if cfg!(windows) { "USERNAME" } else { "USER" })
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn preferred_local_profile(raw_targets_file: &RawTargetsFile) -> String {
+    if raw_targets_file.profiles.contains_key("ark-workbench") {
+        return String::from("ark-workbench");
+    }
+
+    raw_targets_file.default_profile.clone().unwrap_or_default()
+}
+
+fn local_machine_server(ssh_user: &str, profile: &str) -> RemoteContainerServer {
+    RemoteContainerServer {
+        id: String::from(LOCAL_MACHINE_ID),
+        label: String::from(LOCAL_MACHINE_LABEL),
+        transport: MachineTransport::Ssh,
+        host: String::from(LOCAL_MACHINE_HOST),
+        port: 22,
+        description: String::from(LOCAL_MACHINE_DESCRIPTION),
+        manager_type: ContainerManagerType::None,
+        discovery_mode: ContainerDiscoveryMode::HostOnly,
+        discovery_command: String::new(),
+        ssh_user: ssh_user.to_string(),
+        container_ssh_user: ssh_user.to_string(),
+        identity_files: vec![],
+        jump_chain: vec![],
+        known_hosts_path: default_known_hosts_path(),
+        strict_host_key_checking: true,
+        container_name_suffix: String::new(),
+        include_stopped: false,
+        target_label_template: String::new(),
+        target_host_template: String::from("{machineHost}"),
+        target_description_template: String::new(),
+        terminal_command_template: String::new(),
+        notes: vec![],
+        workspace: ContainerWorkspace {
+            profile: profile.to_string(),
+            ..ContainerWorkspace::default()
+        },
+        services: vec![],
+        surfaces: vec![],
+        containers: vec![],
+    }
+}
+
+fn local_machine_template(raw_targets_file: &RawTargetsFile, ssh_user: &str) -> Value {
+    let profile = preferred_local_profile(raw_targets_file);
+    json!({
+        "id": LOCAL_MACHINE_ID,
+        "label": LOCAL_MACHINE_LABEL,
+        "transport": "ssh",
+        "host": LOCAL_MACHINE_HOST,
+        "port": 22,
+        "description": LOCAL_MACHINE_DESCRIPTION,
+        "managerType": "none",
+        "discoveryMode": "host-only",
+        "discoveryCommand": "",
+        "sshUser": ssh_user,
+        "containerSshUser": ssh_user,
+        "identityFiles": [],
+        "jumpChain": [],
+        "knownHostsPath": default_known_hosts_path(),
+        "strictHostKeyChecking": true,
+        "containerNameSuffix": "",
+        "includeStopped": false,
+        "targetLabelTemplate": "",
+        "targetHostTemplate": "{machineHost}",
+        "targetDescriptionTemplate": "",
+        "terminalCommandTemplate": "",
+        "notes": [],
+        "workspace": {
+            "profile": profile,
+            "defaultTool": "dashboard",
+            "projectPath": "",
+            "filesRoot": "",
+            "primaryWebServiceId": "",
+            "tmuxCommandServiceId": ""
+        },
+        "services": [],
+        "surfaces": [],
+        "containers": []
+    })
+}
+
+fn local_machine_probe_chain(ssh_user: &str) -> ResolvedEndpointChain {
+    let server = local_machine_server(ssh_user, "");
+    let endpoint = ResolvedEndpoint::new(
+        LOCAL_MACHINE_ID,
+        LOCAL_MACHINE_HOST,
+        ssh_user,
+        22,
+        Vec::new(),
+    )
+    .with_known_hosts(
+        resolved_known_hosts_path(&server),
+        machine_host_key_alias(&server),
+        true,
+    );
+
+    ResolvedEndpointChain::from_hops(vec![endpoint])
+}
+
+fn local_machine_available() -> bool {
+    let Some(ssh_user) = current_username() else {
+        return false;
+    };
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(_) => return false,
+    };
+
+    let options = RusshClientOptions {
+        connect_timeout: Duration::from_secs(2),
+        inactivity_timeout: Some(Duration::from_secs(2)),
+        keepalive_interval: None,
+        keepalive_max: 0,
+    };
+
+    runtime
+        .block_on(execute_chain(
+            &local_machine_probe_chain(&ssh_user),
+            "printf univers-ark-local-ready",
+            &options,
+        ))
+        .map(|output| output.exit_status == 0)
+        .unwrap_or(false)
+}
+
+fn sync_local_machine_config(config_path: &PathBuf) -> Result<(), String> {
+    let raw_content = fs::read_to_string(config_path)
+        .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))?;
+    let sanitized_content = sanitize_targets_json_content(&raw_content)?;
+    let raw_targets_file: RawTargetsFile = serde_json::from_str(&sanitized_content)
+        .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))?;
+    let mut raw_json: Value = serde_json::from_str(&sanitized_content)
+        .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))?;
+    let Some(machines) = raw_json.get_mut("machines").and_then(Value::as_array_mut) else {
+        return Err(String::from("Config is missing machines."));
+    };
+
+    let local_index = machines
+        .iter()
+        .position(|machine| machine.get("id").and_then(Value::as_str) == Some(LOCAL_MACHINE_ID));
+    let local_available = local_machine_available();
+    let mut changed = false;
+
+    if local_available {
+        let Some(ssh_user) = current_username() else {
+            return Ok(());
+        };
+        let local_machine = local_machine_template(&raw_targets_file, &ssh_user);
+        if let Some(index) = local_index {
+            if machines[index] != local_machine {
+                machines[index] = local_machine;
+                changed = true;
+            }
+        } else {
+            machines.insert(0, local_machine);
+            if raw_json
+                .get("selectedTargetId")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+            {
+                raw_json["selectedTargetId"] = Value::String(String::from("local::host"));
+            }
+            changed = true;
+        }
+    } else if let Some(index) = local_index {
+        machines.remove(index);
+        let selected_target_id = raw_json
+            .get("selectedTargetId")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        if selected_target_id == "local::host" {
+            raw_json["selectedTargetId"] = Value::Null;
+        }
+        changed = true;
+    }
+
+    if !changed {
+        return Ok(());
+    }
+
+    let next_content = serde_json::to_string_pretty(&raw_json)
+        .map_err(|error| format!("Failed to serialize updated config: {}", error))?;
+    fs::write(config_path, next_content)
+        .map_err(|error| format!("Failed to write {}: {}", config_path.display(), error))?;
+    if let Ok(mut cache) = targets_cache().lock() {
+        *cache = None;
+    }
+    Ok(())
+}
+
 fn manager_priority(server: &RemoteContainerServer) -> Vec<ContainerManagerType> {
     match server.manager_type {
         ContainerManagerType::None => vec![
@@ -251,6 +456,10 @@ fn manager_priority(server: &RemoteContainerServer) -> Vec<ContainerManagerType>
 }
 
 const BUNDLED_TARGETS_TEMPLATE_NAME: &str = "developer-targets.json";
+const LOCAL_MACHINE_ID: &str = "local";
+const LOCAL_MACHINE_HOST: &str = "127.0.0.1";
+const LOCAL_MACHINE_LABEL: &str = "Local";
+const LOCAL_MACHINE_DESCRIPTION: &str = "Local machine.";
 
 fn targets_file_name() -> &'static str {
     if cfg!(debug_assertions) {
@@ -331,6 +540,7 @@ pub(crate) fn initialize_targets_file_path<R: Runtime>(
     }
 
     let _ = configured_targets_path().set(writable_targets_path.clone());
+    sync_local_machine_config(&writable_targets_path)?;
 
     Ok(writable_targets_path)
 }
@@ -626,6 +836,7 @@ fn resolved_machine_chain(server: &RemoteContainerServer) -> Result<ResolvedEndp
         return Err(format!("Machine {} uses local transport", server.id));
     }
 
+    let known_hosts_path = resolved_known_hosts_path(server);
     let mut hops = server
         .jump_chain
         .iter()
@@ -638,15 +849,27 @@ fn resolved_machine_chain(server: &RemoteContainerServer) -> Result<ResolvedEndp
                 jump.port,
                 identity_paths(&jump.identity_files),
             )
+            .with_known_hosts(
+                known_hosts_path.clone(),
+                jump.host.clone(),
+                server.strict_host_key_checking,
+            )
         })
         .collect::<Vec<_>>();
-    hops.push(ResolvedEndpoint::new(
-        server.id.clone(),
-        server.host.clone(),
-        server.ssh_user.clone(),
-        server.port,
-        identity_paths(&server.identity_files),
-    ));
+    hops.push(
+        ResolvedEndpoint::new(
+            server.id.clone(),
+            server.host.clone(),
+            server.ssh_user.clone(),
+            server.port,
+            identity_paths(&server.identity_files),
+        )
+        .with_known_hosts(
+            known_hosts_path,
+            machine_host_key_alias(server),
+            server.strict_host_key_checking,
+        ),
+    );
 
     Ok(ResolvedEndpointChain::from_hops(hops))
 }
@@ -676,13 +899,20 @@ pub(crate) fn resolve_target_ssh_chain(target_id: &str) -> Result<ResolvedEndpoi
         .find(|container| container.target_id == target_id)
     {
         let mut chain = resolved_machine_chain(server)?;
-        chain.push(ResolvedEndpoint::new(
-            format!("{}::{}", server.id, container.name),
-            container.ipv4.clone(),
-            container.ssh_user.clone(),
-            22,
-            Vec::new(),
-        ));
+        chain.push(
+            ResolvedEndpoint::new(
+                format!("{}::{}", server.id, container.name),
+                container.ipv4.clone(),
+                container.ssh_user.clone(),
+                22,
+                Vec::new(),
+            )
+            .with_known_hosts(
+                resolved_known_hosts_path(server),
+                container_host_key_alias(server, &container.name),
+                server.strict_host_key_checking,
+            ),
+        );
 
         return Ok(chain);
     }
@@ -714,10 +944,6 @@ pub(crate) fn run_target_shell_command(
     remote_command: &str,
 ) -> Result<Output, String> {
     let target = resolve_raw_target(target_id)?;
-
-    if matches!(target.transport, MachineTransport::Local) {
-        return run_target_shell_command_internal(target_id, remote_command);
-    }
 
     let raw_targets_file = read_raw_targets_file()?;
     let server = raw_targets_file
@@ -1012,6 +1238,35 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
     }
 
     #[test]
+    fn uses_tmux_startup_for_ark_workbench_container_profiles() {
+        let mut server = fixture_server();
+        server.workspace.profile = String::from("ark-workbench");
+        let container = DiscoveredContainer {
+            id: String::from("workflow-dev"),
+            kind: ManagedContainerKind::Managed,
+            name: String::from("workflow-dev"),
+            source: String::from("lxd"),
+            ssh_user: String::from("ubuntu"),
+            ssh_user_candidates: vec![String::from("ubuntu"), String::from("root")],
+            status: String::from("RUNNING"),
+            ipv4: String::from("10.211.82.202"),
+            label: None,
+            description: None,
+            workspace: None,
+            services: vec![],
+            surfaces: vec![],
+        };
+
+        let target = build_target_from_container(&server, &container);
+
+        assert_eq!(
+            target.terminal_startup_command,
+            "tmux-mobile-view attach || exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l"
+        );
+        assert!(target.terminal_command.contains("tmux-mobile-view attach"));
+    }
+
+    #[test]
     fn scan_prefers_detected_container_user_over_stale_saved_user() {
         let server = fixture_server();
         let discovered = DiscoveredContainer {
@@ -1050,10 +1305,12 @@ env-dev,RUNNING,\"172.17.0.1 (docker0)\n\
 
         assert_eq!(value.get("sshUser").and_then(Value::as_str), Some("ubuntu"));
         assert_eq!(
-            value.get("sshUserCandidates")
+            value
+                .get("sshUserCandidates")
                 .and_then(Value::as_array)
                 .map(|items| {
-                    items.iter()
+                    items
+                        .iter()
                         .filter_map(Value::as_str)
                         .map(ToOwned::to_owned)
                         .collect::<Vec<_>>()

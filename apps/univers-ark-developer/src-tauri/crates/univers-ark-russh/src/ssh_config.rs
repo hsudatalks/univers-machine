@@ -13,6 +13,9 @@ pub struct ResolvedEndpoint {
     pub user: String,
     pub port: u16,
     pub identity_files: Vec<PathBuf>,
+    pub known_hosts_path: Option<PathBuf>,
+    pub known_hosts_host: Option<String>,
+    pub accept_new_host_keys: bool,
 }
 
 impl ResolvedEndpoint {
@@ -29,11 +32,32 @@ impl ResolvedEndpoint {
             user: user.into(),
             port,
             identity_files,
+            known_hosts_path: None,
+            known_hosts_host: None,
+            accept_new_host_keys: false,
         }
     }
 
     pub fn identity_files(&self) -> &[PathBuf] {
         &self.identity_files
+    }
+
+    pub fn with_known_hosts(
+        mut self,
+        known_hosts_path: impl Into<PathBuf>,
+        known_hosts_host: impl Into<String>,
+        accept_new_host_keys: bool,
+    ) -> Self {
+        self.known_hosts_path = Some(known_hosts_path.into());
+        self.known_hosts_host = Some(known_hosts_host.into());
+        self.accept_new_host_keys = accept_new_host_keys;
+        self
+    }
+
+    pub fn known_hosts_host(&self) -> &str {
+        self.known_hosts_host
+            .as_deref()
+            .unwrap_or(self.host.as_str())
     }
 }
 
@@ -197,6 +221,9 @@ impl ResolvedConfigEntry {
                 .unwrap_or_else(|| env::var("USER").unwrap_or_else(|_| String::from("root"))),
             port: self.port.unwrap_or(22),
             identity_files: self.identity_files,
+            known_hosts_path: None,
+            known_hosts_host: None,
+            accept_new_host_keys: false,
         }
     }
 }

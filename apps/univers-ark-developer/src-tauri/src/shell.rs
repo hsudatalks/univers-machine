@@ -42,42 +42,6 @@ pub(crate) fn shell_command(command_line: &str) -> Command {
     command
 }
 
-/// Return the program name and arguments for spawning a command line in a PTY.
-///
-/// On macOS/Linux: `("/bin/zsh", ["-lc", command_line])`
-/// On Windows: tokenises the command line and returns `(program, [arg1, arg2, ...])`
-///   so that operators like `||` inside SSH remote commands are not misinterpreted
-///   by `cmd.exe`.
-#[cfg(windows)]
-pub(crate) fn pty_program_and_args(command_line: &str) -> (String, Vec<String>) {
-    // Detect Unix-style local shell commands and substitute PowerShell on Windows.
-    let trimmed = command_line.trim();
-    if trimmed.is_empty()
-        || trimmed.starts_with("exec /bin/")
-        || trimmed.starts_with("/bin/")
-        || trimmed == "bash"
-        || trimmed == "zsh"
-        || trimmed == "sh"
-    {
-        return ("powershell".into(), vec!["-NoLogo".into()]);
-    }
-
-    let tokens = split_command_tokens(command_line);
-
-    if tokens.is_empty() {
-        return ("cmd".into(), vec!["/C".into(), command_line.into()]);
-    }
-
-    let program = tokens[0].clone();
-    let args = tokens[1..].to_vec();
-    (program, args)
-}
-
-#[cfg(not(windows))]
-pub(crate) fn pty_program_and_args(command_line: &str) -> (String, Vec<String>) {
-    ("/bin/zsh".into(), vec!["-lc".into(), command_line.into()])
-}
-
 /// Minimal command-line tokeniser for Windows.
 ///
 /// Splits on unquoted whitespace, respects both single (`'`) and double (`"`)

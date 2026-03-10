@@ -42,7 +42,7 @@ async fn connect_endpoint(
     let mut handle = client::connect(
         config,
         (endpoint.host.as_str(), endpoint.port),
-        ClientHandler,
+        ClientHandler::new(endpoint),
     )
     .await?;
     authenticate_endpoint(&mut handle, endpoint).await?;
@@ -64,7 +64,7 @@ async fn connect_via_handle(
         .await?;
     let stream = channel.into_stream();
     let config = client_config(options);
-    let mut nested = client::connect_stream(config, stream, ClientHandler).await?;
+    let mut nested = client::connect_stream(config, stream, ClientHandler::new(endpoint)).await?;
     authenticate_endpoint(&mut nested, endpoint).await?;
     Ok(nested)
 }
@@ -127,16 +127,50 @@ fn client_config(options: &ClientOptions) -> Arc<client::Config> {
 }
 
 #[derive(Clone)]
-pub(crate) struct ClientHandler;
+pub(crate) struct ClientHandler {
+    endpoint: ResolvedEndpoint,
+}
+
+impl ClientHandler {
+    fn new(endpoint: &ResolvedEndpoint) -> Self {
+        Self {
+            endpoint: endpoint.clone(),
+        }
+    }
+}
 
 impl client::Handler for ClientHandler {
     type Error = russh::Error;
 
     async fn check_server_key(
         &mut self,
-        _server_public_key: &russh::keys::ssh_key::PublicKey,
+        server_public_key: &russh::keys::ssh_key::PublicKey,
     ) -> Result<bool, Self::Error> {
-        Ok(true)
+        let Some(known_hosts_path) = self.endpoint.known_hosts_path.as_ref() else {
+            return Ok(true);
+        };
+
+        let known_hosts_host = self.endpoint.known_hosts_host();
+        match russh::keys::check_known_hosts_path(
+            known_hosts_host,
+            self.endpoint.port,
+            server_public_key,
+            known_hosts_path,
+        ) {
+            Ok(true) => Ok(true),
+            Ok(false) if self.endpoint.accept_new_host_keys => {
+                russh::keys::known_hosts::learn_known_hosts_path(
+                    known_hosts_host,
+                    self.endpoint.port,
+                    server_public_key,
+                    known_hosts_path,
+                )
+                .map_err(russh::Error::from)?;
+                Ok(true)
+            }
+            Ok(false) => Ok(false),
+            Err(error) => Err(russh::Error::from(error)),
+        }
     }
 }
 
