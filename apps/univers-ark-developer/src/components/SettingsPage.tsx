@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import type {
   AppDiagnostics,
@@ -48,6 +49,7 @@ export function SettingsPage({
   const [diagnostics, setDiagnostics] = useState<AppDiagnostics | null>(null);
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
   const [diagnosticsRefreshing, setDiagnosticsRefreshing] = useState(false);
+  const [movingMachineId, setMovingMachineId] = useState<string | null>(null);
 
   const refreshProfiles = () => {
     void loadTargetsConfig()
@@ -72,6 +74,47 @@ export function SettingsPage({
         onConfigSaved();
       })
       .catch(() => {});
+  };
+
+  const moveMachine = (machineId: string, direction: -1 | 1) => {
+    if (movingMachineId) {
+      return;
+    }
+
+    setMovingMachineId(machineId);
+
+    void loadTargetsConfig()
+      .then(async (raw) => {
+        const parsed = parseTargetsConfig(raw);
+        const currentIndex = parsed.machines.findIndex((machine) => machine.id === machineId);
+
+        if (currentIndex < 0) {
+          return;
+        }
+
+        const nextIndex = currentIndex + direction;
+
+        if (nextIndex < 0 || nextIndex >= parsed.machines.length) {
+          return;
+        }
+
+        const nextMachines = [...parsed.machines];
+        const [movedMachine] = nextMachines.splice(currentIndex, 1);
+
+        if (!movedMachine) {
+          return;
+        }
+
+        nextMachines.splice(nextIndex, 0, movedMachine);
+        parsed.machines = nextMachines;
+
+        await updateTargetsConfig(stringifyTargetsConfig(parsed));
+        onConfigSaved();
+      })
+      .catch(() => {})
+      .finally(() => {
+        setMovingMachineId(null);
+      });
   };
 
   useEffect(() => {
@@ -286,16 +329,51 @@ export function SettingsPage({
               <p className="settings-empty">No machines configured.</p>
             ) : (
               <div className="settings-server-list">
-                {machines.map((machine) => (
-                  <button
-                    className="settings-server-card"
+                {machines.map((machine, index) => (
+                  <div
+                    className="settings-server-card settings-server-card-clickable"
                     key={machine.id}
                     onClick={() => setSelectedMachine(machine)}
-                    type="button"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedMachine(machine);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
                     >
                       <div className="settings-server-header">
                         <span className="settings-server-label">{machine.label}</span>
-                        <ConnectionStatusLight state={machine.state} />
+                        <div className="settings-server-actions">
+                          <ConnectionStatusLight state={machine.state} />
+                          <Button
+                            aria-label={`Move ${machine.label} up`}
+                            disabled={index === 0 || movingMachineId !== null}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              moveMachine(machine.id, -1);
+                            }}
+                            size="icon"
+                            title="Move up"
+                            variant="ghost"
+                          >
+                            <ChevronUp size={14} />
+                          </Button>
+                          <Button
+                            aria-label={`Move ${machine.label} down`}
+                            disabled={index === machines.length - 1 || movingMachineId !== null}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              moveMachine(machine.id, 1);
+                            }}
+                            size="icon"
+                            title="Move down"
+                            variant="ghost"
+                          >
+                            <ChevronDown size={14} />
+                          </Button>
+                        </div>
                       </div>
                       <div className="settings-server-meta">
                         <span className="settings-server-host">{machine.host}</span>
@@ -311,7 +389,7 @@ export function SettingsPage({
                         <span className="settings-server-message">{machine.message}</span>
                       ) : null}
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}

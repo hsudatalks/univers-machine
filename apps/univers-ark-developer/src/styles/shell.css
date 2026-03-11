@@ -893,6 +893,12 @@
   transition: border-color 0.15s, background 0.15s;
 }
 
+.settings-server-card-clickable:focus-visible {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 1px var(--ring);
+}
+
 .settings-server-card:hover {
   border-color: var(--ring);
   background: color-mix(in srgb, var(--panel-muted) 80%, var(--ring) 20%);
@@ -907,6 +913,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+.settings-server-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
 }
 
 .settings-server-label {
