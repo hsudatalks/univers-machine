@@ -20,15 +20,19 @@ use std::{
     sync::{atomic::Ordering, Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Runtime};
 use univers_ark_russh::{
     start_local_forward_chain, ClientOptions as RusshClientOptions, ResolvedEndpointChain,
 };
 use url::Url;
 
 const TUNNEL_STOP_WAIT_TIMEOUT: Duration = Duration::from_secs(2);
-const TUNNEL_SUPERVISOR_INTERVAL: Duration = Duration::from_millis(500);
+const TUNNEL_SUPERVISOR_ACTIVE_SLEEP: Duration = Duration::from_millis(200);
+const TUNNEL_SUPERVISOR_MAX_SLEEP: Duration = Duration::from_secs(2);
 const TUNNEL_RETRY_INTERVAL: Duration = Duration::from_secs(2);
+const TUNNEL_READY_PROBE_INTERVAL: Duration = Duration::from_millis(1500);
+
+pub(crate) const TUNNEL_STATUS_BATCH_EVENT: &str = "tunnel-status-batch";
 
 pub(crate) fn tunnel_status(
     target_id: &str,
@@ -107,6 +111,53 @@ pub(crate) fn active_tunnel_status(
     }
 
     starting_tunnel_status(target_id, surface)
+}
+
+fn tunnel_status_changed(current: Option<&TunnelStatus>, next: &TunnelStatus) -> bool {
+    current
+        .map(|status| {
+            status.local_url != next.local_url
+                || status.state != next.state
+                || status.message != next.message
+        })
+        .unwrap_or(true)
+}
+
+pub(crate) fn emit_tunnel_status_updates<R: Runtime>(
+    app: &AppHandle<R>,
+    status_snapshots: &Arc<Mutex<HashMap<String, TunnelStatus>>>,
+    statuses: impl IntoIterator<Item = TunnelStatus>,
+) {
+    let candidates = statuses.into_iter().collect::<Vec<_>>();
+    if candidates.is_empty() {
+        return;
+    }
+
+    let changed = if let Ok(mut snapshots) = status_snapshots.lock() {
+        let mut changed = Vec::new();
+
+        for status in candidates {
+            let key = service_key(&status.target_id, &status.service_id);
+            if tunnel_status_changed(snapshots.get(&key), &status) {
+                snapshots.insert(key, status.clone());
+                changed.push(status);
+            }
+        }
+
+        changed
+    } else {
+        candidates
+    };
+
+    if changed.is_empty() {
+        return;
+    }
+
+    for status in &changed {
+        emit_tunnel_service_status(app, status);
+    }
+
+    let _ = app.emit(TUNNEL_STATUS_BATCH_EVENT, changed);
 }
 
 fn tunnel_output_excerpt(output: &Arc<Mutex<String>>) -> Option<String> {
@@ -384,6 +435,12 @@ pub(crate) fn sync_desired_tunnels(
     *desired = next;
     drop(desired);
 
+    if let Ok(mut status_snapshots) = tunnel_state.status_snapshots.lock() {
+        for key in &removed_keys {
+            status_snapshots.remove(key);
+        }
+    }
+
     let removed_sessions = {
         let mut sessions = tunnel_state
             .sessions
@@ -439,8 +496,7 @@ pub(crate) fn reconcile_registered_tunnel(
     if !should_manage_runtime_surface_tunnel(target_id, &surface)? {
         let status = direct_tunnel_status(target_id, &surface);
         if emit_status_event {
-            emit_tunnel_service_status(app, &status);
-            let _ = app.emit("tunnel-status", status.clone());
+            emit_tunnel_status_updates(app, &tunnel_state.status_snapshots, [status.clone()]);
         }
         return Ok(status);
     }
@@ -457,8 +513,11 @@ pub(crate) fn reconcile_registered_tunnel(
                 if tunnel_session_is_alive(&session)? {
                     let status = active_tunnel_status(target_id, &surface, &session);
                     if emit_status_event {
-                        emit_tunnel_service_status(app, &status);
-                        let _ = app.emit("tunnel-status", status.clone());
+                        emit_tunnel_status_updates(
+                            app,
+                            &tunnel_state.status_snapshots,
+                            [status.clone()],
+                        );
                     }
                     return Ok(status);
                 }
@@ -477,8 +536,7 @@ pub(crate) fn reconcile_registered_tunnel(
     match start_tunnel(app, tunnel_state, target_id, &surface) {
         Ok(status) => {
             if emit_status_event {
-                emit_tunnel_service_status(app, &status);
-                let _ = app.emit("tunnel-status", status.clone());
+                emit_tunnel_status_updates(app, &tunnel_state.status_snapshots, [status.clone()]);
             }
             Ok(status)
         }
@@ -492,8 +550,7 @@ pub(crate) fn reconcile_registered_tunnel(
                 error.clone(),
             );
             if emit_status_event {
-                emit_tunnel_service_status(app, &status);
-                let _ = app.emit("tunnel-status", status);
+                emit_tunnel_status_updates(app, &tunnel_state.status_snapshots, [status]);
             }
             Err(error)
         }
@@ -502,15 +559,29 @@ pub(crate) fn reconcile_registered_tunnel(
 
 pub(crate) fn start_tunnel_supervisor(app: AppHandle, tunnel_state: TunnelState) {
     std::thread::spawn(move || loop {
-        let due_registrations = tunnel_state
+        let now = Instant::now();
+        let (due_registrations, next_due_at) = tunnel_state
             .desired_tunnels
             .lock()
             .map(|desired| {
-                desired
+                let mut next_due_at = None;
+                let due_registrations = desired
                     .values()
-                    .filter(|registration| registration.next_attempt_at <= Instant::now())
-                    .cloned()
-                    .collect::<Vec<_>>()
+                    .filter_map(|registration| {
+                        if registration.next_attempt_at <= now {
+                            Some(registration.clone())
+                        } else {
+                            next_due_at = Some(
+                                next_due_at
+                                    .map(|current: Instant| current.min(registration.next_attempt_at))
+                                    .unwrap_or(registration.next_attempt_at),
+                            );
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                (due_registrations, next_due_at)
             })
             .unwrap_or_default();
 
@@ -524,7 +595,18 @@ pub(crate) fn start_tunnel_supervisor(app: AppHandle, tunnel_state: TunnelState)
             );
         }
 
-        std::thread::sleep(TUNNEL_SUPERVISOR_INTERVAL);
+        let sleep_duration = next_due_at
+            .map(|due| {
+                let remaining = due.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    TUNNEL_SUPERVISOR_ACTIVE_SLEEP
+                } else {
+                    remaining.min(TUNNEL_SUPERVISOR_MAX_SLEEP)
+                }
+            })
+            .unwrap_or(TUNNEL_SUPERVISOR_MAX_SLEEP);
+
+        std::thread::sleep(sleep_duration);
     });
 }
 
@@ -641,6 +723,7 @@ fn spawn_russh_forward(
 fn spawn_managed_tunnel_session(
     app: &AppHandle,
     sessions: Arc<Mutex<HashMap<String, TunnelSession>>>,
+    status_snapshots: Arc<Mutex<HashMap<String, TunnelStatus>>>,
     session_id: u64,
     target_id: &str,
     surface: &BrowserSurface,
@@ -681,9 +764,10 @@ fn spawn_managed_tunnel_session(
             {
                 if probe_targets_ready(&probe_targets) {
                     ready_flag.store(true, Ordering::Release);
-                    let _ = app_handle.emit(
-                        "tunnel-status",
-                        tunnel_status(
+                    emit_tunnel_status_updates(
+                        &app_handle,
+                        &status_snapshots,
+                        [tunnel_status(
                             &target_id,
                             &surface_id,
                             Some(local_url.clone()),
@@ -692,14 +776,15 @@ fn spawn_managed_tunnel_session(
                                 "{} is forwarding browser traffic to {}.",
                                 surface_label, local_url
                             ),
-                        ),
+                        )],
                     );
                 } else if !waiting_message_emitted
                     && started_at.elapsed() >= TUNNEL_PROBE_MESSAGE_DELAY
                 {
-                    let _ = app_handle.emit(
-                        "tunnel-status",
-                        tunnel_status(
+                    emit_tunnel_status_updates(
+                        &app_handle,
+                        &status_snapshots,
+                        [tunnel_status(
                             &target_id,
                             &surface_id,
                             Some(local_url.clone()),
@@ -708,7 +793,7 @@ fn spawn_managed_tunnel_session(
                                 "{} tunnel is up, waiting for {} to accept connections.",
                                 surface_label, local_url
                             ),
-                        ),
+                        )],
                     );
                     waiting_message_emitted = true;
                 }
@@ -718,9 +803,10 @@ fn spawn_managed_tunnel_session(
                 if !proxy.running.load(Ordering::Acquire) {
                     if remove_tunnel_session_if_current(&monitor_sessions, &session_key, session_id)
                     {
-                        let _ = app_handle.emit(
-                            "tunnel-status",
-                            tunnel_status(
+                        emit_tunnel_status_updates(
+                            &app_handle,
+                            &status_snapshots,
+                            [tunnel_status(
                                 &target_id,
                                 &surface_id,
                                 Some(local_url.clone()),
@@ -728,7 +814,7 @@ fn spawn_managed_tunnel_session(
                                 proxy_error_message(proxy).unwrap_or_else(|| {
                                     format!("{} proxy exited unexpectedly.", surface_label)
                                 }),
-                            ),
+                            )],
                         );
                     }
                     break;
@@ -781,15 +867,16 @@ fn spawn_managed_tunnel_session(
 
             if let Some(error) = monitor_error {
                 if remove_tunnel_session_if_current(&monitor_sessions, &session_key, session_id) {
-                    let _ = app_handle.emit(
-                        "tunnel-status",
-                        tunnel_status(
+                    emit_tunnel_status_updates(
+                        &app_handle,
+                        &status_snapshots,
+                        [tunnel_status(
                             &target_id,
                             &surface_id,
                             Some(local_url.clone()),
                             "error",
                             error,
-                        ),
+                        )],
                     );
                 }
                 break;
@@ -808,21 +895,27 @@ fn spawn_managed_tunnel_session(
                     };
 
                     let state = if success { "stopped" } else { "error" };
-                    let _ = app_handle.emit(
-                        "tunnel-status",
-                        tunnel_status(
+                    emit_tunnel_status_updates(
+                        &app_handle,
+                        &status_snapshots,
+                        [tunnel_status(
                             &target_id,
                             &surface_id,
                             Some(local_url.clone()),
                             state,
                             message,
-                        ),
+                        )],
                     );
                 }
                 break;
             }
 
-            std::thread::sleep(TUNNEL_PROBE_INTERVAL);
+            let sleep_interval = if ready_flag.load(Ordering::Acquire) {
+                TUNNEL_READY_PROBE_INTERVAL
+            } else {
+                TUNNEL_PROBE_INTERVAL
+            };
+            std::thread::sleep(sleep_interval);
         }
     });
 
@@ -890,6 +983,7 @@ fn spawn_vite_proxy_session(
     Ok(spawn_managed_tunnel_session(
         app,
         sessions,
+        tunnel_state.status_snapshots.clone(),
         session_id,
         target_id,
         surface,
@@ -941,6 +1035,7 @@ pub(crate) fn start_tunnel(
         spawn_managed_tunnel_session(
             app,
             tunnel_state.sessions.clone(),
+            tunnel_state.status_snapshots.clone(),
             session_id,
             target_id,
             surface,

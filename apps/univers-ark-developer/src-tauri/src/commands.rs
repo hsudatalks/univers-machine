@@ -27,8 +27,7 @@ use crate::{
     },
     runtime::{read_runtime_targets_file, resolve_runtime_web_surface, surface_key},
     service_registry::{
-        emit_command_service_status, emit_dashboard_service_statuses, emit_tunnel_service_status,
-        sync_registered_web_services,
+        emit_command_service_status, emit_dashboard_service_statuses, sync_registered_web_services,
     },
     settings::{load_app_settings as read_app_settings, save_app_settings as write_app_settings},
     shell::shell_command,
@@ -37,14 +36,15 @@ use crate::{
         write_to_terminal_session,
     },
     tunnel::{
-        active_tunnel_status, direct_tunnel_status, reconcile_registered_tunnel,
-        register_desired_tunnel, remove_tunnel_session_if_current, start_tunnel,
+        active_tunnel_status, direct_tunnel_status, emit_tunnel_status_updates,
+        reconcile_registered_tunnel, register_desired_tunnel,
+        remove_tunnel_session_if_current, start_tunnel,
         stop_tunnel_session, sync_desired_tunnels, tunnel_session_is_alive,
     },
 };
 use serde::Deserialize;
 use std::{collections::HashMap, path::PathBuf};
-use tauri::{async_runtime, AppHandle, Emitter, State};
+use tauri::{async_runtime, AppHandle, State};
 use univers_ark_russh::SshConfigResolver;
 
 #[derive(Debug, Deserialize, Default)]
@@ -643,10 +643,7 @@ pub(crate) async fn sync_tunnel_registrations(
         sync_registered_web_services(&app_clone, &request_pairs);
         let statuses = sync_desired_tunnels(&app_clone, &tunnel_inner, &request_pairs)?;
 
-        for status in &statuses {
-            emit_tunnel_service_status(&app_clone, status);
-            let _ = app_clone.emit("tunnel-status", status.clone());
-        }
+        emit_tunnel_status_updates(&app_clone, &tunnel_inner.status_snapshots, statuses.clone());
 
         Ok(statuses)
     })

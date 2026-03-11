@@ -15,7 +15,7 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use univers_ark_russh::{execute_chain, ClientOptions as RusshClientOptions};
 
-pub(crate) const CONNECTIVITY_STATUS_EVENT: &str = "connectivity-status";
+pub(crate) const CONNECTIVITY_STATUS_BATCH_EVENT: &str = "connectivity-status-batch";
 const CONNECTIVITY_MONITOR_TICK: Duration = Duration::from_secs(2);
 const CONNECTIVITY_INVENTORY_REFRESH_INTERVAL: Duration = Duration::from_secs(10);
 const CONNECTIVITY_ACTIVE_RECHECK_INTERVAL: Duration = Duration::from_secs(15);
@@ -329,57 +329,77 @@ fn upsert_snapshot(
     changed
 }
 
-fn emit_machine_snapshot<R: Runtime>(
-    app: &AppHandle<R>,
+fn machine_status_event(
+    machine_id: &str,
+    snapshot: &ConnectivitySnapshot,
+) -> ConnectivityStatusEvent {
+    ConnectivityStatusEvent {
+        entity: String::from("machine"),
+        machine_id: machine_id.to_string(),
+        target_id: None,
+        state: snapshot.state.clone(),
+        message: snapshot.message.clone(),
+        reachable: snapshot.reachable,
+    }
+}
+
+fn target_status_event(
+    machine_id: &str,
+    target_id: &str,
+    snapshot: &ConnectivitySnapshot,
+) -> ConnectivityStatusEvent {
+    ConnectivityStatusEvent {
+        entity: String::from("container"),
+        machine_id: machine_id.to_string(),
+        target_id: Some(target_id.to_string()),
+        state: snapshot.state.clone(),
+        message: snapshot.message.clone(),
+        reachable: snapshot.reachable,
+    }
+}
+
+fn queue_machine_snapshot(
     connectivity_state: &ConnectivityState,
     machine_id: &str,
     snapshot: &ConnectivitySnapshot,
+    pending_events: &mut Vec<ConnectivityStatusEvent>,
 ) {
     if !upsert_snapshot(&connectivity_state.machine_snapshots, machine_id, snapshot) {
         return;
     }
 
-    let _ = app.emit(
-        CONNECTIVITY_STATUS_EVENT,
-        ConnectivityStatusEvent {
-            entity: String::from("machine"),
-            machine_id: machine_id.to_string(),
-            target_id: None,
-            state: snapshot.state.clone(),
-            message: snapshot.message.clone(),
-            reachable: snapshot.reachable,
-        },
-    );
+    pending_events.push(machine_status_event(machine_id, snapshot));
 }
 
-fn emit_target_snapshot<R: Runtime>(
-    app: &AppHandle<R>,
+fn queue_target_snapshot(
     connectivity_state: &ConnectivityState,
     machine_id: &str,
     target_id: &str,
     snapshot: &ConnectivitySnapshot,
+    pending_events: &mut Vec<ConnectivityStatusEvent>,
 ) {
     if !upsert_snapshot(&connectivity_state.target_snapshots, target_id, snapshot) {
         return;
     }
 
-    let _ = app.emit(
-        CONNECTIVITY_STATUS_EVENT,
-        ConnectivityStatusEvent {
-            entity: String::from("container"),
-            machine_id: machine_id.to_string(),
-            target_id: Some(target_id.to_string()),
-            state: snapshot.state.clone(),
-            message: snapshot.message.clone(),
-            reachable: snapshot.reachable,
-        },
-    );
+    pending_events.push(target_status_event(machine_id, target_id, snapshot));
 }
 
-fn seed_missing_snapshots<R: Runtime>(
+fn emit_connectivity_statuses<R: Runtime>(
     app: &AppHandle<R>,
+    statuses: Vec<ConnectivityStatusEvent>,
+) {
+    if statuses.is_empty() {
+        return;
+    }
+
+    let _ = app.emit(CONNECTIVITY_STATUS_BATCH_EVENT, statuses);
+}
+
+fn seed_missing_snapshots(
     connectivity_state: &ConnectivityState,
     machines: &[ManagedServer],
+    pending_events: &mut Vec<ConnectivityStatusEvent>,
 ) {
     let known_machine_ids = connectivity_state
         .machine_snapshots
@@ -394,32 +414,32 @@ fn seed_missing_snapshots<R: Runtime>(
 
     for machine in machines {
         if !known_machine_ids.contains(&machine.id) {
-            emit_machine_snapshot(
-                app,
+            queue_machine_snapshot(
                 connectivity_state,
                 &machine.id,
                 &checking_snapshot("Checking machine connectivity."),
+                pending_events,
             );
         }
 
         if !known_target_ids.contains(&machine.host_target_id) {
-            emit_target_snapshot(
-                app,
+            queue_target_snapshot(
                 connectivity_state,
                 &machine.id,
                 &machine.host_target_id,
                 &checking_snapshot(format!("Checking {} host connectivity.", machine.label)),
+                pending_events,
             );
         }
 
         for container in &machine.containers {
             if !known_target_ids.contains(&container.target_id) {
-                emit_target_snapshot(
-                    app,
+                queue_target_snapshot(
                     connectivity_state,
                     &machine.id,
                     &container.target_id,
                     &checking_snapshot(format!("Checking {} connectivity.", container.label)),
+                    pending_events,
                 );
             }
         }
@@ -514,8 +534,7 @@ fn sort_probe_requests(
     });
 }
 
-fn apply_probe_outcome<R: Runtime>(
-    app: &AppHandle<R>,
+fn apply_probe_outcome(
     connectivity_state: &ConnectivityState,
     monitor_state: &mut ConnectivityMonitorState,
     target_snapshots: &mut HashMap<String, ConnectivitySnapshot>,
@@ -523,13 +542,14 @@ fn apply_probe_outcome<R: Runtime>(
     target_id: &str,
     outcome: ProbeOutcome,
     now: Instant,
+    pending_events: &mut Vec<ConnectivityStatusEvent>,
 ) {
-    emit_target_snapshot(
-        app,
+    queue_target_snapshot(
         connectivity_state,
         machine_id,
         target_id,
         &outcome.snapshot,
+        pending_events,
     );
     target_snapshots.insert(target_id.to_string(), outcome.snapshot.clone());
 
@@ -549,8 +569,7 @@ fn apply_probe_outcome<R: Runtime>(
     }
 }
 
-fn defer_container_until_host<R: Runtime>(
-    app: &AppHandle<R>,
+fn defer_container_until_host(
     connectivity_state: &ConnectivityState,
     monitor_state: &mut ConnectivityMonitorState,
     target_snapshots: &mut HashMap<String, ConnectivitySnapshot>,
@@ -560,6 +579,7 @@ fn defer_container_until_host<R: Runtime>(
     host_snapshot: &ConnectivitySnapshot,
     host_next_due_at: Instant,
     now: Instant,
+    pending_events: &mut Vec<ConnectivityStatusEvent>,
 ) {
     let waiting_snapshot = if host_snapshot.state == "checking" {
         checking_snapshot(format!(
@@ -573,12 +593,12 @@ fn defer_container_until_host<R: Runtime>(
         ))
     };
 
-    emit_target_snapshot(
-        app,
+    queue_target_snapshot(
         connectivity_state,
         machine_id,
         container_target_id,
         &waiting_snapshot,
+        pending_events,
     );
     target_snapshots.insert(container_target_id.to_string(), waiting_snapshot);
 
@@ -590,11 +610,11 @@ fn defer_container_until_host<R: Runtime>(
     };
 }
 
-fn load_inventory<R: Runtime>(
-    app: &AppHandle<R>,
+fn load_inventory(
     connectivity_state: &ConnectivityState,
     monitor_state: &mut ConnectivityMonitorState,
     now: Instant,
+    pending_events: &mut Vec<ConnectivityStatusEvent>,
 ) -> Option<Vec<ManagedServer>> {
     let should_refresh = monitor_state
         .inventory_cache
@@ -607,7 +627,7 @@ fn load_inventory<R: Runtime>(
     if should_refresh {
         match read_server_inventory(false) {
             Ok(machines) => {
-                seed_missing_snapshots(app, connectivity_state, &machines);
+                seed_missing_snapshots(connectivity_state, &machines, pending_events);
                 prune_snapshots(connectivity_state, &machines);
                 prune_probe_schedules(monitor_state, &machines);
                 monitor_state.inventory_cache = Some(InventoryCache {
@@ -694,7 +714,13 @@ fn run_connectivity_probe_cycle<R: Runtime>(
     monitor_state: &mut ConnectivityMonitorState,
 ) {
     let now = Instant::now();
-    let Some(machines) = load_inventory(app, connectivity_state, monitor_state, now) else {
+    let mut pending_events = Vec::new();
+    let Some(machines) = load_inventory(
+        connectivity_state,
+        monitor_state,
+        now,
+        &mut pending_events,
+    ) else {
         return;
     };
 
@@ -729,7 +755,6 @@ fn run_connectivity_probe_cycle<R: Runtime>(
     let host_probe_count = host_requests.len();
     for (request, outcome) in run_probe_batch(app, host_requests) {
         apply_probe_outcome(
-            app,
             connectivity_state,
             monitor_state,
             &mut target_snapshots,
@@ -737,6 +762,7 @@ fn run_connectivity_probe_cycle<R: Runtime>(
             &request.target_id,
             outcome,
             now,
+            &mut pending_events,
         );
     }
 
@@ -759,7 +785,6 @@ fn run_connectivity_probe_cycle<R: Runtime>(
         for container in &machine.containers {
             if host_snapshot.state != "ready" || !host_snapshot.reachable {
                 defer_container_until_host(
-                    app,
                     connectivity_state,
                     monitor_state,
                     &mut target_snapshots,
@@ -769,6 +794,7 @@ fn run_connectivity_probe_cycle<R: Runtime>(
                     &host_snapshot,
                     host_next_due_at,
                     now,
+                    &mut pending_events,
                 );
                 continue;
             }
@@ -792,7 +818,6 @@ fn run_connectivity_probe_cycle<R: Runtime>(
 
     for (request, outcome) in run_probe_batch(app, container_requests) {
         apply_probe_outcome(
-            app,
             connectivity_state,
             monitor_state,
             &mut target_snapshots,
@@ -800,6 +825,7 @@ fn run_connectivity_probe_cycle<R: Runtime>(
             &request.target_id,
             outcome,
             now,
+            &mut pending_events,
         );
     }
 
@@ -827,8 +853,15 @@ fn run_connectivity_probe_cycle<R: Runtime>(
             .collect::<Vec<_>>();
 
         let machine_snapshot = aggregate_machine_snapshot(&host_snapshot, &container_snapshots);
-        emit_machine_snapshot(app, connectivity_state, &machine.id, &machine_snapshot);
+        queue_machine_snapshot(
+            connectivity_state,
+            &machine.id,
+            &machine_snapshot,
+            &mut pending_events,
+        );
     }
+
+    emit_connectivity_statuses(app, pending_events);
 }
 
 pub(crate) fn start_connectivity_monitor<R: Runtime>(

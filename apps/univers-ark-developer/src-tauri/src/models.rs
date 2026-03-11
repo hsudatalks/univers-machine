@@ -645,6 +645,7 @@ pub(crate) struct TunnelState {
     pub(crate) sessions: Arc<Mutex<HashMap<String, TunnelSession>>>,
     pub(crate) desired_tunnels: Arc<Mutex<HashMap<String, TunnelRegistration>>>,
     pub(crate) local_ports: Arc<Mutex<HashMap<String, u16>>>,
+    pub(crate) status_snapshots: Arc<Mutex<HashMap<String, TunnelStatus>>>,
     pub(crate) next_session_id: AtomicU64,
 }
 
@@ -677,6 +678,7 @@ impl Clone for TunnelState {
             sessions: self.sessions.clone(),
             desired_tunnels: self.desired_tunnels.clone(),
             local_ports: self.local_ports.clone(),
+            status_snapshots: self.status_snapshots.clone(),
             next_session_id: AtomicU64::new(
                 self.next_session_id
                     .load(std::sync::atomic::Ordering::Relaxed),
@@ -707,6 +709,7 @@ impl Default for TunnelState {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             desired_tunnels: Arc::new(Mutex::new(HashMap::new())),
             local_ports: Arc::new(Mutex::new(HashMap::new())),
+            status_snapshots: Arc::new(Mutex::new(HashMap::new())),
             next_session_id: AtomicU64::new(1),
         }
     }

@@ -21,7 +21,7 @@ pub(crate) const INTERNAL_TUNNEL_PORT_START: u16 = 46000;
 pub(crate) const INTERNAL_TUNNEL_PORT_END: u16 = 46999;
 
 pub(crate) const SURFACE_HOST: &str = "127.0.0.1";
-pub(crate) const TUNNEL_PROBE_INTERVAL: Duration = Duration::from_millis(180);
+pub(crate) const TUNNEL_PROBE_INTERVAL: Duration = Duration::from_millis(300);
 pub(crate) const TUNNEL_PROBE_TIMEOUT: Duration = Duration::from_millis(700);
 pub(crate) const TUNNEL_PROBE_MESSAGE_DELAY: Duration = Duration::from_secs(2);
 pub(crate) const PROXY_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(60);
