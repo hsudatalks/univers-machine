@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 1420",
+    "dev": "vite --host 127.0.0.1 --port 1536",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview --host 127.0.0.1 --port 1420",
+    "preview": "vite preview --host 127.0.0.1 --port 1536",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },
