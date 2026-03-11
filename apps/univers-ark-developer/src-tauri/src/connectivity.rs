@@ -405,10 +405,17 @@ fn queue_target_snapshot(
 
 fn emit_connectivity_statuses<R: Runtime>(
     app: &AppHandle<R>,
+    connectivity_state: &ConnectivityState,
     statuses: Vec<ConnectivityStatusEvent>,
 ) {
     if statuses.is_empty() {
         return;
+    }
+
+    if let Ok(mut telemetry) = connectivity_state.telemetry.lock() {
+        let now = Instant::now();
+        telemetry.status_events.record(now, 1);
+        telemetry.status_items.record(now, statuses.len());
     }
 
     let _ = app.emit(CONNECTIVITY_STATUS_BATCH_EVENT, statuses);
@@ -797,6 +804,7 @@ fn run_connectivity_probe_cycle<R: Runtime>(
     host_requests.truncate(max_probes_per_tick.max(1));
 
     let host_probe_count = host_requests.len();
+    let mut executed_probe_count = host_probe_count;
     for (request, outcome) in run_probe_batch(app, host_requests) {
         apply_probe_outcome(
             connectivity_state,
@@ -864,6 +872,7 @@ fn run_connectivity_probe_cycle<R: Runtime>(
         prioritized_target_id,
     );
     container_requests.truncate(remaining_probe_budget);
+    executed_probe_count += container_requests.len();
 
     for (request, outcome) in run_probe_batch(app, container_requests) {
         apply_probe_outcome(
@@ -909,8 +918,34 @@ fn run_connectivity_probe_cycle<R: Runtime>(
             &mut pending_events,
         );
     }
+    let (next_due_in_ms, due_now_count, backoff_target_count, max_consecutive_failures) = monitor_state
+        .probe_schedules
+        .values()
+        .fold((u64::MAX, 0usize, 0usize, 0u32), |acc, schedule| {
+            let next_due_in_ms = acc.0.min(schedule.next_due_at.saturating_duration_since(now).as_millis() as u64);
+            let due_now_count = acc.1 + usize::from(schedule.next_due_at <= now);
+            let backoff_target_count = acc.2 + usize::from(schedule.consecutive_failures > 0);
+            let max_consecutive_failures = acc.3.max(schedule.consecutive_failures);
+            (
+                next_due_in_ms,
+                due_now_count,
+                backoff_target_count,
+                max_consecutive_failures,
+            )
+        });
+    if let Ok(mut telemetry) = connectivity_state.telemetry.lock() {
+        telemetry.probes.record(now, executed_probe_count);
+        telemetry.next_due_in_ms = if monitor_state.probe_schedules.is_empty() {
+            0
+        } else {
+            next_due_in_ms.min(u64::MAX - 1)
+        };
+        telemetry.due_now_count = due_now_count;
+        telemetry.backoff_target_count = backoff_target_count;
+        telemetry.max_consecutive_failures = max_consecutive_failures;
+    }
 
-    emit_connectivity_statuses(app, pending_events);
+    emit_connectivity_statuses(app, connectivity_state, pending_events);
 }
 
 pub(crate) fn run_connectivity_scheduler_cycle<R: Runtime>(

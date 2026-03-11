@@ -12,7 +12,7 @@ use std::{
     collections::HashMap,
     sync::atomic::Ordering,
     thread,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Runtime};
 
@@ -64,14 +64,30 @@ fn scheduler_budget(activity: &RuntimeActivitySnapshot) -> SchedulerBudget {
     }
 }
 
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 pub(crate) fn scheduler_budget_diagnostics(
     activity: &RuntimeActivitySnapshot,
+    scheduler_state: &SchedulerState,
 ) -> SchedulerBudgetDiagnostics {
     let budget = scheduler_budget(activity);
+    let telemetry = scheduler_state
+        .telemetry
+        .lock()
+        .map(|value| value.clone())
+        .unwrap_or_default();
     SchedulerBudgetDiagnostics {
         max_tunnel_reconciles: budget.max_tunnel_reconciles,
         max_connectivity_probes: budget.max_connectivity_probes,
         max_dashboard_refreshes: budget.max_dashboard_refreshes,
+        next_wake_in_ms: telemetry.next_wake_in_ms,
+        last_cycle_started_at_ms: telemetry.last_cycle_started_at_ms,
+        last_cycle_finished_at_ms: telemetry.last_cycle_finished_at_ms,
     }
 }
 
@@ -89,6 +105,10 @@ pub(crate) fn start_background_scheduler<R: Runtime>(
         let mut dashboard_due_at = HashMap::<String, Instant>::new();
 
         while !scheduler_state.stop_requested.load(Ordering::Relaxed) {
+            let cycle_started_at_ms = now_ms();
+            if let Ok(mut telemetry) = scheduler_state.telemetry.lock() {
+                telemetry.last_cycle_started_at_ms = cycle_started_at_ms;
+            }
             let activity = current_runtime_activity(&activity_state);
             let budget = scheduler_budget(&activity);
             let tunnel_sleep = run_tunnel_supervisor_cycle(
@@ -118,6 +138,10 @@ pub(crate) fn start_background_scheduler<R: Runtime>(
             );
 
             let sleep_duration = tunnel_sleep.min(connectivity_sleep).min(dashboard_sleep);
+            if let Ok(mut telemetry) = scheduler_state.telemetry.lock() {
+                telemetry.last_cycle_finished_at_ms = now_ms();
+                telemetry.next_wake_in_ms = sleep_duration.as_millis() as u64;
+            }
             let mut remaining = sleep_duration;
 
             while remaining > Duration::ZERO {

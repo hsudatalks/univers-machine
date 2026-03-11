@@ -25,8 +25,8 @@ use crate::{
         ConnectivityDiagnostics, ConnectivityState, ContainerDashboard, DashboardDiagnostics,
         DashboardState, GithubProjectState, GithubPullRequestDetail, MachineImportCandidate,
         ManagedServer, PortRangeDiagnostics, RemoteDirectoryListing, RemoteFilePreview,
-        RuntimeActivityDiagnostics, RuntimeActivityState, TerminalDiagnostics, TerminalSnapshot,
-        TerminalState, TunnelDiagnostics, TunnelState, TunnelStatus,
+        RuntimeActivityDiagnostics, RuntimeActivityState, SchedulerState, TerminalDiagnostics,
+        TerminalSnapshot, TerminalState, TunnelDiagnostics, TunnelState, TunnelStatus,
     },
     runtime::{read_runtime_targets_file, resolve_runtime_web_surface, surface_key},
     scheduler::scheduler_budget_diagnostics,
@@ -51,6 +51,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     path::PathBuf,
     sync::atomic::Ordering,
+    time::Instant,
 };
 use tauri::{async_runtime, AppHandle, State};
 use univers_ark_russh::SshConfigResolver;
@@ -661,7 +662,12 @@ pub(crate) async fn sync_tunnel_registrations(
         sync_registered_web_services(&app_clone, &request_pairs);
         let statuses = sync_desired_tunnels(&app_clone, &tunnel_inner, &request_pairs)?;
 
-        emit_tunnel_status_updates(&app_clone, &tunnel_inner.status_snapshots, statuses.clone());
+        emit_tunnel_status_updates(
+            &app_clone,
+            &tunnel_inner.status_snapshots,
+            &tunnel_inner.telemetry,
+            statuses.clone(),
+        );
 
         Ok(statuses)
     })
@@ -808,8 +814,12 @@ pub(crate) fn stop_dashboard_monitor(
 }
 
 #[tauri::command]
-pub(crate) fn refresh_container_dashboard(app: AppHandle, target_id: String) -> Result<(), String> {
-    refresh_dashboard_once(app, target_id);
+pub(crate) fn refresh_container_dashboard(
+    app: AppHandle,
+    dashboard_state: State<'_, DashboardState>,
+    target_id: String,
+) -> Result<(), String> {
+    refresh_dashboard_once(app, dashboard_state.inner().clone(), target_id);
     Ok(())
 }
 
@@ -929,9 +939,11 @@ pub(crate) fn load_app_diagnostics(
     connectivity_state: State<'_, ConnectivityState>,
     dashboard_state: State<'_, DashboardState>,
     activity_state: State<'_, RuntimeActivityState>,
+    scheduler_state: State<'_, SchedulerState>,
 ) -> Result<AppDiagnostics, String> {
     let activity = current_runtime_activity(activity_state.inner());
-    let scheduler = scheduler_budget_diagnostics(&activity);
+    let scheduler = scheduler_budget_diagnostics(&activity, scheduler_state.inner());
+    let now = Instant::now();
 
     let terminal_sessions = terminal_state
         .sessions
@@ -968,6 +980,21 @@ pub(crate) fn load_app_diagnostics(
         .sessions
         .lock()
         .map_err(|_| String::from("Failed to inspect dashboard registrations"))?;
+    let tunnel_telemetry = tunnel_state
+        .telemetry
+        .lock()
+        .map(|value| value.clone())
+        .map_err(|_| String::from("Failed to inspect tunnel telemetry"))?;
+    let connectivity_telemetry = connectivity_state
+        .telemetry
+        .lock()
+        .map(|value| value.clone())
+        .map_err(|_| String::from("Failed to inspect connectivity telemetry"))?;
+    let dashboard_telemetry = dashboard_state
+        .telemetry
+        .lock()
+        .map(|value| value.clone())
+        .map_err(|_| String::from("Failed to inspect dashboard telemetry"))?;
 
     Ok(AppDiagnostics {
         process_id: std::process::id(),
@@ -1010,6 +1037,12 @@ pub(crate) fn load_app_diagnostics(
                 .count(),
             local_port_count: tunnel_ports.len(),
             status_counts: count_states(tunnel_statuses.values().map(|status| status.state.as_str())),
+            status_events_per_minute: tunnel_telemetry.status_events.per_minute(now),
+            status_items_per_minute: tunnel_telemetry.status_items.per_minute(now),
+            reconciles_per_minute: tunnel_telemetry.reconciles.per_minute(now),
+            next_due_in_ms: tunnel_telemetry.next_due_in_ms,
+            due_now_count: tunnel_telemetry.due_now_count,
+            waiting_count: tunnel_telemetry.waiting_count,
         },
         connectivity: ConnectivityDiagnostics {
             machine_snapshot_count: machine_snapshots.len(),
@@ -1022,9 +1055,19 @@ pub(crate) fn load_app_diagnostics(
                     .values()
                     .map(|snapshot| snapshot.state.as_str()),
             ),
+            status_events_per_minute: connectivity_telemetry.status_events.per_minute(now),
+            status_items_per_minute: connectivity_telemetry.status_items.per_minute(now),
+            probes_per_minute: connectivity_telemetry.probes.per_minute(now),
+            next_due_in_ms: connectivity_telemetry.next_due_in_ms,
+            due_now_count: connectivity_telemetry.due_now_count,
+            backoff_target_count: connectivity_telemetry.backoff_target_count,
+            max_consecutive_failures: connectivity_telemetry.max_consecutive_failures,
         },
         dashboards: DashboardDiagnostics {
             registered_count: dashboard_sessions.len(),
+            updates_per_minute: dashboard_telemetry.updates.per_minute(now),
+            next_due_in_ms: dashboard_telemetry.next_due_in_ms,
+            due_now_count: dashboard_telemetry.due_now_count,
         },
     })
 }

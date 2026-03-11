@@ -248,6 +248,9 @@ export interface SchedulerBudgetDiagnostics {
   maxTunnelReconciles: number;
   maxConnectivityProbes: number;
   maxDashboardRefreshes: number;
+  nextWakeInMs: number;
+  lastCycleStartedAtMs: number;
+  lastCycleFinishedAtMs: number;
 }
 
 export interface TunnelDiagnostics {
@@ -256,6 +259,12 @@ export interface TunnelDiagnostics {
   readySessionCount: number;
   localPortCount: number;
   statusCounts: Record<string, number>;
+  statusEventsPerMinute: number;
+  statusItemsPerMinute: number;
+  reconcilesPerMinute: number;
+  nextDueInMs: number;
+  dueNowCount: number;
+  waitingCount: number;
 }
 
 export interface ConnectivityDiagnostics {
@@ -263,10 +272,20 @@ export interface ConnectivityDiagnostics {
   containerSnapshotCount: number;
   machineStateCounts: Record<string, number>;
   containerStateCounts: Record<string, number>;
+  statusEventsPerMinute: number;
+  statusItemsPerMinute: number;
+  probesPerMinute: number;
+  nextDueInMs: number;
+  dueNowCount: number;
+  backoffTargetCount: number;
+  maxConsecutiveFailures: number;
 }
 
 export interface DashboardDiagnostics {
   registeredCount: number;
+  updatesPerMinute: number;
+  nextDueInMs: number;
+  dueNowCount: number;
 }
 
 export interface TerminalDiagnostics {

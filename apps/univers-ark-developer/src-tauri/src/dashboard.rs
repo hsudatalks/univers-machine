@@ -760,10 +760,15 @@ fn now_ms() -> u64 {
 
 fn emit_dashboard_update<R: Runtime>(
     app: &AppHandle<R>,
+    dashboard_state: &DashboardState,
     target_id: &str,
     refresh_seconds: u64,
     result: Result<ContainerDashboard, String>,
 ) {
+    if let Ok(mut telemetry) = dashboard_state.telemetry.lock() {
+        telemetry.updates.record(Instant::now(), 1);
+    }
+
     if let Ok(dashboard) = result.as_ref() {
         emit_dashboard_service_statuses(app, target_id, dashboard);
     }
@@ -822,9 +827,19 @@ pub(crate) fn stop_dashboard_monitor(
     stop_dashboard_monitor_inner(dashboard_state.inner(), &target_id)
 }
 
-pub(crate) fn refresh_dashboard_once<R: Runtime>(app: AppHandle<R>, target_id: String) {
+pub(crate) fn refresh_dashboard_once<R: Runtime>(
+    app: AppHandle<R>,
+    dashboard_state: DashboardState,
+    target_id: String,
+) {
     thread::spawn(move || {
-        emit_dashboard_update(&app, &target_id, 0, load_container_dashboard(&target_id));
+        emit_dashboard_update(
+            &app,
+            &dashboard_state,
+            &target_id,
+            0,
+            load_container_dashboard(&target_id),
+        );
     });
 }
 
@@ -887,11 +902,13 @@ pub(crate) fn run_dashboard_scheduler_cycle<R: Runtime>(
 
         (priority, target_id.clone())
     });
+    let due_now_count = due_targets.len();
     due_targets.truncate(max_refreshes.max(1));
 
     for (target_id, refresh_seconds) in due_targets {
         emit_dashboard_update(
             app,
+            dashboard_state,
             &target_id,
             refresh_seconds,
             load_container_dashboard(&target_id),
@@ -901,13 +918,17 @@ pub(crate) fn run_dashboard_scheduler_cycle<R: Runtime>(
             now + Duration::from_secs(effective_dashboard_refresh_seconds(activity_state, refresh_seconds)),
         );
     }
-
-    next_due_at
+    let next_due = next_due_at
         .values()
         .min()
         .copied()
         .map(|due| due.saturating_duration_since(Instant::now()))
-        .unwrap_or(Duration::from_secs(2))
+        .unwrap_or(Duration::from_secs(2));
+    if let Ok(mut telemetry) = dashboard_state.telemetry.lock() {
+        telemetry.next_due_in_ms = next_due.as_millis() as u64;
+        telemetry.due_now_count = due_now_count;
+    }
+    next_due
 }
 
 pub(crate) fn stop_all_dashboard_monitors(dashboard_state: &DashboardState) {

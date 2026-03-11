@@ -144,6 +144,7 @@ fn tunnel_status_changed(current: Option<&TunnelStatus>, next: &TunnelStatus) ->
 pub(crate) fn emit_tunnel_status_updates<R: Runtime>(
     app: &AppHandle<R>,
     status_snapshots: &Arc<Mutex<HashMap<String, TunnelStatus>>>,
+    telemetry: &Arc<Mutex<crate::models::TunnelTelemetry>>,
     statuses: impl IntoIterator<Item = TunnelStatus>,
 ) {
     let candidates = statuses.into_iter().collect::<Vec<_>>();
@@ -169,6 +170,12 @@ pub(crate) fn emit_tunnel_status_updates<R: Runtime>(
 
     if changed.is_empty() {
         return;
+    }
+
+    if let Ok(mut value) = telemetry.lock() {
+        let now = Instant::now();
+        value.status_events.record(now, 1);
+        value.status_items.record(now, changed.len());
     }
 
     for status in &changed {
@@ -530,7 +537,12 @@ pub(crate) fn reconcile_registered_tunnel<R: Runtime>(
     if !should_manage_runtime_surface_tunnel(target_id, &surface)? {
         let status = direct_tunnel_status(target_id, &surface);
         if emit_status_event {
-            emit_tunnel_status_updates(app, &tunnel_state.status_snapshots, [status.clone()]);
+            emit_tunnel_status_updates(
+                app,
+                &tunnel_state.status_snapshots,
+                &tunnel_state.telemetry,
+                [status.clone()],
+            );
         }
         return Ok(status);
     }
@@ -550,6 +562,7 @@ pub(crate) fn reconcile_registered_tunnel<R: Runtime>(
                         emit_tunnel_status_updates(
                             app,
                             &tunnel_state.status_snapshots,
+                            &tunnel_state.telemetry,
                             [status.clone()],
                         );
                     }
@@ -570,7 +583,12 @@ pub(crate) fn reconcile_registered_tunnel<R: Runtime>(
     match start_tunnel(app, tunnel_state, target_id, &surface) {
         Ok(status) => {
             if emit_status_event {
-                emit_tunnel_status_updates(app, &tunnel_state.status_snapshots, [status.clone()]);
+                emit_tunnel_status_updates(
+                    app,
+                    &tunnel_state.status_snapshots,
+                    &tunnel_state.telemetry,
+                    [status.clone()],
+                );
             }
             Ok(status)
         }
@@ -584,7 +602,12 @@ pub(crate) fn reconcile_registered_tunnel<R: Runtime>(
                 error.clone(),
             );
             if emit_status_event {
-                emit_tunnel_status_updates(app, &tunnel_state.status_snapshots, [status]);
+                emit_tunnel_status_updates(
+                    app,
+                    &tunnel_state.status_snapshots,
+                    &tunnel_state.telemetry,
+                    [status],
+                );
             }
             Err(error)
         }
@@ -611,7 +634,7 @@ pub(crate) fn run_tunnel_supervisor_cycle<R: Runtime>(
         stagger_desired_tunnels_for_recovery(tunnel_state, now);
     }
 
-    let (mut due_registrations, next_due_at) = tunnel_state
+    let (mut due_registrations, next_due_at, desired_count) = tunnel_state
         .desired_tunnels
         .lock()
         .map(|desired| {
@@ -632,9 +655,10 @@ pub(crate) fn run_tunnel_supervisor_cycle<R: Runtime>(
                 })
                 .collect::<Vec<_>>();
 
-            (due_registrations, next_due_at)
+            (due_registrations, next_due_at, desired.len())
         })
         .unwrap_or_default();
+    let due_now_count = due_registrations.len();
 
     due_registrations.sort_by_key(|registration| {
         let priority = if prioritized_target_id == Some(registration.target_id.as_str()) {
@@ -650,6 +674,19 @@ pub(crate) fn run_tunnel_supervisor_cycle<R: Runtime>(
         )
     });
     due_registrations.truncate(max_reconciles.max(1));
+    let reconciled_count = due_registrations.len();
+    if let Ok(mut telemetry) = tunnel_state.telemetry.lock() {
+        telemetry.next_due_in_ms = if due_now_count > 0 {
+            0
+        } else {
+            next_due_at
+                .map(|due| due.saturating_duration_since(now).as_millis() as u64)
+                .unwrap_or(0)
+        };
+        telemetry.due_now_count = due_now_count;
+        telemetry.waiting_count = desired_count.saturating_sub(due_now_count);
+        telemetry.reconciles.record(now, reconciled_count);
+    }
 
     for registration in due_registrations {
         let _ = reconcile_registered_tunnel(
@@ -793,6 +830,7 @@ fn spawn_managed_tunnel_session<R: Runtime>(
     app: &AppHandle<R>,
     sessions: Arc<Mutex<HashMap<String, TunnelSession>>>,
     status_snapshots: Arc<Mutex<HashMap<String, TunnelStatus>>>,
+    telemetry: Arc<Mutex<crate::models::TunnelTelemetry>>,
     session_id: u64,
     target_id: &str,
     surface: &BrowserSurface,
@@ -836,6 +874,7 @@ fn spawn_managed_tunnel_session<R: Runtime>(
                     emit_tunnel_status_updates(
                         &app_handle,
                         &status_snapshots,
+                        &telemetry,
                         [tunnel_status(
                             &target_id,
                             &surface_id,
@@ -853,6 +892,7 @@ fn spawn_managed_tunnel_session<R: Runtime>(
                     emit_tunnel_status_updates(
                         &app_handle,
                         &status_snapshots,
+                        &telemetry,
                         [tunnel_status(
                             &target_id,
                             &surface_id,
@@ -875,6 +915,7 @@ fn spawn_managed_tunnel_session<R: Runtime>(
                         emit_tunnel_status_updates(
                             &app_handle,
                             &status_snapshots,
+                            &telemetry,
                             [tunnel_status(
                                 &target_id,
                                 &surface_id,
@@ -939,6 +980,7 @@ fn spawn_managed_tunnel_session<R: Runtime>(
                     emit_tunnel_status_updates(
                         &app_handle,
                         &status_snapshots,
+                        &telemetry,
                         [tunnel_status(
                             &target_id,
                             &surface_id,
@@ -967,6 +1009,7 @@ fn spawn_managed_tunnel_session<R: Runtime>(
                     emit_tunnel_status_updates(
                         &app_handle,
                         &status_snapshots,
+                        &telemetry,
                         [tunnel_status(
                             &target_id,
                             &surface_id,
@@ -1053,6 +1096,7 @@ fn spawn_vite_proxy_session<R: Runtime>(
         app,
         sessions,
         tunnel_state.status_snapshots.clone(),
+        tunnel_state.telemetry.clone(),
         session_id,
         target_id,
         surface,
@@ -1105,6 +1149,7 @@ pub(crate) fn start_tunnel<R: Runtime>(
             app,
             tunnel_state.sessions.clone(),
             tunnel_state.status_snapshots.clone(),
+            tunnel_state.telemetry.clone(),
             session_id,
             target_id,
             surface,

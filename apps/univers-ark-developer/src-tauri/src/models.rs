@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, VecDeque},
     process::Child,
     sync::{
         atomic::{AtomicBool, AtomicU64},
         Arc, Mutex,
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 use univers_ark_russh::{LocalForward, PtySession};
 
@@ -524,6 +524,9 @@ pub(crate) struct SchedulerBudgetDiagnostics {
     pub(crate) max_tunnel_reconciles: usize,
     pub(crate) max_connectivity_probes: usize,
     pub(crate) max_dashboard_refreshes: usize,
+    pub(crate) next_wake_in_ms: u64,
+    pub(crate) last_cycle_started_at_ms: u64,
+    pub(crate) last_cycle_finished_at_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -534,6 +537,12 @@ pub(crate) struct TunnelDiagnostics {
     pub(crate) ready_session_count: usize,
     pub(crate) local_port_count: usize,
     pub(crate) status_counts: BTreeMap<String, usize>,
+    pub(crate) status_events_per_minute: usize,
+    pub(crate) status_items_per_minute: usize,
+    pub(crate) reconciles_per_minute: usize,
+    pub(crate) next_due_in_ms: u64,
+    pub(crate) due_now_count: usize,
+    pub(crate) waiting_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -543,12 +552,22 @@ pub(crate) struct ConnectivityDiagnostics {
     pub(crate) container_snapshot_count: usize,
     pub(crate) machine_state_counts: BTreeMap<String, usize>,
     pub(crate) container_state_counts: BTreeMap<String, usize>,
+    pub(crate) status_events_per_minute: usize,
+    pub(crate) status_items_per_minute: usize,
+    pub(crate) probes_per_minute: usize,
+    pub(crate) next_due_in_ms: u64,
+    pub(crate) due_now_count: usize,
+    pub(crate) backoff_target_count: usize,
+    pub(crate) max_consecutive_failures: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DashboardDiagnostics {
     pub(crate) registered_count: usize,
+    pub(crate) updates_per_minute: usize,
+    pub(crate) next_due_in_ms: u64,
+    pub(crate) due_now_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -571,6 +590,76 @@ pub(crate) struct AppDiagnostics {
     pub(crate) tunnels: TunnelDiagnostics,
     pub(crate) connectivity: ConnectivityDiagnostics,
     pub(crate) dashboards: DashboardDiagnostics,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RateWindow {
+    pub(crate) entries: VecDeque<(Instant, usize)>,
+}
+
+impl RateWindow {
+    const WINDOW: Duration = Duration::from_secs(60);
+
+    fn prune(&mut self, now: Instant) {
+        while let Some((at, _)) = self.entries.front() {
+            if now.saturating_duration_since(*at) <= Self::WINDOW {
+                break;
+            }
+            self.entries.pop_front();
+        }
+    }
+
+    pub(crate) fn record(&mut self, now: Instant, count: usize) {
+        if count == 0 {
+            self.prune(now);
+            return;
+        }
+        self.entries.push_back((now, count));
+        self.prune(now);
+    }
+
+    pub(crate) fn per_minute(&self, now: Instant) -> usize {
+        self.entries
+            .iter()
+            .filter(|(at, _)| now.saturating_duration_since(*at) <= Self::WINDOW)
+            .map(|(_, count)| *count)
+            .sum()
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct TunnelTelemetry {
+    pub(crate) status_events: RateWindow,
+    pub(crate) status_items: RateWindow,
+    pub(crate) reconciles: RateWindow,
+    pub(crate) next_due_in_ms: u64,
+    pub(crate) due_now_count: usize,
+    pub(crate) waiting_count: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ConnectivityTelemetry {
+    pub(crate) status_events: RateWindow,
+    pub(crate) status_items: RateWindow,
+    pub(crate) probes: RateWindow,
+    pub(crate) next_due_in_ms: u64,
+    pub(crate) due_now_count: usize,
+    pub(crate) backoff_target_count: usize,
+    pub(crate) max_consecutive_failures: u32,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct DashboardTelemetry {
+    pub(crate) updates: RateWindow,
+    pub(crate) next_due_in_ms: u64,
+    pub(crate) due_now_count: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SchedulerTelemetry {
+    pub(crate) next_wake_in_ms: u64,
+    pub(crate) last_cycle_started_at_ms: u64,
+    pub(crate) last_cycle_finished_at_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -721,6 +810,7 @@ pub(crate) struct TunnelState {
     pub(crate) desired_tunnels: Arc<Mutex<HashMap<String, TunnelRegistration>>>,
     pub(crate) local_ports: Arc<Mutex<HashMap<String, u16>>>,
     pub(crate) status_snapshots: Arc<Mutex<HashMap<String, TunnelStatus>>>,
+    pub(crate) telemetry: Arc<Mutex<TunnelTelemetry>>,
     pub(crate) next_session_id: AtomicU64,
 }
 
@@ -732,6 +822,7 @@ pub(crate) struct DashboardMonitor {
 #[derive(Clone, Default)]
 pub(crate) struct DashboardState {
     pub(crate) sessions: Arc<Mutex<HashMap<String, DashboardMonitor>>>,
+    pub(crate) telemetry: Arc<Mutex<DashboardTelemetry>>,
 }
 
 #[derive(Clone, Default)]
@@ -744,6 +835,7 @@ pub(crate) struct ServiceState {
 pub(crate) struct ConnectivityState {
     pub(crate) machine_snapshots: Arc<Mutex<HashMap<String, ConnectivitySnapshot>>>,
     pub(crate) target_snapshots: Arc<Mutex<HashMap<String, ConnectivitySnapshot>>>,
+    pub(crate) telemetry: Arc<Mutex<ConnectivityTelemetry>>,
 }
 
 #[derive(Clone)]
@@ -761,6 +853,7 @@ pub(crate) struct RuntimeActivityState {
 #[derive(Clone, Default)]
 pub(crate) struct SchedulerState {
     pub(crate) stop_requested: Arc<AtomicBool>,
+    pub(crate) telemetry: Arc<Mutex<SchedulerTelemetry>>,
 }
 
 impl Clone for TunnelState {
@@ -770,6 +863,7 @@ impl Clone for TunnelState {
             desired_tunnels: self.desired_tunnels.clone(),
             local_ports: self.local_ports.clone(),
             status_snapshots: self.status_snapshots.clone(),
+            telemetry: self.telemetry.clone(),
             next_session_id: AtomicU64::new(
                 self.next_session_id
                     .load(std::sync::atomic::Ordering::Relaxed),
@@ -801,6 +895,7 @@ impl Default for TunnelState {
             desired_tunnels: Arc::new(Mutex::new(HashMap::new())),
             local_ports: Arc::new(Mutex::new(HashMap::new())),
             status_snapshots: Arc::new(Mutex::new(HashMap::new())),
+            telemetry: Arc::new(Mutex::new(TunnelTelemetry::default())),
             next_session_id: AtomicU64::new(1),
         }
     }
