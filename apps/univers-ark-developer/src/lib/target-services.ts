@@ -101,6 +101,12 @@ export function primaryWebSurface(target: DeveloperTarget): DeveloperSurface | u
   return primaryWebService(target)?.web;
 }
 
+export function backgroundPrerenderWebServices(
+  target: DeveloperTarget,
+): WebDeveloperService[] {
+  return webServices(target).filter((service) => service.web.backgroundPrerender);
+}
+
 export function tmuxCommandService(
   target: DeveloperTarget,
 ): CommandDeveloperService | undefined {
@@ -152,3 +158,4 @@ export const browserServiceById = webServiceById;
 export const browserSurfaceById = webSurfaceById;
 export const primaryBrowserService = primaryWebService;
 export const primaryBrowserSurface = primaryWebSurface;
+export const backgroundPrerenderBrowserServices = backgroundPrerenderWebServices;

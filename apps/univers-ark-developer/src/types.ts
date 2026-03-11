@@ -8,6 +8,7 @@ export interface DeveloperSurface {
   id: string;
   label: string;
   serviceType: BrowserServiceType;
+  backgroundPrerender?: boolean;
   tunnelCommand: string;
   localUrl: string;
   remoteUrl: string;

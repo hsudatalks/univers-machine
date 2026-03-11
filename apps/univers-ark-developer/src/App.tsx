@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { BrowserFrameInstance } from "./components/BrowserPane";
 import { AddMachineDialog } from "./components/AddMachineDialog";
 import { ContainerPage } from "./components/ContainerPage";
@@ -16,11 +16,14 @@ import {
   restartContainer,
 } from "./lib/tauri";
 import {
+  backgroundPrerenderBrowserServices,
   browserSurfaceById,
   primaryBrowserSurface,
   resolveDefaultToolPanel,
   webServices,
 } from "./lib/target-services";
+import { preloadBrowserFrames } from "./lib/browser-cache";
+import { registerTunnelRequests } from "./lib/tunnel-manager";
 import "./App.css";
 import { useAppearance } from "./hooks/useAppearance";
 import { useContainerWorkspace } from "./hooks/useContainerWorkspace";
@@ -101,12 +104,12 @@ function surfaceKey(targetId: string, surfaceId: string): string {
 }
 
 function fallbackTunnelStatus(
-  targetId: string,
+  target: DeveloperTarget,
   surface: DeveloperSurface,
 ): TunnelStatus {
-  if (!surface.tunnelCommand.trim()) {
+  if (target.transport === "local" && !surface.tunnelCommand.trim()) {
     return {
-      targetId,
+      targetId: target.id,
       serviceId: surface.id,
       surfaceId: surface.id,
       localUrl: surface.localUrl,
@@ -116,13 +119,17 @@ function fallbackTunnelStatus(
   }
 
   return {
-    targetId,
+    targetId: target.id,
     serviceId: surface.id,
     surfaceId: surface.id,
     localUrl: surface.localUrl,
     state: "starting",
     message: `${surface.label} is warming in the background.`,
   };
+}
+
+function isReadyTunnelState(state: string | undefined): boolean {
+  return state === "direct" || state === "running";
 }
 
 function containerViewRefreshKey(target: DeveloperTarget): string {
@@ -188,8 +195,14 @@ function App() {
     updateDashboardRefreshSeconds,
     updateThemeMode,
   } = useAppearance();
-  const { bootstrap, error, expandedMachineIds, isRefreshing, refreshInventory, setExpandedMachineIds } =
-    useWorkbenchBootstrap();
+  const {
+    bootstrap,
+    error,
+    expandedMachineIds,
+    isRefreshing,
+    refreshInventory,
+    setExpandedMachineIds,
+  } = useWorkbenchBootstrap();
   const { isSidebarHidden, setIsSidebarHidden } = useSidebarState();
   const { overviewZoom, setOverviewZoom, clampOverviewZoom, roundOverviewZoom } =
     useOverviewZoom();
@@ -205,6 +218,33 @@ function App() {
     targetById,
     visitedMachines,
   } = useWorkbenchInventory(bootstrap, activeView, visitedMachineIds);
+  const startupPrerenderDescriptors = useMemo(
+    () =>
+      bootstrap
+        ? bootstrap.targets
+            .filter(
+              (target) =>
+                !bootstrap.machines.some(
+                  (machine) => machine.hostTargetId === target.id,
+                ),
+            )
+            .flatMap((target) =>
+              backgroundPrerenderBrowserServices(target).map((service) => ({
+                cacheKey: surfaceKey(target.id, service.id),
+                serviceId: service.id,
+                surface: service.web,
+                target,
+              })),
+            )
+        : [],
+    [bootstrap],
+  );
+  const [startupPrerenderVersions, setStartupPrerenderVersions] = useState<
+    Record<string, number>
+  >({});
+  const previousStartupPrerenderStatesRef = useRef<
+    Record<string, string | undefined>
+  >({});
   const editingMachine = editingMachineId && bootstrap
     ? bootstrap.machines.find((machine) => machine.id === editingMachineId) ?? null
     : null;
@@ -268,6 +308,70 @@ function App() {
 
     window.location.hash = nextHash;
   }, [activeView]);
+
+  useEffect(() => {
+    if (startupPrerenderDescriptors.length === 0) {
+      return;
+    }
+
+    void registerTunnelRequests(
+      startupPrerenderDescriptors.map(({ target, serviceId }) => ({
+        targetId: target.id,
+        serviceId,
+      })),
+      setTunnelStatus,
+    );
+  }, [setTunnelStatus, startupPrerenderDescriptors]);
+
+  useEffect(() => {
+    const previousStates = previousStartupPrerenderStatesRef.current;
+    const nextReadyKeys: string[] = [];
+
+    for (const descriptor of startupPrerenderDescriptors) {
+      const nextState = tunnelStatuses[descriptor.cacheKey]?.state;
+      const previousState = previousStates[descriptor.cacheKey];
+
+      if (!isReadyTunnelState(previousState) && isReadyTunnelState(nextState)) {
+        nextReadyKeys.push(descriptor.cacheKey);
+      }
+
+      previousStates[descriptor.cacheKey] = nextState;
+    }
+
+    if (nextReadyKeys.length === 0) {
+      return;
+    }
+
+    setStartupPrerenderVersions((current) => {
+      const next = { ...current };
+
+      for (const key of nextReadyKeys) {
+        next[key] = (next[key] ?? 0) + 1;
+      }
+
+      return next;
+    });
+  }, [startupPrerenderDescriptors, tunnelStatuses]);
+
+  useEffect(() => {
+    if (startupPrerenderDescriptors.length === 0) {
+      return;
+    }
+
+    preloadBrowserFrames(
+      startupPrerenderDescriptors
+        .filter(({ cacheKey, target }) => {
+          const state = tunnelStatuses[cacheKey]?.state;
+          return isReadyTunnelState(state) || target.transport === "local";
+        })
+        .map(({ cacheKey, surface, target }) => ({
+          cacheKey,
+          frameVersion: startupPrerenderVersions[cacheKey] ?? 0,
+          src: tunnelStatuses[cacheKey]?.localUrl ?? surface.localUrl,
+          title: `${target.label} ${surface.label}`,
+        })),
+    );
+  }, [startupPrerenderDescriptors, startupPrerenderVersions, tunnelStatuses]);
 
   useEffect(() => {
     if (!bootstrap) {
@@ -587,7 +691,7 @@ function App() {
             const browserStatus =
               browserSurface && target
                 ? tunnelStatuses[surfaceKey(target.id, browserSurface.id)] ??
-                  fallbackTunnelStatus(target.id, browserSurface)
+                  fallbackTunnelStatus(target, browserSurface)
                 : undefined;
             const browserFrames: BrowserFrameInstance[] = target
               ? webServices(target).map((service) => {
@@ -595,7 +699,7 @@ function App() {
                   const panel = `browser:${surface.id}` as const;
                   const status =
                     tunnelStatuses[surfaceKey(target.id, surface.id)] ??
-                    fallbackTunnelStatus(target.id, surface);
+                    fallbackTunnelStatus(target, surface);
 
                   return {
                     cacheKey: surfaceKey(target.id, surface.id),
@@ -617,7 +721,7 @@ function App() {
             const primaryBrowserStatus =
               primarySurface && target
                 ? tunnelStatuses[surfaceKey(target.id, primarySurface.id)] ??
-                  fallbackTunnelStatus(target.id, primarySurface)
+                  fallbackTunnelStatus(target, primarySurface)
                 : undefined;
             return (
               <section

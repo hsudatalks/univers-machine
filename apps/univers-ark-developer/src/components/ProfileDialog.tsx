@@ -469,6 +469,19 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
                                     ]}
                                     value={service.web.serviceType}
                                   />
+                                  <ToggleField
+                                    checked={Boolean(service.web.backgroundPrerender)}
+                                    hint="Warm the tunnel and preload this service in the background after the app starts."
+                                    label="Background prerender on app startup"
+                                    onChange={(checked) =>
+                                      updateService(index, (current) => ({
+                                        ...current,
+                                        web: current.web
+                                          ? { ...current.web, backgroundPrerender: checked }
+                                          : current.web,
+                                      }))
+                                    }
+                                  />
                                   <ReadOnlyField
                                     label="Resolved Remote URL"
                                     mono
@@ -734,6 +747,33 @@ function SelectField({
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+function ToggleField({
+  checked,
+  hint,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  hint?: string;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="dialog-field-group">
+      <label className="dialog-field">
+        <span className="dialog-field-label">{label}</span>
+        <input
+          checked={checked}
+          className="dialog-choice-checkbox"
+          onChange={(event) => onChange(event.target.checked)}
+          type="checkbox"
+        />
+      </label>
+      {hint ? <p className="dialog-field-hint">{hint}</p> : null}
     </div>
   );
 }

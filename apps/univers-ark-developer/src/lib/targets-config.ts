@@ -249,6 +249,7 @@ export function createDefaultWebService(
       id,
       label,
       serviceType,
+      backgroundPrerender: serviceType === "vite",
       tunnelCommand: "",
       localUrl: "",
       remoteUrl: "",
