@@ -1,4 +1,5 @@
 use std::{
+    env,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc, Arc, Mutex,
@@ -15,6 +16,23 @@ use crate::{
     ssh_config::ResolvedEndpointChain,
     types::{ClientOptions, PtySession, PtySessionCommand, PtySessionEvent, RusshError},
 };
+
+fn pty_locale_env() -> Vec<(&'static str, String)> {
+    let lang = env::var("LANG")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| String::from("en_US.UTF-8"));
+    let lc_all = env::var("LC_ALL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| lang.clone());
+    let lc_ctype = env::var("LC_CTYPE")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| lang.clone());
+
+    vec![("LANG", lang), ("LC_ALL", lc_all), ("LC_CTYPE", lc_ctype)]
+}
 
 pub fn start_pty_session_chain(
     chain: &ResolvedEndpointChain,
@@ -93,6 +111,9 @@ async fn run_pty_session(
 ) -> Result<(), RusshError> {
     let client = connect_chain(chain, options).await?;
     let mut channel = client.handle.channel_open_session().await?;
+    for (name, value) in pty_locale_env() {
+        let _ = channel.set_env(false, name, value).await;
+    }
     channel
         .request_pty(
             true,
