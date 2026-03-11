@@ -376,6 +376,7 @@ fn local_machine_available() -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(desktop)]
 fn sync_local_machine_config(config_path: &PathBuf) -> Result<(), String> {
     let raw_content = fs::read_to_string(config_path)
         .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))?;
@@ -444,6 +445,11 @@ fn sync_local_machine_config(config_path: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(mobile)]
+fn sync_local_machine_config(_config_path: &PathBuf) -> Result<(), String> {
+    Ok(())
+}
+
 fn manager_priority(server: &RemoteContainerServer) -> Vec<ContainerManagerType> {
     match server.manager_type {
         ContainerManagerType::None => vec![
@@ -469,7 +475,8 @@ fn targets_file_name() -> &'static str {
     }
 }
 
-pub(crate) fn univers_config_dir() -> Result<PathBuf, String> {
+#[cfg(desktop)]
+fn fallback_univers_config_dir() -> Result<PathBuf, String> {
     let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
         .map(PathBuf::from)
         .ok_or_else(|| String::from("Failed to resolve user home directory"))?;
@@ -477,9 +484,43 @@ pub(crate) fn univers_config_dir() -> Result<PathBuf, String> {
     Ok(home.join(".univers"))
 }
 
+#[cfg(mobile)]
+fn fallback_univers_config_dir() -> Result<PathBuf, String> {
+    configured_config_dir()
+        .get()
+        .cloned()
+        .ok_or_else(|| String::from("App config directory is not initialized"))
+}
+
 fn configured_targets_path() -> &'static OnceLock<PathBuf> {
     static CONFIGURED_TARGETS_PATH: OnceLock<PathBuf> = OnceLock::new();
     &CONFIGURED_TARGETS_PATH
+}
+
+fn configured_config_dir() -> &'static OnceLock<PathBuf> {
+    static CONFIGURED_CONFIG_DIR: OnceLock<PathBuf> = OnceLock::new();
+    &CONFIGURED_CONFIG_DIR
+}
+
+#[cfg(desktop)]
+fn resolve_univers_config_dir<R: Runtime>(_app_handle: &AppHandle<R>) -> Result<PathBuf, String> {
+    fallback_univers_config_dir()
+}
+
+#[cfg(mobile)]
+fn resolve_univers_config_dir<R: Runtime>(app_handle: &AppHandle<R>) -> Result<PathBuf, String> {
+    app_handle
+        .path()
+        .app_config_dir()
+        .map_err(|error| format!("Failed to resolve mobile app config directory: {}", error))
+}
+
+pub(crate) fn univers_config_dir() -> Result<PathBuf, String> {
+    if let Some(path) = configured_config_dir().get() {
+        return Ok(path.clone());
+    }
+
+    fallback_univers_config_dir()
 }
 
 pub(crate) fn app_root() -> PathBuf {
@@ -513,7 +554,7 @@ fn legacy_targets_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> Option<Pat
 pub(crate) fn initialize_targets_file_path<R: Runtime>(
     app_handle: &AppHandle<R>,
 ) -> Result<PathBuf, String> {
-    let app_config_dir = univers_config_dir()?;
+    let app_config_dir = resolve_univers_config_dir(app_handle)?;
 
     fs::create_dir_all(&app_config_dir).map_err(|error| {
         format!(
@@ -539,6 +580,7 @@ pub(crate) fn initialize_targets_file_path<R: Runtime>(
         })?;
     }
 
+    let _ = configured_config_dir().set(app_config_dir.clone());
     let _ = configured_targets_path().set(writable_targets_path.clone());
     sync_local_machine_config(&writable_targets_path)?;
 

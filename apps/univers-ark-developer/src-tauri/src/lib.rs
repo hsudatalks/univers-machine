@@ -19,6 +19,7 @@ mod shell;
 mod terminal;
 mod tunnel;
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     app::run();
 }

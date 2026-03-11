@@ -1,5 +1,4 @@
 use crate::{
-    cleanup::cleanup_stale_ssh_tunnels,
     commands,
     config::initialize_targets_file_path,
     dashboard::stop_all_dashboard_monitors,
@@ -11,12 +10,14 @@ use crate::{
     secret_management::SecretManagementState,
     tunnel::stop_all_tunnels,
 };
-use tauri::{
-    menu::{
-        AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
-        WINDOW_SUBMENU_ID,
-    },
-    AppHandle, Emitter, Manager, Runtime,
+use tauri::{AppHandle, Emitter, Manager, Runtime};
+
+#[cfg(desktop)]
+use crate::cleanup::cleanup_stale_ssh_tunnels;
+
+#[cfg(desktop)]
+use tauri::menu::{
+    AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
 };
 
 const TOGGLE_SIDEBAR_MENU_ID: &str = "toggle_sidebar";
@@ -28,7 +29,7 @@ const PREVIOUS_CONTAINER_EVENT: &str = "previous-container-requested";
 const NEXT_CONTAINER_EVENT: &str = "next-container-requested";
 const PARENT_VIEW_EVENT: &str = "parent-view-requested";
 
-#[cfg(target_os = "macos")]
+#[cfg(all(desktop, target_os = "macos"))]
 fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let pkg_info = app_handle.package_info();
     let config = app_handle.config();
@@ -152,7 +153,7 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
     )
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(desktop, not(target_os = "macos")))]
 fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let toggle_sidebar = MenuItem::with_id(
         app_handle,
@@ -210,19 +211,9 @@ fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Menu<R
     Menu::with_items(app_handle, &[&file_menu, &view_menu])
 }
 
-pub(crate) fn run() {
-    tauri::Builder::default()
-        .manage(TerminalState::default())
-        .manage(TunnelState::default())
-        .manage(ServiceState::default())
-        .manage(DashboardState::default())
-        .manage(ConnectivityState::default())
-        .manage(RuntimeActivityState::default())
-        .manage(SchedulerState::default())
-        .manage(SecretManagementState::new().expect("failed to initialize secret management"))
-        // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right/Up
-        // on Windows, Cmd+Alt+Left/Right/Up on macOS) are handled by the menu
-        // accelerators in build_app_menu, not by global shortcuts.
+#[cfg(desktop)]
+fn apply_platform_features<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder
         .menu(build_app_menu)
         .on_menu_event(|app_handle, event| {
             if event.id().as_ref() == TOGGLE_SIDEBAR_MENU_ID {
@@ -235,6 +226,29 @@ pub(crate) fn run() {
                 let _ = app_handle.emit(PARENT_VIEW_EVENT, ());
             }
         })
+}
+
+#[cfg(mobile)]
+fn apply_platform_features<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder
+}
+
+pub(crate) fn run() {
+    let builder = tauri::Builder::default()
+        .manage(TerminalState::default())
+        .manage(TunnelState::default())
+        .manage(ServiceState::default())
+        .manage(DashboardState::default())
+        .manage(ConnectivityState::default())
+        .manage(RuntimeActivityState::default())
+        .manage(SchedulerState::default())
+        .manage(SecretManagementState::new().expect("failed to initialize secret management"))
+        // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right/Up
+        // on Windows, Cmd+Alt+Left/Right/Up on macOS) are handled by the menu
+        // accelerators in build_app_menu, not by global shortcuts.
+        ;
+
+    apply_platform_features(builder)
         .setup(|app| {
             initialize_targets_file_path(app.handle())?;
             start_background_scheduler(
@@ -246,6 +260,7 @@ pub(crate) fn run() {
                 app.state::<RuntimeActivityState>().inner().clone(),
             );
 
+            #[cfg(desktop)]
             std::thread::spawn(|| match cleanup_stale_ssh_tunnels() {
                 Ok(cleaned) if cleaned > 0 => {
                     eprintln!(
