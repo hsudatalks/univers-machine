@@ -1,6 +1,6 @@
 import type { AppBootstrap } from "../types";
 import { isMachineHostTarget, visibleContainers } from "../lib/container-visibility";
-import { Badge } from "./ui/badge";
+import { ConnectionStatusLight } from "./ConnectionStatusLight";
 import {
   Sidebar,
   SidebarContent,
@@ -35,28 +35,6 @@ function titleCase(value: string): string {
   }
 
   return value.slice(0, 1).toUpperCase() + value.slice(1);
-}
-
-function inventoryStateTone(state: string): string {
-  switch (state) {
-    case "ready":
-      return "success";
-    case "degraded":
-    case "empty":
-      return "warning";
-    case "error":
-      return "destructive";
-    default:
-      return "neutral";
-  }
-}
-
-function StatusBadge({ state, title }: { state: string; title: string }) {
-  return (
-    <Badge aria-label={title} title={title} variant={state as "neutral" | "success" | "warning" | "destructive"}>
-      {title}
-    </Badge>
-  );
 }
 
 export function SidebarNav({
@@ -125,26 +103,31 @@ export function SidebarNav({
             {bootstrap.machines.map((machine) => {
               const isExpanded = expandedMachineIds.includes(machine.id);
               const isMachineActive = activeMachineId === machine.id;
+              const managedContainers = visibleContainers(machine.containers);
+              const hasManagedContainers = managedContainers.length > 0;
               const branchHasActiveTarget =
                 activeTargetId === machine.hostTargetId ||
                 machine.containers.some(
                   (container) => container.targetId === activeTargetId,
                 );
-              const managedContainers = visibleContainers(machine.containers);
 
               return (
                 <SidebarMenuItem className="sidebar-branch" key={machine.id}>
-                  <div className="sidebar-branch-header">
-                    <button
-                      className="sidebar-branch-toggle"
-                      onClick={() => onToggleMachine(machine.id)}
-                      type="button"
-                    >
-                      <ChevronRight
-                        className={isExpanded ? "rotate-90 transition-transform" : "transition-transform"}
-                        size={14}
-                      />
-                    </button>
+                  <div
+                    className={`sidebar-branch-header ${hasManagedContainers ? "" : "sidebar-branch-header-flat"}`.trim()}
+                  >
+                    {hasManagedContainers ? (
+                      <button
+                        className="sidebar-branch-toggle"
+                        onClick={() => onToggleMachine(machine.id)}
+                        type="button"
+                      >
+                        <ChevronRight
+                          className={isExpanded ? "rotate-90 transition-transform" : "transition-transform"}
+                          size={14}
+                        />
+                      </button>
+                    ) : null}
 
                     <SidebarMenuButton
                       className={branchHasActiveTarget ? "is-branch-active" : ""}
@@ -157,14 +140,14 @@ export function SidebarNav({
                         <span className="sidebar-node-label">{machine.label}</span>
                       </span>
 
-                      <StatusBadge
-                        state={inventoryStateTone(machine.state)}
+                      <ConnectionStatusLight
                         title={titleCase(machine.state)}
+                        state={machine.state}
                       />
                     </SidebarMenuButton>
                   </div>
 
-                  {isExpanded ? (
+                  {isExpanded && hasManagedContainers ? (
                     <SidebarMenuSub className="sidebar-children">
                       {managedContainers.map((container) => {
                         const isActive = activeTargetId === container.targetId;
@@ -184,8 +167,8 @@ export function SidebarNav({
                               <span className="sidebar-node-label">{container.label}</span>
                             </span>
 
-                            <StatusBadge
-                              state={container.sshReachable ? "success" : "destructive"}
+                            <ConnectionStatusLight
+                              state={container.sshState}
                               title={container.sshState}
                             />
                           </SidebarMenuButton>

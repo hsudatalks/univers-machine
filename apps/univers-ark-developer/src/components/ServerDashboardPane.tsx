@@ -1,7 +1,7 @@
 import { Activity, HardDrive, Server, SquareTerminal } from "lucide-react";
 import { visibleContainers } from "../lib/container-visibility";
 import type { DeveloperTarget, ManagedMachine } from "../types";
-import { Badge } from "./ui/badge";
+import { ConnectionStatusLight } from "./ConnectionStatusLight";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
@@ -9,28 +9,6 @@ interface ServerDashboardPaneProps {
   onOpenWorkspace: (targetId: string) => void;
   resolveTarget: (targetId: string) => DeveloperTarget | undefined;
   server: ManagedMachine;
-}
-
-function inventoryStateVariant(
-  state: string,
-): "neutral" | "success" | "warning" | "destructive" {
-  switch (state) {
-    case "ready":
-      return "success";
-    case "degraded":
-    case "empty":
-      return "warning";
-    case "error":
-      return "destructive";
-    default:
-      return "neutral";
-  }
-}
-
-function sshStateVariant(
-  reachable: boolean,
-): "neutral" | "success" | "warning" | "destructive" {
-  return reachable ? "success" : "destructive";
 }
 
 export function ServerDashboardPane({
@@ -69,9 +47,7 @@ export function ServerDashboardPane({
             </div>
 
             <div className="dashboard-summary-actions">
-              <Badge variant={inventoryStateVariant(server.state)}>
-                {server.state}
-              </Badge>
+              <ConnectionStatusLight state={server.state} />
             </div>
           </CardContent>
         </Card>
@@ -149,9 +125,7 @@ export function ServerDashboardPane({
                     </div>
 
                     <div className="server-dashboard-row-actions">
-                      <Badge variant={sshStateVariant(container.sshReachable)}>
-                        {container.sshState}
-                      </Badge>
+                      <ConnectionStatusLight state={container.sshState} title={container.sshState} />
                       <Button
                         disabled={!target}
                         onClick={() => {

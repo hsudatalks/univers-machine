@@ -78,6 +78,10 @@
   gap: 0.15rem;
 }
 
+.sidebar-branch-header-flat {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .sidebar-branch-toggle {
   display: inline-flex;
   align-items: center;

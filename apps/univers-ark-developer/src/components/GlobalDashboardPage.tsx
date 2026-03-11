@@ -7,6 +7,7 @@ import type {
   ManagedMachine,
   ServiceStatus,
 } from "../types";
+import { ConnectionStatusLight } from "./ConnectionStatusLight";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -26,28 +27,6 @@ interface GlobalDashboardPageProps {
   serviceStatuses: Record<string, ServiceStatus>;
   machines: ManagedMachine[];
   standaloneTargets: DeveloperTarget[];
-}
-
-function inventoryStateVariant(
-  state: string,
-): "neutral" | "success" | "warning" | "destructive" {
-  switch (state) {
-    case "ready":
-      return "success";
-    case "degraded":
-    case "empty":
-      return "warning";
-    case "error":
-      return "destructive";
-    default:
-      return "neutral";
-  }
-}
-
-function sshStateVariant(
-  reachable: boolean,
-): "neutral" | "success" | "warning" | "destructive" {
-  return reachable ? "success" : "destructive";
 }
 
 function serviceKey(targetId: string, serviceId: string): string {
@@ -126,9 +105,7 @@ export function GlobalDashboardPage({
                     </div>
 
                     <div className="server-dashboard-row-actions">
-                      <Badge variant={inventoryStateVariant(machine.state)}>
-                        {machine.state}
-                      </Badge>
+                      <ConnectionStatusLight state={machine.state} />
                       <Button
                         onClick={() => {
                           onOpenMachine(machine.id);
@@ -170,9 +147,7 @@ export function GlobalDashboardPage({
                     </div>
 
                     <div className="server-dashboard-row-actions">
-                      <Badge variant={sshStateVariant(container.sshReachable)}>
-                        {container.sshState}
-                      </Badge>
+                      <ConnectionStatusLight state={container.sshState} title={container.sshState} />
                       {primary ? (
                         <Badge variant="neutral">{primary.label}</Badge>
                       ) : null}

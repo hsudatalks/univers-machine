@@ -7,6 +7,7 @@ import type {
 import { visibleContainers } from "../lib/container-visibility";
 import { loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
 import { parseTargetsConfig, stringifyTargetsConfig } from "../lib/targets-config";
+import { ConnectionStatusLight } from "./ConnectionStatusLight";
 import { ProfileDialog } from "./ProfileDialog";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -24,22 +25,6 @@ interface SettingsPageProps {
   onThemeModeChange: (themeMode: ThemeMode) => void;
   resolvedTheme: "light" | "dark";
   machines: ManagedMachine[];
-}
-
-function badgeVariantForState(state: string | undefined): "neutral" | "success" | "warning" | "destructive" {
-  switch (state) {
-    case "running":
-    case "ready":
-      return "success";
-    case "starting":
-    case "pending":
-      return "warning";
-    case "error":
-    case "stopped":
-      return "destructive";
-    default:
-      return "neutral";
-  }
 }
 
 export function SettingsPage({
@@ -217,15 +202,13 @@ export function SettingsPage({
                     key={machine.id}
                     onClick={() => setSelectedMachine(machine)}
                     type="button"
-                  >
-                    <div className="settings-server-header">
-                      <span className="settings-server-label">{machine.label}</span>
-                      <Badge variant={badgeVariantForState(machine.state)}>
-                        {machine.state}
-                      </Badge>
-                    </div>
-                    <div className="settings-server-meta">
-                      <span className="settings-server-host">{machine.host}</span>
+                    >
+                      <div className="settings-server-header">
+                        <span className="settings-server-label">{machine.label}</span>
+                        <ConnectionStatusLight state={machine.state} />
+                      </div>
+                      <div className="settings-server-meta">
+                        <span className="settings-server-host">{machine.host}</span>
                       {machine.description ? (
                         <span className="settings-server-desc">{machine.description}</span>
                       ) : null}

@@ -1,3 +1,4 @@
+import { ConnectionStatusLight } from "./ConnectionStatusLight";
 import { GithubPopover } from "./GithubPopover";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -82,7 +83,7 @@ export function StatusBar({
         <Badge className="status-bar-chip" variant="neutral">
           {activeStatusLabel}
         </Badge>
-        <span className="status-bar-text status-bar-text-subtle">ready</span>
+        <ConnectionStatusLight className="status-bar-state-light" state="ready" title="Ready" />
       </div>
 
       <div className="status-bar-section status-bar-section-secondary">
