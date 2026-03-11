@@ -2,8 +2,9 @@ use crate::{
     cleanup::cleanup_stale_ssh_tunnels,
     commands,
     config::initialize_targets_file_path,
+    connectivity::start_connectivity_monitor,
     dashboard::stop_all_dashboard_monitors,
-    models::{DashboardState, ServiceState, TerminalState, TunnelState},
+    models::{ConnectivityState, DashboardState, ServiceState, TerminalState, TunnelState},
     tunnel::{start_tunnel_supervisor, stop_all_tunnels},
 };
 use tauri::{
@@ -211,6 +212,7 @@ pub(crate) fn run() {
         .manage(TunnelState::default())
         .manage(ServiceState::default())
         .manage(DashboardState::default())
+        .manage(ConnectivityState::default())
         // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right/Up
         // on Windows, Cmd+Alt+Left/Right/Up on macOS) are handled by the menu
         // accelerators in build_app_menu, not by global shortcuts.
@@ -231,6 +233,10 @@ pub(crate) fn run() {
             start_tunnel_supervisor(
                 app.handle().clone(),
                 app.state::<TunnelState>().inner().clone(),
+            );
+            start_connectivity_monitor(
+                app.handle().clone(),
+                app.state::<ConnectivityState>().inner().clone(),
             );
 
             std::thread::spawn(|| match cleanup_stale_ssh_tunnels() {

@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AppSettings,
   AppBootstrap,
+  ConnectivityStatusEvent,
   ContainerDashboard,
   ContainerDashboardUpdate,
   DeveloperService,
@@ -719,6 +720,18 @@ export async function listenTunnelStatus(
   }
 
   return listen<TunnelStatus>("tunnel-status", (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function listenConnectivityStatus(
+  handler: (payload: ConnectivityStatusEvent) => void,
+): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => undefined;
+  }
+
+  return listen<ConnectivityStatusEvent>("connectivity-status", (event) => {
     handler(event.payload);
   });
 }

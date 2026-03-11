@@ -464,6 +464,24 @@ pub(crate) struct TunnelStatus {
     pub(crate) message: String,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct ConnectivitySnapshot {
+    pub(crate) state: String,
+    pub(crate) message: String,
+    pub(crate) reachable: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ConnectivityStatusEvent {
+    pub(crate) entity: String,
+    pub(crate) machine_id: String,
+    pub(crate) target_id: Option<String>,
+    pub(crate) state: String,
+    pub(crate) message: String,
+    pub(crate) reachable: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ServiceStatus {
@@ -644,6 +662,13 @@ pub(crate) struct DashboardState {
 pub(crate) struct ServiceState {
     pub(crate) registrations: Arc<Mutex<HashMap<String, ServiceRegistration>>>,
     pub(crate) statuses: Arc<Mutex<HashMap<String, ServiceStatus>>>,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct ConnectivityState {
+    pub(crate) machine_snapshots: Arc<Mutex<HashMap<String, ConnectivitySnapshot>>>,
+    pub(crate) target_snapshots: Arc<Mutex<HashMap<String, ConnectivitySnapshot>>>,
+    pub(crate) stop_requested: Arc<AtomicBool>,
 }
 
 impl Clone for TunnelState {

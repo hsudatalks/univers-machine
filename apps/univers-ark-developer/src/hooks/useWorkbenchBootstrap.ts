@@ -1,6 +1,46 @@
 import { useEffect, useState } from "react";
-import { loadBootstrap, refreshBootstrap } from "../lib/tauri";
-import type { AppBootstrap } from "../types";
+import {
+  listenConnectivityStatus,
+  loadBootstrap,
+  refreshBootstrap,
+} from "../lib/tauri";
+import type { AppBootstrap, ConnectivityStatusEvent } from "../types";
+
+function applyConnectivityStatus(
+  bootstrap: AppBootstrap,
+  status: ConnectivityStatusEvent,
+): AppBootstrap {
+  return {
+    ...bootstrap,
+    machines: bootstrap.machines.map((machine) => {
+      if (machine.id !== status.machineId) {
+        return machine;
+      }
+
+      if (status.entity === "machine") {
+        return {
+          ...machine,
+          state: status.state,
+          message: status.message,
+        };
+      }
+
+      return {
+        ...machine,
+        containers: machine.containers.map((container) =>
+          container.targetId === status.targetId
+            ? {
+                ...container,
+                sshState: status.state,
+                sshMessage: status.message,
+                sshReachable: status.reachable,
+              }
+            : container,
+        ),
+      };
+    }),
+  };
+}
 
 export function useWorkbenchBootstrap() {
   const [bootstrap, setBootstrap] = useState<AppBootstrap | null>(null);
@@ -35,6 +75,22 @@ export function useWorkbenchBootstrap() {
 
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    void listenConnectivityStatus((status) => {
+      setBootstrap((current) =>
+        current ? applyConnectivityStatus(current, status) : current,
+      );
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+
+    return () => {
+      unlisten?.();
     };
   }, []);
 

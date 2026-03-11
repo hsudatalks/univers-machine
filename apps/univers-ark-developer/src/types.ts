@@ -252,6 +252,15 @@ export interface TunnelStatus {
   message: string;
 }
 
+export interface ConnectivityStatusEvent {
+  entity: "machine" | "container";
+  machineId: string;
+  targetId?: string | null;
+  state: string;
+  message: string;
+  reachable: boolean;
+}
+
 export interface ServiceStatus {
   targetId: string;
   serviceId: string;

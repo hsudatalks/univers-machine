@@ -4,6 +4,7 @@ use crate::{
         read_targets_config, resolve_raw_target, restart_container as restart_remote_container,
         save_targets_config, scan_and_store_server_inventory, targets_file_path,
     },
+    connectivity::apply_connectivity_snapshots,
     dashboard::{
         load_container_dashboard as read_container_dashboard, refresh_dashboard_once,
         start_dashboard_monitor as spawn_dashboard_monitor,
@@ -19,10 +20,10 @@ use crate::{
         merge_github_pull_request as execute_github_pull_request_merge, open_external_url,
     },
     models::{
-        command_service, tmux_command_service, AppBootstrap, AppSettings, ContainerDashboard,
-        DashboardState, GithubProjectState, GithubPullRequestDetail, MachineImportCandidate,
-        ManagedServer, RemoteDirectoryListing, RemoteFilePreview, TerminalSnapshot, TerminalState,
-        TunnelState, TunnelStatus,
+        command_service, tmux_command_service, AppBootstrap, AppSettings, ConnectivityState,
+        ContainerDashboard, DashboardState, GithubProjectState, GithubPullRequestDetail,
+        MachineImportCandidate, ManagedServer, RemoteDirectoryListing, RemoteFilePreview,
+        TerminalSnapshot, TerminalState, TunnelState, TunnelStatus,
     },
     runtime::{read_runtime_targets_file, resolve_runtime_web_surface, surface_key},
     service_registry::{
@@ -402,11 +403,14 @@ fn should_manage_runtime_surface_tunnel(
 #[tauri::command]
 pub(crate) async fn load_bootstrap(
     tunnel_state: State<'_, TunnelState>,
+    connectivity_state: State<'_, ConnectivityState>,
 ) -> Result<AppBootstrap, String> {
     let tunnel_state_inner = tunnel_state.inner().clone();
+    let connectivity_state_inner = connectivity_state.inner().clone();
 
     async_runtime::spawn_blocking(move || {
-        let (targets_file, servers) = read_bootstrap_data(false)?;
+        let (targets_file, mut servers) = read_bootstrap_data(false)?;
+        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
         let hydrated_targets_file = read_runtime_targets_file(&tunnel_state_inner)?;
         let config_path = targets_file_path();
 
@@ -425,11 +429,14 @@ pub(crate) async fn load_bootstrap(
 #[tauri::command]
 pub(crate) async fn refresh_bootstrap(
     tunnel_state: State<'_, TunnelState>,
+    connectivity_state: State<'_, ConnectivityState>,
 ) -> Result<AppBootstrap, String> {
     let tunnel_state_inner = tunnel_state.inner().clone();
+    let connectivity_state_inner = connectivity_state.inner().clone();
 
     async_runtime::spawn_blocking(move || {
-        let (targets_file, servers) = read_bootstrap_data(false)?;
+        let (targets_file, mut servers) = read_bootstrap_data(false)?;
+        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
         let hydrated_targets_file = read_runtime_targets_file(&tunnel_state_inner)?;
         let config_path = targets_file_path();
 
@@ -446,24 +453,51 @@ pub(crate) async fn refresh_bootstrap(
 }
 
 #[tauri::command]
-pub(crate) async fn load_machine_inventory() -> Result<Vec<ManagedServer>, String> {
-    async_runtime::spawn_blocking(|| read_server_inventory(false))
-        .await
-        .map_err(|error| format!("Failed to join machine inventory task: {}", error))?
+pub(crate) async fn load_machine_inventory(
+    connectivity_state: State<'_, ConnectivityState>,
+) -> Result<Vec<ManagedServer>, String> {
+    let connectivity_state_inner = connectivity_state.inner().clone();
+
+    async_runtime::spawn_blocking(move || {
+        let mut servers = read_server_inventory(false)?;
+        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
+        Ok(servers)
+    })
+    .await
+    .map_err(|error| format!("Failed to join machine inventory task: {}", error))?
 }
 
 #[tauri::command]
-pub(crate) async fn refresh_machine_inventory() -> Result<Vec<ManagedServer>, String> {
-    async_runtime::spawn_blocking(|| read_server_inventory(false))
-        .await
-        .map_err(|error| format!("Failed to join refresh machine inventory task: {}", error))?
+pub(crate) async fn refresh_machine_inventory(
+    connectivity_state: State<'_, ConnectivityState>,
+) -> Result<Vec<ManagedServer>, String> {
+    let connectivity_state_inner = connectivity_state.inner().clone();
+
+    async_runtime::spawn_blocking(move || {
+        let mut servers = read_server_inventory(false)?;
+        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
+        Ok(servers)
+    })
+    .await
+    .map_err(|error| format!("Failed to join refresh machine inventory task: {}", error))?
 }
 
 #[tauri::command]
-pub(crate) async fn scan_machine_inventory(machine_id: String) -> Result<ManagedServer, String> {
-    async_runtime::spawn_blocking(move || scan_and_store_server_inventory(&machine_id))
-        .await
-        .map_err(|error| format!("Failed to join machine scan task: {}", error))?
+pub(crate) async fn scan_machine_inventory(
+    machine_id: String,
+    connectivity_state: State<'_, ConnectivityState>,
+) -> Result<ManagedServer, String> {
+    let connectivity_state_inner = connectivity_state.inner().clone();
+
+    async_runtime::spawn_blocking(move || {
+        let mut server = scan_and_store_server_inventory(&machine_id)?;
+        let mut servers = vec![server.clone()];
+        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
+        server = servers.into_iter().next().unwrap_or(server);
+        Ok(server)
+    })
+    .await
+    .map_err(|error| format!("Failed to join machine scan task: {}", error))?
 }
 
 #[tauri::command]

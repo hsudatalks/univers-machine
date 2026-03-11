@@ -253,6 +253,7 @@
 }
 
 .status-connected,
+.status-ready,
 .status-running {
   color: #d6f3dd;
   border-color: rgba(125, 211, 141, 0.28);
@@ -260,6 +261,7 @@
 }
 
 .terminal-status-dot.status-connected,
+.terminal-status-dot.status-ready,
 .terminal-status-dot.status-running {
   border-color: rgba(125, 211, 141, 0.42);
   background: rgb(125, 211, 141);
@@ -267,6 +269,7 @@
 }
 
 .status-connecting,
+.status-checking,
 .status-starting {
   color: #f3dfb1;
   border-color: rgba(242, 178, 77, 0.28);

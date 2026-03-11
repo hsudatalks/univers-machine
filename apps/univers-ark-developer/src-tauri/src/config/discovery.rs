@@ -1173,9 +1173,9 @@ fn build_managed_container(
             probe_managed_container_ssh(server, &container.ipv4, &container.name, &ssh_user)
         } else {
             (
-                true,
-                String::from("cached"),
-                String::from("Using cached container snapshot."),
+                false,
+                String::from("checking"),
+                String::from("Waiting for background SSH probe."),
             )
         };
 
@@ -1216,9 +1216,9 @@ fn machine_host_state(server: &RemoteContainerServer, probe_ssh: bool) -> (bool,
     }
 
     (
-        true,
-        String::from("cached"),
-        String::from("Using cached machine snapshot."),
+        false,
+        String::from("checking"),
+        String::from("Waiting for background SSH probe."),
     )
 }
 
@@ -1226,7 +1226,7 @@ fn machine_host_state(server: &RemoteContainerServer, probe_ssh: bool) -> (bool,
 pub(super) fn server_state_for_containers(containers: &[ManagedContainer]) -> (String, String) {
     if containers.is_empty() {
         return (
-            String::from("empty"),
+            String::from("error"),
             String::from("No matching development containers were detected."),
         );
     }
@@ -1245,7 +1245,7 @@ pub(super) fn server_state_for_containers(containers: &[ManagedContainer]) -> (S
 
     if reachable > 0 {
         return (
-            String::from("degraded"),
+            String::from("error"),
             format!(
                 "{} of {} development container(s) are SSH reachable.",
                 reachable,
@@ -1270,12 +1270,17 @@ fn server_state_for_machine(
 ) -> (String, String) {
     if containers.is_empty() {
         if host_reachable {
-            let message = if host_message == "Using cached machine snapshot." {
-                String::from("Using cached machine snapshot. No managed containers detected.")
-            } else {
-                String::from("Machine host is ready. No managed containers detected.")
-            };
-            return (String::from("ready"), message);
+            return (
+                String::from("ready"),
+                String::from("Machine host is ready. No managed containers detected."),
+            );
+        }
+
+        if host_message == "Waiting for background SSH probe." {
+            return (
+                String::from("checking"),
+                String::from("Checking machine host. No managed containers detected."),
+            );
         }
 
         return (
@@ -1300,18 +1305,19 @@ fn server_state_for_machine(
         );
     }
 
-    if host_reachable || reachable > 0 {
-        let host_prefix = if host_reachable {
-            String::from("Machine host is ready.")
-        } else {
-            format!("Machine host is unreachable: {}", host_message)
-        };
-
+    if host_message == "Waiting for background SSH probe." || reachable > 0 && !host_reachable {
         return (
-            String::from("degraded"),
+            String::from("checking"),
+            format!("Checking machine host and {} managed container(s).", total),
+        );
+    }
+
+    if host_reachable {
+        return (
+            String::from("error"),
             format!(
-                "{} {} of {} managed container(s) are SSH reachable.",
-                host_prefix, reachable, total
+                "Machine host is ready, but only {} of {} managed container(s) are SSH reachable.",
+                reachable, total
             ),
         );
     }
@@ -1332,7 +1338,6 @@ fn build_server_inventory(
 ) -> DiscoveredServerInventory {
     let mut managed_containers = Vec::new();
     let host_target = build_machine_host_target(server);
-    let (host_reachable, _, host_message) = machine_host_state(server, probe_ssh);
     let mut available_targets = vec![host_target.clone()];
 
     for container in containers {
@@ -1345,8 +1350,22 @@ fn build_server_inventory(
         }
     }
 
-    let (state, message) =
-        server_state_for_machine(host_reachable, &host_message, &managed_containers);
+    let (state, message) = if probe_ssh {
+        let (host_reachable, _, host_message) = machine_host_state(server, true);
+        server_state_for_machine(host_reachable, &host_message, &managed_containers)
+    } else {
+        (
+            String::from("checking"),
+            if managed_containers.is_empty() {
+                String::from("Checking machine host. No managed containers detected.")
+            } else {
+                format!(
+                    "Checking machine host and {} managed container(s).",
+                    managed_containers.len()
+                )
+            },
+        )
+    };
 
     DiscoveredServerInventory {
         server: ManagedServer {
@@ -1399,11 +1418,7 @@ pub(super) fn discover_remote_server_inventory(
                     transport: server.transport,
                     host: server.host.clone(),
                     description: server.description.clone(),
-                    state: if host_reachable {
-                        String::from("degraded")
-                    } else {
-                        String::from("error")
-                    },
+                    state: String::from("error"),
                     message,
                     containers: Vec::new(),
                 },

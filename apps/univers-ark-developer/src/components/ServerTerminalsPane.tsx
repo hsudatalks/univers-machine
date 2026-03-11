@@ -1,3 +1,4 @@
+import { connectionStatusClass } from "../lib/connectivity-state";
 import { visibleContainers } from "../lib/container-visibility";
 import { TerminalCard } from "./TerminalCard";
 import type { DeveloperTarget, ManagedContainer, ManagedMachine } from "../types";
@@ -18,7 +19,9 @@ function UnavailableTerminalCard({ container }: { container: ManagedContainer })
         </div>
 
         <div className="terminal-meta">
-          <span className="terminal-status status-error">{container.sshState}</span>
+          <span className={`terminal-status ${connectionStatusClass(container.sshState)}`}>
+            {container.sshState}
+          </span>
         </div>
       </header>
 

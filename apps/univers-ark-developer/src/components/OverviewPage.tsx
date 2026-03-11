@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { connectionStatusClass } from "../lib/connectivity-state";
 import { TerminalCard } from "./TerminalCard";
 import type { DeveloperTarget, ManagedContainer, ManagedMachine } from "../types";
 
@@ -39,7 +40,9 @@ function UnavailableTerminalCard({
         </div>
 
         <div className="terminal-meta">
-          <span className="terminal-status status-error">{container.sshState}</span>
+          <span className={`terminal-status ${connectionStatusClass(container.sshState)}`}>
+            {container.sshState}
+          </span>
         </div>
       </header>
 
