@@ -651,7 +651,7 @@ pub(crate) struct TunnelState {
 
 #[derive(Clone)]
 pub(crate) struct DashboardMonitor {
-    pub(crate) stop_requested: Arc<AtomicBool>,
+    pub(crate) refresh_seconds: u64,
 }
 
 #[derive(Clone, Default)]
@@ -669,7 +669,6 @@ pub(crate) struct ServiceState {
 pub(crate) struct ConnectivityState {
     pub(crate) machine_snapshots: Arc<Mutex<HashMap<String, ConnectivitySnapshot>>>,
     pub(crate) target_snapshots: Arc<Mutex<HashMap<String, ConnectivitySnapshot>>>,
-    pub(crate) stop_requested: Arc<AtomicBool>,
 }
 
 #[derive(Clone)]
@@ -679,6 +678,11 @@ pub(crate) struct RuntimeActivityState {
     pub(crate) online: Arc<AtomicBool>,
     pub(crate) recovering_until_ms: Arc<AtomicU64>,
     pub(crate) recovery_generation: Arc<AtomicU64>,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct SchedulerState {
+    pub(crate) stop_requested: Arc<AtomicBool>,
 }
 
 impl Clone for TunnelState {

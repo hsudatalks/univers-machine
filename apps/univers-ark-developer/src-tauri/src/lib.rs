@@ -11,6 +11,7 @@ mod github;
 mod models;
 mod proxy;
 mod runtime;
+mod scheduler;
 mod service_registry;
 mod settings;
 mod shell;

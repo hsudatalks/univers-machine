@@ -1,8 +1,5 @@
 use crate::{
-    activity::{
-        current_runtime_activity, detect_runtime_suspend_gap,
-        RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS,
-    },
+    activity::{current_runtime_activity, RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS},
     config::{resolve_raw_target, resolve_target_ssh_chain, run_target_shell_command},
     models::{
         ContainerAgentInfo, ContainerDashboard, ContainerDashboardUpdate, ContainerProjectInfo,
@@ -14,10 +11,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    collections::HashMap,
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -798,78 +792,25 @@ fn stop_dashboard_monitor_inner(
     dashboard_state: &DashboardState,
     target_id: &str,
 ) -> Result<(), String> {
-    let monitor = dashboard_state
+    dashboard_state
         .sessions
         .lock()
         .map_err(|_| String::from("Dashboard monitor state is unavailable"))?
         .remove(target_id);
 
-    if let Some(monitor) = monitor {
-        monitor.stop_requested.store(true, Ordering::Relaxed);
-    }
-
     Ok(())
 }
 
-pub(crate) fn start_dashboard_monitor<R: Runtime>(
-    app: AppHandle<R>,
+pub(crate) fn start_dashboard_monitor(
     dashboard_state: State<'_, DashboardState>,
-    activity_state: State<'_, RuntimeActivityState>,
     target_id: String,
     refresh_seconds: u64,
 ) -> Result<(), String> {
-    stop_dashboard_monitor_inner(dashboard_state.inner(), &target_id)?;
-
-    let stop_requested = Arc::new(AtomicBool::new(false));
-    let monitor = DashboardMonitor {
-        stop_requested: stop_requested.clone(),
-    };
-
     dashboard_state
         .sessions
         .lock()
         .map_err(|_| String::from("Dashboard monitor state is unavailable"))?
-        .insert(target_id.clone(), monitor);
-
-    let activity_state = activity_state.inner().clone();
-
-    thread::spawn(move || {
-        let mut last_tick_at = Instant::now();
-
-        loop {
-            let now = Instant::now();
-            let _gap_detected =
-                detect_runtime_suspend_gap(&activity_state, &mut last_tick_at, now);
-            let activity = current_runtime_activity(&activity_state);
-
-            emit_dashboard_update(
-                &app,
-                &target_id,
-                refresh_seconds,
-                load_container_dashboard(&target_id),
-            );
-
-            if refresh_seconds == 0 || stop_requested.load(Ordering::Relaxed) {
-                break;
-            }
-
-            let effective_refresh_seconds = if activity.is_foreground() {
-                refresh_seconds
-            } else if !activity.online {
-                RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS.max(refresh_seconds.max(1) * 2)
-            } else {
-                refresh_seconds.max(RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS)
-            };
-
-            let sleep_chunks = effective_refresh_seconds.saturating_mul(4);
-            for _ in 0..sleep_chunks {
-                if stop_requested.load(Ordering::Relaxed) {
-                    return;
-                }
-                thread::sleep(Duration::from_millis(250));
-            }
-        }
-    });
+        .insert(target_id, DashboardMonitor { refresh_seconds });
 
     Ok(())
 }
@@ -887,16 +828,81 @@ pub(crate) fn refresh_dashboard_once<R: Runtime>(app: AppHandle<R>, target_id: S
     });
 }
 
-pub(crate) fn stop_all_dashboard_monitors(dashboard_state: &DashboardState) {
-    let sessions = match dashboard_state.sessions.lock() {
-        Ok(mut sessions) => sessions
-            .drain()
-            .map(|(_, monitor)| monitor)
-            .collect::<Vec<_>>(),
-        Err(_) => return,
-    };
+fn effective_dashboard_refresh_seconds(
+    activity_state: &RuntimeActivityState,
+    refresh_seconds: u64,
+) -> u64 {
+    let activity = current_runtime_activity(activity_state);
 
-    for monitor in sessions {
-        monitor.stop_requested.store(true, Ordering::Relaxed);
+    if activity.is_foreground() {
+        return refresh_seconds.max(1);
+    }
+
+    if !activity.online {
+        return RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS.max(refresh_seconds.max(1) * 2);
+    }
+
+    refresh_seconds.max(RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS)
+}
+
+pub(crate) fn run_dashboard_scheduler_cycle<R: Runtime>(
+    app: &AppHandle<R>,
+    dashboard_state: &DashboardState,
+    activity_state: &RuntimeActivityState,
+    next_due_at: &mut HashMap<String, Instant>,
+    max_refreshes: usize,
+) -> Duration {
+    let now = Instant::now();
+
+    let monitors = dashboard_state
+        .sessions
+        .lock()
+        .map(|sessions| sessions.clone())
+        .unwrap_or_default();
+
+    next_due_at.retain(|target_id, _| monitors.contains_key(target_id));
+
+    for target_id in monitors.keys() {
+        next_due_at.entry(target_id.clone()).or_insert(now);
+    }
+
+    let mut due_targets = monitors
+        .iter()
+        .filter_map(|(target_id, monitor)| {
+            let next_due = next_due_at.get(target_id).copied().unwrap_or(now);
+            if next_due <= now {
+                Some((target_id.clone(), monitor.refresh_seconds))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    due_targets.sort_by(|left, right| left.0.cmp(&right.0));
+    due_targets.truncate(max_refreshes);
+
+    for (target_id, refresh_seconds) in due_targets {
+        emit_dashboard_update(
+            app,
+            &target_id,
+            refresh_seconds,
+            load_container_dashboard(&target_id),
+        );
+        next_due_at.insert(
+            target_id,
+            now + Duration::from_secs(effective_dashboard_refresh_seconds(activity_state, refresh_seconds)),
+        );
+    }
+
+    next_due_at
+        .values()
+        .min()
+        .copied()
+        .map(|due| due.saturating_duration_since(Instant::now()))
+        .unwrap_or(Duration::from_secs(2))
+}
+
+pub(crate) fn stop_all_dashboard_monitors(dashboard_state: &DashboardState) {
+    if let Ok(mut sessions) = dashboard_state.sessions.lock() {
+        sessions.clear();
     }
 }

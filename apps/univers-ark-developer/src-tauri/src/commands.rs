@@ -8,8 +8,8 @@ use crate::{
     connectivity::apply_connectivity_snapshots,
     dashboard::{
         load_container_dashboard as read_container_dashboard, refresh_dashboard_once,
-        start_dashboard_monitor as spawn_dashboard_monitor,
-        stop_dashboard_monitor as halt_dashboard_monitor,
+        start_dashboard_monitor as register_dashboard_monitor,
+        stop_dashboard_monitor as unregister_dashboard_monitor,
     },
     files::{
         list_remote_directory as load_remote_directory,
@@ -783,13 +783,11 @@ pub(crate) async fn load_container_dashboard(
 
 #[tauri::command]
 pub(crate) fn start_dashboard_monitor(
-    app: AppHandle,
     dashboard_state: State<'_, DashboardState>,
-    activity_state: State<'_, RuntimeActivityState>,
     target_id: String,
     refresh_seconds: u64,
 ) -> Result<(), String> {
-    spawn_dashboard_monitor(app, dashboard_state, activity_state, target_id, refresh_seconds)
+    register_dashboard_monitor(dashboard_state, target_id, refresh_seconds)
 }
 
 #[tauri::command]
@@ -797,7 +795,7 @@ pub(crate) fn stop_dashboard_monitor(
     dashboard_state: State<'_, DashboardState>,
     target_id: String,
 ) -> Result<(), String> {
-    halt_dashboard_monitor(dashboard_state, target_id)
+    unregister_dashboard_monitor(dashboard_state, target_id)
 }
 
 #[tauri::command]

@@ -11,7 +11,7 @@ use crate::{
 };
 use std::{
     collections::{HashMap, HashSet},
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -67,6 +67,22 @@ struct InventoryCache {
 struct ConnectivityMonitorState {
     inventory_cache: Option<InventoryCache>,
     probe_schedules: HashMap<String, ProbeSchedule>,
+}
+
+pub(crate) struct ConnectivitySchedulerState {
+    monitor_state: ConnectivityMonitorState,
+    last_tick_at: Instant,
+    last_recovery_generation: u64,
+}
+
+impl Default for ConnectivitySchedulerState {
+    fn default() -> Self {
+        Self {
+            monitor_state: ConnectivityMonitorState::default(),
+            last_tick_at: Instant::now(),
+            last_recovery_generation: 0,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -874,48 +890,32 @@ fn run_connectivity_probe_cycle<R: Runtime>(
     emit_connectivity_statuses(app, pending_events);
 }
 
-pub(crate) fn start_connectivity_monitor<R: Runtime>(
+pub(crate) fn run_connectivity_scheduler_cycle<R: Runtime>(
     app: AppHandle<R>,
     connectivity_state: ConnectivityState,
     activity_state: RuntimeActivityState,
-) {
-    let stop_requested = connectivity_state.stop_requested.clone();
+    scheduler_state: &mut ConnectivitySchedulerState,
+) -> Duration {
+    let now = Instant::now();
+    let gap_detected =
+        detect_runtime_suspend_gap(&activity_state, &mut scheduler_state.last_tick_at, now);
+    let activity = current_runtime_activity(&activity_state);
+    let recovery_generation_changed =
+        activity.recovery_generation != scheduler_state.last_recovery_generation;
+    scheduler_state.last_recovery_generation = activity.recovery_generation;
 
-    thread::spawn(move || {
-        let mut monitor_state = ConnectivityMonitorState::default();
-        let mut last_tick_at = Instant::now();
-        let mut last_recovery_generation = 0;
+    run_connectivity_probe_cycle(
+        &app,
+        &connectivity_state,
+        &mut scheduler_state.monitor_state,
+        gap_detected || recovery_generation_changed,
+    );
 
-        while !stop_requested.load(Ordering::Relaxed) {
-            let now = Instant::now();
-            let gap_detected = detect_runtime_suspend_gap(&activity_state, &mut last_tick_at, now);
-            let activity = current_runtime_activity(&activity_state);
-            let recovery_generation_changed =
-                activity.recovery_generation != last_recovery_generation;
-            last_recovery_generation = activity.recovery_generation;
-
-            run_connectivity_probe_cycle(
-                &app,
-                &connectivity_state,
-                &mut monitor_state,
-                gap_detected || recovery_generation_changed,
-            );
-
-            let sleep_interval = if activity.recovering || activity.is_foreground() {
-                CONNECTIVITY_MONITOR_TICK
-            } else if !activity.online {
-                RUNTIME_BACKGROUND_MONITOR_INTERVAL.max(CONNECTIVITY_READY_RECHECK_INTERVAL)
-            } else {
-                RUNTIME_BACKGROUND_MONITOR_INTERVAL
-            };
-            let sleep_chunks = sleep_interval.as_millis() / 250;
-            for _ in 0..sleep_chunks.max(1) {
-                if stop_requested.load(Ordering::Relaxed) {
-                    return;
-                }
-
-                thread::sleep(Duration::from_millis(250));
-            }
-        }
-    });
+    if activity.recovering || activity.is_foreground() {
+        CONNECTIVITY_MONITOR_TICK
+    } else if !activity.online {
+        RUNTIME_BACKGROUND_MONITOR_INTERVAL.max(CONNECTIVITY_READY_RECHECK_INTERVAL)
+    } else {
+        RUNTIME_BACKGROUND_MONITOR_INTERVAL
+    }
 }

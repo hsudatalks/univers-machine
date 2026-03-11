@@ -2,13 +2,13 @@ use crate::{
     cleanup::cleanup_stale_ssh_tunnels,
     commands,
     config::initialize_targets_file_path,
-    connectivity::start_connectivity_monitor,
     dashboard::stop_all_dashboard_monitors,
     models::{
-        ConnectivityState, DashboardState, RuntimeActivityState, ServiceState, TerminalState,
-        TunnelState,
+        ConnectivityState, DashboardState, RuntimeActivityState, SchedulerState, ServiceState,
+        TerminalState, TunnelState,
     },
-    tunnel::{start_tunnel_supervisor, stop_all_tunnels},
+    scheduler::{start_background_scheduler, stop_background_scheduler},
+    tunnel::stop_all_tunnels,
 };
 use tauri::{
     menu::{
@@ -217,6 +217,7 @@ pub(crate) fn run() {
         .manage(DashboardState::default())
         .manage(ConnectivityState::default())
         .manage(RuntimeActivityState::default())
+        .manage(SchedulerState::default())
         // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right/Up
         // on Windows, Cmd+Alt+Left/Right/Up on macOS) are handled by the menu
         // accelerators in build_app_menu, not by global shortcuts.
@@ -234,14 +235,12 @@ pub(crate) fn run() {
         })
         .setup(|app| {
             initialize_targets_file_path(app.handle())?;
-            start_tunnel_supervisor(
+            start_background_scheduler(
                 app.handle().clone(),
+                app.state::<SchedulerState>().inner().clone(),
                 app.state::<TunnelState>().inner().clone(),
-                app.state::<RuntimeActivityState>().inner().clone(),
-            );
-            start_connectivity_monitor(
-                app.handle().clone(),
                 app.state::<ConnectivityState>().inner().clone(),
+                app.state::<DashboardState>().inner().clone(),
                 app.state::<RuntimeActivityState>().inner().clone(),
             );
 
@@ -306,6 +305,8 @@ pub(crate) fn run() {
             ) {
                 let tunnel_state = app_handle.state::<TunnelState>();
                 let dashboard_state = app_handle.state::<DashboardState>();
+                let scheduler_state = app_handle.state::<SchedulerState>();
+                stop_background_scheduler(scheduler_state.inner());
                 stop_all_tunnels(tunnel_state.inner());
                 stop_all_dashboard_monitors(dashboard_state.inner());
             }

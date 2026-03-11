@@ -38,6 +38,20 @@ const TUNNEL_RECOVERY_STAGGER_STEP: Duration = Duration::from_millis(250);
 
 pub(crate) const TUNNEL_STATUS_BATCH_EVENT: &str = "tunnel-status-batch";
 
+pub(crate) struct TunnelSupervisorState {
+    last_tick_at: Instant,
+    last_recovery_generation: u64,
+}
+
+impl Default for TunnelSupervisorState {
+    fn default() -> Self {
+        Self {
+            last_tick_at: Instant::now(),
+            last_recovery_generation: 0,
+        }
+    }
+}
+
 pub(crate) fn tunnel_status(
     target_id: &str,
     service_id: &str,
@@ -412,8 +426,8 @@ pub(crate) fn register_desired_tunnel(
     }
 }
 
-pub(crate) fn sync_desired_tunnels(
-    app: &AppHandle,
+pub(crate) fn sync_desired_tunnels<R: Runtime>(
+    app: &AppHandle<R>,
     tunnel_state: &TunnelState,
     requests: &[(String, String)],
 ) -> Result<Vec<TunnelStatus>, String> {
@@ -504,8 +518,8 @@ fn stagger_desired_tunnels_for_recovery(tunnel_state: &TunnelState, now: Instant
     }
 }
 
-pub(crate) fn reconcile_registered_tunnel(
-    app: &AppHandle,
+pub(crate) fn reconcile_registered_tunnel<R: Runtime>(
+    app: &AppHandle<R>,
     tunnel_state: &TunnelState,
     target_id: &str,
     service_id: &str,
@@ -577,83 +591,75 @@ pub(crate) fn reconcile_registered_tunnel(
     }
 }
 
-pub(crate) fn start_tunnel_supervisor(
-    app: AppHandle,
-    tunnel_state: TunnelState,
-    activity_state: RuntimeActivityState,
-) {
-    std::thread::spawn(move || {
-        let mut last_tick_at = Instant::now();
-        let mut last_recovery_generation = 0;
+pub(crate) fn run_tunnel_supervisor_cycle<R: Runtime>(
+    app: &AppHandle<R>,
+    tunnel_state: &TunnelState,
+    activity_state: &RuntimeActivityState,
+    scheduler_state: &mut TunnelSupervisorState,
+) -> Duration {
+    let now = Instant::now();
+    let gap_detected =
+        detect_runtime_suspend_gap(activity_state, &mut scheduler_state.last_tick_at, now);
+    let activity = current_runtime_activity(activity_state);
+    let recovery_generation_changed =
+        activity.recovery_generation != scheduler_state.last_recovery_generation;
+    scheduler_state.last_recovery_generation = activity.recovery_generation;
 
-        loop {
-            let now = Instant::now();
-            let gap_detected =
-                detect_runtime_suspend_gap(&activity_state, &mut last_tick_at, now);
-            let activity = current_runtime_activity(&activity_state);
-            let recovery_generation_changed =
-                activity.recovery_generation != last_recovery_generation;
-            last_recovery_generation = activity.recovery_generation;
+    if gap_detected || recovery_generation_changed {
+        stagger_desired_tunnels_for_recovery(tunnel_state, now);
+    }
 
-            if gap_detected || recovery_generation_changed {
-                stagger_desired_tunnels_for_recovery(&tunnel_state, now);
-            }
-
-            let (due_registrations, next_due_at) = tunnel_state
-                .desired_tunnels
-                .lock()
-                .map(|desired| {
-                    let mut next_due_at = None;
-                    let due_registrations = desired
-                        .values()
-                        .filter_map(|registration| {
-                            if registration.next_attempt_at <= now {
-                                Some(registration.clone())
-                            } else {
-                                next_due_at = Some(
-                                    next_due_at
-                                        .map(|current: Instant| {
-                                            current.min(registration.next_attempt_at)
-                                        })
-                                        .unwrap_or(registration.next_attempt_at),
-                                );
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>();
-
-                    (due_registrations, next_due_at)
-                })
-                .unwrap_or_default();
-
-            for registration in due_registrations {
-                let _ = reconcile_registered_tunnel(
-                    &app,
-                    &tunnel_state,
-                    &registration.target_id,
-                    &registration.service_id,
-                    true,
-                );
-            }
-
-            let mut sleep_duration = next_due_at
-                .map(|due| {
-                    let remaining = due.saturating_duration_since(Instant::now());
-                    if remaining.is_zero() {
-                        TUNNEL_SUPERVISOR_ACTIVE_SLEEP
+    let (due_registrations, next_due_at) = tunnel_state
+        .desired_tunnels
+        .lock()
+        .map(|desired| {
+            let mut next_due_at = None;
+            let due_registrations = desired
+                .values()
+                .filter_map(|registration| {
+                    if registration.next_attempt_at <= now {
+                        Some(registration.clone())
                     } else {
-                        remaining.min(TUNNEL_SUPERVISOR_MAX_SLEEP)
+                        next_due_at = Some(
+                            next_due_at
+                                .map(|current: Instant| current.min(registration.next_attempt_at))
+                                .unwrap_or(registration.next_attempt_at),
+                        );
+                        None
                     }
                 })
-                .unwrap_or(TUNNEL_SUPERVISOR_MAX_SLEEP);
+                .collect::<Vec<_>>();
 
-            if !activity.recovering && (!activity.is_foreground() || !activity.online) {
-                sleep_duration = sleep_duration.max(RUNTIME_BACKGROUND_SUPERVISOR_FLOOR);
+            (due_registrations, next_due_at)
+        })
+        .unwrap_or_default();
+
+    for registration in due_registrations {
+        let _ = reconcile_registered_tunnel(
+            app,
+            tunnel_state,
+            &registration.target_id,
+            &registration.service_id,
+            true,
+        );
+    }
+
+    let mut sleep_duration = next_due_at
+        .map(|due| {
+            let remaining = due.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                TUNNEL_SUPERVISOR_ACTIVE_SLEEP
+            } else {
+                remaining.min(TUNNEL_SUPERVISOR_MAX_SLEEP)
             }
+        })
+        .unwrap_or(TUNNEL_SUPERVISOR_MAX_SLEEP);
 
-            std::thread::sleep(sleep_duration);
-        }
-    });
+    if !activity.recovering && (!activity.is_foreground() || !activity.online) {
+        sleep_duration = sleep_duration.max(RUNTIME_BACKGROUND_SUPERVISOR_FLOOR);
+    }
+
+    sleep_duration
 }
 
 fn resolve_container_chain(target_id: &str) -> Result<ResolvedEndpointChain, String> {
@@ -766,8 +772,8 @@ fn spawn_russh_forward(
     })
 }
 
-fn spawn_managed_tunnel_session(
-    app: &AppHandle,
+fn spawn_managed_tunnel_session<R: Runtime>(
+    app: &AppHandle<R>,
     sessions: Arc<Mutex<HashMap<String, TunnelSession>>>,
     status_snapshots: Arc<Mutex<HashMap<String, TunnelStatus>>>,
     session_id: u64,
@@ -968,8 +974,8 @@ fn spawn_managed_tunnel_session(
     session
 }
 
-fn spawn_vite_proxy_session(
-    app: &AppHandle,
+fn spawn_vite_proxy_session<R: Runtime>(
+    app: &AppHandle<R>,
     sessions: Arc<Mutex<HashMap<String, TunnelSession>>>,
     tunnel_state: &TunnelState,
     session_id: u64,
@@ -1048,8 +1054,8 @@ fn uses_vite_forwarding(surface: &BrowserSurface) -> bool {
         || !surface.vite_hmr_tunnel_command.trim().is_empty()
 }
 
-pub(crate) fn start_tunnel(
-    app: &AppHandle,
+pub(crate) fn start_tunnel<R: Runtime>(
+    app: &AppHandle<R>,
     tunnel_state: &TunnelState,
     target_id: &str,
     surface: &BrowserSurface,
