@@ -4,11 +4,19 @@ import { GithubPopover } from "./GithubPopover";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 
+type MachineNavEntry = {
+  id: string;
+  label: string;
+};
+
 type StatusBarProps = {
+  activeMachineId?: string;
   activeStatusLabel: string;
   containerCount: number;
   isOrchestrationActive: boolean;
   isSidebarHidden: boolean;
+  machineEntries: MachineNavEntry[];
+  onNavigateMachine?: (machineId: string) => void;
   onSetOrchestrationViewMode: (viewMode: OrchestrationViewMode) => void;
   onOpenSettings: () => void;
   onResetOverviewZoom: () => void;
@@ -25,10 +33,13 @@ type StatusBarProps = {
 };
 
 export function StatusBar({
+  activeMachineId,
   activeStatusLabel,
   containerCount,
   isOrchestrationActive,
   isSidebarHidden,
+  machineEntries,
+  onNavigateMachine,
   onSetOrchestrationViewMode,
   onOpenSettings,
   onResetOverviewZoom,
@@ -43,6 +54,20 @@ export function StatusBar({
   reachableContainerCount,
   serverCount,
 }: StatusBarProps) {
+  const activeMachineIndex = activeMachineId
+    ? machineEntries.findIndex((entry) => entry.id === activeMachineId)
+    : -1;
+  const hasMachineNav =
+    activeMachineIndex >= 0 && machineEntries.length > 1 && onNavigateMachine;
+  const prevMachine = hasMachineNav
+    ? machineEntries[activeMachineIndex - 1]
+    : undefined;
+  const nextMachine = hasMachineNav
+    ? machineEntries[activeMachineIndex + 1]
+    : undefined;
+  const activeMachineLabel = hasMachineNav
+    ? machineEntries[activeMachineIndex].label
+    : undefined;
   return (
     <footer className="status-bar" role="status">
       <div className="status-bar-section status-bar-section-primary">
@@ -92,15 +117,44 @@ export function StatusBar({
       </div>
 
       <div className="status-bar-section status-bar-section-center">
-        {isOrchestrationActive ? (
+        {hasMachineNav ? (
+          <div className="status-bar-machine-nav" aria-label="Machine navigation">
+            <Button
+              aria-label={prevMachine ? `Go to ${prevMachine.label}` : "No previous machine"}
+              className="status-bar-button"
+              disabled={!prevMachine}
+              onClick={() => prevMachine && onNavigateMachine(prevMachine.id)}
+              size="sm"
+              title={prevMachine ? prevMachine.label : "No previous machine"}
+              variant="ghost"
+            >
+              <svg aria-hidden="true" className="panel-button-icon-svg" fill="none" viewBox="0 0 16 16">
+                <path d="M10 3L5.5 8l4.5 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
+              </svg>
+            </Button>
+            <span className="status-bar-machine-label">{activeMachineLabel}</span>
+            <Button
+              aria-label={nextMachine ? `Go to ${nextMachine.label}` : "No next machine"}
+              className="status-bar-button"
+              disabled={!nextMachine}
+              onClick={() => nextMachine && onNavigateMachine(nextMachine.id)}
+              size="sm"
+              title={nextMachine ? nextMachine.label : "No next machine"}
+              variant="ghost"
+            >
+              <svg aria-hidden="true" className="panel-button-icon-svg" fill="none" viewBox="0 0 16 16">
+                <path d="M6 3l4.5 5L6 13" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
+              </svg>
+            </Button>
+          </div>
+        ) : isOrchestrationActive ? (
           <>
             <div className="status-bar-view-switcher" aria-label="Orchestration views" role="tablist">
               {(["grid", "focus"] as const).map((viewMode) => (
                 <Button
                   aria-pressed={orchestrationViewMode === viewMode}
-                  className={`status-bar-view-button ${
-                    orchestrationViewMode === viewMode ? "is-active" : ""
-                  }`}
+                  className={`status-bar-view-button ${orchestrationViewMode === viewMode ? "is-active" : ""
+                    }`}
                   key={viewMode}
                   onClick={() => {
                     onSetOrchestrationViewMode(viewMode);

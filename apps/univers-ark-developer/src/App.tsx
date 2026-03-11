@@ -261,20 +261,20 @@ function App() {
     () =>
       bootstrap
         ? bootstrap.targets
-            .filter(
-              (target) =>
-                !bootstrap.machines.some(
-                  (machine) => machine.hostTargetId === target.id,
-                ),
-            )
-            .flatMap((target) =>
-              backgroundPrerenderBrowserServices(target).map((service) => ({
-                cacheKey: surfaceKey(target.id, service.id),
-                serviceId: service.id,
-                surface: service.web,
-                target,
-              })),
-            )
+          .filter(
+            (target) =>
+              !bootstrap.machines.some(
+                (machine) => machine.hostTargetId === target.id,
+              ),
+          )
+          .flatMap((target) =>
+            backgroundPrerenderBrowserServices(target).map((service) => ({
+              cacheKey: surfaceKey(target.id, service.id),
+              serviceId: service.id,
+              surface: service.web,
+              target,
+            })),
+          )
         : [],
     [bootstrap],
   );
@@ -777,27 +777,27 @@ function App() {
         className={`shell-layout ${isOverviewView ? "shell-layout-overview" : ""} ${isSidebarHidden ? "shell-layout-sidebar-hidden" : ""}`}
       >
         {!isSidebarHidden ? (
-        <SidebarNav
-          activeMachineId={
-            activeView.kind === "machine"
-              ? activeView.machineId
-              : activeView.kind === "container"
+          <SidebarNav
+            activeMachineId={
+              activeView.kind === "machine"
+                ? activeView.machineId
+                : activeView.kind === "container"
                   ? activeContainerMachine?.id
                   : undefined
             }
             activeTargetId={activeView.kind === "container" ? activeView.targetId : undefined}
             availableTargetIds={bootstrap.targets.map((target) => target.id)}
-          bootstrap={bootstrap}
-          expandedMachineIds={expandedMachineIds}
-          isDashboardActive={activeView.kind === "dashboard"}
-          isOverviewActive={activeView.kind === "overview"}
-          isOverviewLayout={isOverviewView}
-          onSelectContainer={setContainerView}
-          onSelectDashboard={() => {
-            setActiveView({ kind: "dashboard" });
-          }}
-          onSelectOverview={() => {
-            setActiveView({ kind: "overview" });
+            bootstrap={bootstrap}
+            expandedMachineIds={expandedMachineIds}
+            isDashboardActive={activeView.kind === "dashboard"}
+            isOverviewActive={activeView.kind === "overview"}
+            isOverviewLayout={isOverviewView}
+            onSelectContainer={setContainerView}
+            onSelectDashboard={() => {
+              setActiveView({ kind: "dashboard" });
+            }}
+            onSelectOverview={() => {
+              setActiveView({ kind: "overview" });
             }}
             onSelectMachine={openMachineView}
             onToggleMachine={toggleMachineExpansion}
@@ -807,34 +807,34 @@ function App() {
         <section
           className={`content-shell ${isOverviewView ? "content-shell-overview" : ""} ${activeView.kind === "container" ? "content-shell-container" : ""}`}
         >
-        <section
-          className={`content-page ${activeView.kind === "dashboard" ? "" : "is-hidden"}`}
-        >
-          <GlobalDashboardPage
-            onAddMachine={() => {
-              setIsAddMachineDialogOpen(true);
-            }}
-            onEditAgentTeam={(machineId) => {
-              openMachineSettings(machineId, "containers");
-            }}
-            onEditMachine={(machineId) => {
-              openMachineSettings(machineId, "general");
-            }}
-            onOpenOverview={() => {
-              setActiveView({ kind: "overview" });
-            }}
-            onOpenMachine={openMachineView}
-            onOpenWorkspace={setContainerView}
-            overviewContainers={overviewContainers}
-            serviceStatuses={serviceStatuses}
-            machines={bootstrap.machines}
-            standaloneTargets={standaloneTargets}
-          />
-        </section>
+          <section
+            className={`content-page ${activeView.kind === "dashboard" ? "" : "is-hidden"}`}
+          >
+            <GlobalDashboardPage
+              onAddMachine={() => {
+                setIsAddMachineDialogOpen(true);
+              }}
+              onEditAgentTeam={(machineId) => {
+                openMachineSettings(machineId, "containers");
+              }}
+              onEditMachine={(machineId) => {
+                openMachineSettings(machineId, "general");
+              }}
+              onOpenOverview={() => {
+                setActiveView({ kind: "overview" });
+              }}
+              onOpenMachine={openMachineView}
+              onOpenWorkspace={setContainerView}
+              overviewContainers={overviewContainers}
+              serviceStatuses={serviceStatuses}
+              machines={bootstrap.machines}
+              standaloneTargets={standaloneTargets}
+            />
+          </section>
 
-        <section
-          className={`content-page content-page-overview ${activeView.kind === "overview" ? "" : "is-hidden"}`}
-        >
+          <section
+            className={`content-page content-page-overview ${activeView.kind === "overview" ? "" : "is-hidden"}`}
+          >
             <OverviewPage
               activeFocusedTargetId={activeOverviewFocusedTargetId}
               onFocusTarget={setOverviewFocusedTargetId}
@@ -914,37 +914,37 @@ function App() {
             const browserStatus =
               browserSurface && target
                 ? tunnelStatuses[surfaceKey(target.id, browserSurface.id)] ??
-                  fallbackTunnelStatus(target, browserSurface)
+                fallbackTunnelStatus(target, browserSurface)
                 : undefined;
             const browserFrames: BrowserFrameInstance[] = target
               ? webServices(target).map((service) => {
-                  const surface = service.web;
-                  const panel = `browser:${surface.id}` as const;
-                  const status =
-                    tunnelStatuses[surfaceKey(target.id, surface.id)] ??
-                    fallbackTunnelStatus(target, surface);
+                const surface = service.web;
+                const panel = `browser:${surface.id}` as const;
+                const status =
+                  tunnelStatuses[surfaceKey(target.id, surface.id)] ??
+                  fallbackTunnelStatus(target, surface);
 
-                  return {
-                    cacheKey: surfaceKey(target.id, surface.id),
-                    frameVersion:
-                      browserFrameVersions[surfaceKey(target.id, surface.id)] ?? 0,
-                    isActive: isVisible && activeTool === panel,
-                    status,
-                    surface,
-                    target,
-                  };
-                })
+                return {
+                  cacheKey: surfaceKey(target.id, surface.id),
+                  frameVersion:
+                    browserFrameVersions[surfaceKey(target.id, surface.id)] ?? 0,
+                  isActive: isVisible && activeTool === panel,
+                  status,
+                  surface,
+                  target,
+                };
+              })
               : [];
             const browserFrame: BrowserFrameInstance | undefined =
               browserSurface && browserStatus && target
                 ? browserFrames.find(
-                    (frame) => frame.surface.id === browserSurface.id,
-                  )
+                  (frame) => frame.surface.id === browserSurface.id,
+                )
                 : undefined;
             const primaryBrowserStatus =
               primarySurface && target
                 ? tunnelStatuses[surfaceKey(target.id, primarySurface.id)] ??
-                  fallbackTunnelStatus(target, primarySurface)
+                fallbackTunnelStatus(target, primarySurface)
                 : undefined;
             return (
               <section
@@ -960,9 +960,9 @@ function App() {
                     browserServices={
                       target
                         ? webServices(target).map((service) => ({
-                            id: service.id,
-                            label: service.label,
-                          }))
+                          id: service.id,
+                          label: service.label,
+                        }))
                         : []
                     }
                     browserSurface={browserSurface}
@@ -984,8 +984,8 @@ function App() {
                     onRestartContainer={
                       target.containerKind === "managed"
                         ? async () => {
-                            await restartContainer(target.machineId, target.containerId);
-                          }
+                          await restartContainer(target.machineId, target.containerId);
+                        }
                         : undefined
                     }
                     onSelectTool={(panel) => {
@@ -1020,10 +1020,13 @@ function App() {
       </section>
 
       <StatusBar
+        activeMachineId={activeView.kind === "machine" ? activeView.machineId : undefined}
         activeStatusLabel={activeStatusLabel}
         containerCount={overviewContainers.length}
         isOrchestrationActive={activeView.kind === "overview"}
         isSidebarHidden={isSidebarHidden}
+        machineEntries={bootstrap.machines.map((machine) => ({ id: machine.id, label: machine.label }))}
+        onNavigateMachine={openMachineView}
         onSetOrchestrationViewMode={setOrchestrationViewMode}
         onOpenSettings={() => {
           setActiveView((current) =>
