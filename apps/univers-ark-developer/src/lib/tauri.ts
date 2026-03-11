@@ -467,6 +467,8 @@ export async function updateRuntimeActivity(activity: {
   visible: boolean;
   focused: boolean;
   online: boolean;
+  activeMachineId?: string | null;
+  activeTargetId?: string | null;
 }): Promise<void> {
   if (!isTauri()) {
     return;

@@ -678,6 +678,8 @@ pub(crate) struct RuntimeActivityState {
     pub(crate) online: Arc<AtomicBool>,
     pub(crate) recovering_until_ms: Arc<AtomicU64>,
     pub(crate) recovery_generation: Arc<AtomicU64>,
+    pub(crate) active_machine_id: Arc<Mutex<Option<String>>>,
+    pub(crate) active_target_id: Arc<Mutex<Option<String>>>,
 }
 
 #[derive(Clone, Default)]
@@ -736,6 +738,8 @@ impl Default for RuntimeActivityState {
             online: Arc::new(AtomicBool::new(true)),
             recovering_until_ms: Arc::new(AtomicU64::new(0)),
             recovery_generation: Arc::new(AtomicU64::new(0)),
+            active_machine_id: Arc::new(Mutex::new(None)),
+            active_target_id: Arc::new(Mutex::new(None)),
         }
     }
 }

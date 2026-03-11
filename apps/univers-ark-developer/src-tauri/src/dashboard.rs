@@ -851,6 +851,7 @@ pub(crate) fn run_dashboard_scheduler_cycle<R: Runtime>(
     activity_state: &RuntimeActivityState,
     next_due_at: &mut HashMap<String, Instant>,
     max_refreshes: usize,
+    prioritized_target_id: Option<&str>,
 ) -> Duration {
     let now = Instant::now();
 
@@ -877,8 +878,16 @@ pub(crate) fn run_dashboard_scheduler_cycle<R: Runtime>(
             }
         })
         .collect::<Vec<_>>();
-    due_targets.sort_by(|left, right| left.0.cmp(&right.0));
-    due_targets.truncate(max_refreshes);
+    due_targets.sort_by_key(|(target_id, _)| {
+        let priority = if prioritized_target_id == Some(target_id.as_str()) {
+            0
+        } else {
+            1
+        };
+
+        (priority, target_id.clone())
+    });
+    due_targets.truncate(max_refreshes.max(1));
 
     for (target_id, refresh_seconds) in due_targets {
         emit_dashboard_update(

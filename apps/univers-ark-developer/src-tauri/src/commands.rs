@@ -78,6 +78,8 @@ pub(crate) struct RuntimeActivityInput {
     visible: bool,
     focused: bool,
     online: bool,
+    active_machine_id: Option<String>,
+    active_target_id: Option<String>,
 }
 
 fn sanitize_machine_id(value: &str) -> String {
@@ -921,6 +923,8 @@ pub(crate) fn update_runtime_activity(
         activity.visible,
         activity.focused,
         activity.online,
+        activity.active_machine_id,
+        activity.active_target_id,
     );
     Ok(())
 }

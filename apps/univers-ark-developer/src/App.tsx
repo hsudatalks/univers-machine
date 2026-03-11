@@ -283,6 +283,38 @@ function App() {
     onOpenWorkspace: setContainerView,
     targetIds: overviewTerminalTargets.map((target) => target.id),
   });
+  const activeRuntimeTargetId = useMemo(() => {
+    if (activeView.kind === "container") {
+      return activeView.targetId;
+    }
+
+    if (activeView.kind === "overview") {
+      return activeOverviewFocusedTargetId || null;
+    }
+
+    return null;
+  }, [activeOverviewFocusedTargetId, activeView]);
+  const activeRuntimeMachineId = useMemo(() => {
+    if (activeView.kind === "machine") {
+      return activeView.machineId;
+    }
+
+    if (activeView.kind === "container") {
+      return activeContainerMachine?.id ?? activeContainerTarget?.machineId ?? null;
+    }
+
+    if (activeView.kind === "overview" && activeRuntimeTargetId) {
+      return targetById.get(activeRuntimeTargetId)?.machineId ?? null;
+    }
+
+    return null;
+  }, [
+    activeContainerMachine?.id,
+    activeContainerTarget?.machineId,
+    activeRuntimeTargetId,
+    activeView,
+    targetById,
+  ]);
 
   useEffect(() => {
     if (!bootstrap) {
@@ -330,8 +362,16 @@ function App() {
       visible: isDocumentVisible,
       focused: isWindowFocused,
       online: isNetworkOnline,
+      activeMachineId: activeRuntimeMachineId,
+      activeTargetId: activeRuntimeTargetId,
     }).catch(() => undefined);
-  }, [isDocumentVisible, isNetworkOnline, isWindowFocused]);
+  }, [
+    activeRuntimeMachineId,
+    activeRuntimeTargetId,
+    isDocumentVisible,
+    isNetworkOnline,
+    isWindowFocused,
+  ]);
 
   useEffect(() => {
     if (startupPrerenderDescriptors.length === 0) {

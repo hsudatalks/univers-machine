@@ -596,6 +596,8 @@ pub(crate) fn run_tunnel_supervisor_cycle<R: Runtime>(
     tunnel_state: &TunnelState,
     activity_state: &RuntimeActivityState,
     scheduler_state: &mut TunnelSupervisorState,
+    max_reconciles: usize,
+    prioritized_target_id: Option<&str>,
 ) -> Duration {
     let now = Instant::now();
     let gap_detected =
@@ -609,7 +611,7 @@ pub(crate) fn run_tunnel_supervisor_cycle<R: Runtime>(
         stagger_desired_tunnels_for_recovery(tunnel_state, now);
     }
 
-    let (due_registrations, next_due_at) = tunnel_state
+    let (mut due_registrations, next_due_at) = tunnel_state
         .desired_tunnels
         .lock()
         .map(|desired| {
@@ -633,6 +635,21 @@ pub(crate) fn run_tunnel_supervisor_cycle<R: Runtime>(
             (due_registrations, next_due_at)
         })
         .unwrap_or_default();
+
+    due_registrations.sort_by_key(|registration| {
+        let priority = if prioritized_target_id == Some(registration.target_id.as_str()) {
+            0
+        } else {
+            1
+        };
+
+        (
+            priority,
+            registration.target_id.clone(),
+            registration.service_id.clone(),
+        )
+    });
+    due_registrations.truncate(max_reconciles.max(1));
 
     for registration in due_registrations {
         let _ = reconcile_registered_tunnel(

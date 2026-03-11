@@ -26,7 +26,6 @@ const CONNECTIVITY_READY_RECHECK_INTERVAL: Duration = Duration::from_secs(60);
 const CONNECTIVITY_CHECKING_RETRY_INTERVAL: Duration = Duration::from_secs(5);
 const CONNECTIVITY_ERROR_BACKOFF_BASE: Duration = Duration::from_secs(10);
 const CONNECTIVITY_ERROR_BACKOFF_MAX: Duration = Duration::from_secs(300);
-const CONNECTIVITY_MAX_PROBES_PER_TICK: usize = 8;
 const CONNECTIVITY_PROBE_COMMAND: &str = "true";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -543,9 +542,20 @@ fn target_priority(snapshot: Option<&ConnectivitySnapshot>) -> u8 {
 fn sort_probe_requests(
     requests: &mut Vec<ProbeRequest>,
     target_snapshots: &HashMap<String, ConnectivitySnapshot>,
+    prioritized_machine_id: Option<&str>,
+    prioritized_target_id: Option<&str>,
 ) {
     requests.sort_by_key(|request| {
+        let focus_priority = if prioritized_target_id == Some(request.target_id.as_str()) {
+            0
+        } else if prioritized_machine_id == Some(request.machine_id.as_str()) {
+            1
+        } else {
+            2
+        };
+
         (
+            focus_priority,
             request.kind,
             target_priority(target_snapshots.get(&request.target_id)),
             request.target_id.clone(),
@@ -732,6 +742,9 @@ fn run_connectivity_probe_cycle<R: Runtime>(
     connectivity_state: &ConnectivityState,
     monitor_state: &mut ConnectivityMonitorState,
     force_recovery_refresh: bool,
+    max_probes_per_tick: usize,
+    prioritized_machine_id: Option<&str>,
+    prioritized_target_id: Option<&str>,
 ) {
     let now = Instant::now();
     if force_recovery_refresh {
@@ -775,8 +788,13 @@ fn run_connectivity_probe_cycle<R: Runtime>(
             })
         })
         .collect::<Vec<_>>();
-    sort_probe_requests(&mut host_requests, &target_snapshots);
-    host_requests.truncate(CONNECTIVITY_MAX_PROBES_PER_TICK);
+    sort_probe_requests(
+        &mut host_requests,
+        &target_snapshots,
+        prioritized_machine_id,
+        prioritized_target_id,
+    );
+    host_requests.truncate(max_probes_per_tick.max(1));
 
     let host_probe_count = host_requests.len();
     for (request, outcome) in run_probe_batch(app, host_requests) {
@@ -793,7 +811,7 @@ fn run_connectivity_probe_cycle<R: Runtime>(
     }
 
     let mut container_requests = Vec::new();
-    let remaining_probe_budget = CONNECTIVITY_MAX_PROBES_PER_TICK.saturating_sub(host_probe_count);
+    let remaining_probe_budget = max_probes_per_tick.saturating_sub(host_probe_count);
 
     for machine in &machines {
         let host_snapshot = target_snapshots
@@ -839,7 +857,12 @@ fn run_connectivity_probe_cycle<R: Runtime>(
         }
     }
 
-    sort_probe_requests(&mut container_requests, &target_snapshots);
+    sort_probe_requests(
+        &mut container_requests,
+        &target_snapshots,
+        prioritized_machine_id,
+        prioritized_target_id,
+    );
     container_requests.truncate(remaining_probe_budget);
 
     for (request, outcome) in run_probe_batch(app, container_requests) {
@@ -895,6 +918,9 @@ pub(crate) fn run_connectivity_scheduler_cycle<R: Runtime>(
     connectivity_state: ConnectivityState,
     activity_state: RuntimeActivityState,
     scheduler_state: &mut ConnectivitySchedulerState,
+    max_probes_per_tick: usize,
+    prioritized_machine_id: Option<&str>,
+    prioritized_target_id: Option<&str>,
 ) -> Duration {
     let now = Instant::now();
     let gap_detected =
@@ -909,6 +935,9 @@ pub(crate) fn run_connectivity_scheduler_cycle<R: Runtime>(
         &connectivity_state,
         &mut scheduler_state.monitor_state,
         gap_detected || recovery_generation_changed,
+        max_probes_per_tick,
+        prioritized_machine_id,
+        prioritized_target_id,
     );
 
     if activity.recovering || activity.is_foreground() {

@@ -10,17 +10,19 @@ pub(crate) const RUNTIME_BACKGROUND_MONITOR_INTERVAL: Duration = Duration::from_
 pub(crate) const RUNTIME_BACKGROUND_SUPERVISOR_FLOOR: Duration = Duration::from_secs(5);
 pub(crate) const RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS: u64 = 60;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct RuntimeActivitySnapshot {
     pub(crate) visible: bool,
     pub(crate) focused: bool,
     pub(crate) online: bool,
     pub(crate) recovering: bool,
     pub(crate) recovery_generation: u64,
+    pub(crate) active_machine_id: Option<String>,
+    pub(crate) active_target_id: Option<String>,
 }
 
 impl RuntimeActivitySnapshot {
-    pub(crate) fn is_foreground(self) -> bool {
+    pub(crate) fn is_foreground(&self) -> bool {
         self.visible || self.focused
     }
 }
@@ -43,6 +45,16 @@ pub(crate) fn current_runtime_activity(
         online: activity_state.online.load(Ordering::Acquire),
         recovering: recovering_until_ms > now_epoch_ms(),
         recovery_generation: activity_state.recovery_generation.load(Ordering::Acquire),
+        active_machine_id: activity_state
+            .active_machine_id
+            .lock()
+            .ok()
+            .and_then(|value| value.clone()),
+        active_target_id: activity_state
+            .active_target_id
+            .lock()
+            .ok()
+            .and_then(|value| value.clone()),
     }
 }
 
@@ -65,10 +77,18 @@ pub(crate) fn update_runtime_activity(
     visible: bool,
     focused: bool,
     online: bool,
+    active_machine_id: Option<String>,
+    active_target_id: Option<String>,
 ) {
     let previous_visible = activity_state.visible.swap(visible, Ordering::AcqRel);
     let previous_focused = activity_state.focused.swap(focused, Ordering::AcqRel);
     let previous_online = activity_state.online.swap(online, Ordering::AcqRel);
+    if let Ok(mut value) = activity_state.active_machine_id.lock() {
+        *value = active_machine_id;
+    }
+    if let Ok(mut value) = activity_state.active_target_id.lock() {
+        *value = active_target_id;
+    }
 
     if (!previous_visible && visible) || (!previous_focused && focused) || (!previous_online && online)
     {
