@@ -18,6 +18,10 @@ interface CachedTerminalSession {
   fitAddon: FitAddon;
   fontScale: number;
   hostElement: HTMLDivElement;
+  pendingPunctuationFallbackText: string | null;
+  pendingPunctuationFallbackTimer: number | null;
+  recentPunctuationCommitAt: number;
+  recentPunctuationCommitText: string | null;
   outputUnlisten?: () => void;
   exitUnlisten?: () => void;
   ownerId: symbol | null;
@@ -32,6 +36,10 @@ interface CachedTerminalSession {
 
 const DEFAULT_TERMINAL_STATUS = "Connecting";
 const DEFAULT_TERMINAL_FONT_SIZE = 12;
+const TERMINAL_FONT_FAMILY =
+  '"SFMono-Regular", Menlo, Monaco, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", Consolas, monospace';
+const PUNCTUATION_FALLBACK_DELAY_MS = 72;
+const PUNCTUATION_FALLBACK_DEDUPE_WINDOW_MS = 180;
 const terminalSessions = new Map<string, CachedTerminalSession>();
 
 let parkingLotElement: HTMLDivElement | null = null;
@@ -103,6 +111,71 @@ function applyTerminalFontScale(
     9,
     Math.round(DEFAULT_TERMINAL_FONT_SIZE * nextFontScale * 10) / 10,
   );
+  if (session.terminal.textarea) {
+    session.terminal.textarea.style.fontSize = `${session.terminal.options.fontSize}px`;
+  }
+}
+
+function isImePunctuationCharacter(value: string): boolean {
+  return /^[\u3000-\u303f\uff00-\uffef]$/u.test(value);
+}
+
+function clearPendingPunctuationFallback(session: CachedTerminalSession) {
+  if (session.pendingPunctuationFallbackTimer !== null) {
+    window.clearTimeout(session.pendingPunctuationFallbackTimer);
+    session.pendingPunctuationFallbackTimer = null;
+  }
+
+  session.pendingPunctuationFallbackText = null;
+}
+
+function writeTerminalData(session: CachedTerminalSession, data: string) {
+  if (!session.readyForInput) {
+    session.pendingWrites.push(data);
+    return;
+  }
+
+  void writeTerminal(session.targetId, data).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    session.terminal.writeln(`\r\n[write failed] ${message}`);
+  });
+}
+
+function schedulePunctuationFallback(session: CachedTerminalSession, data: string) {
+  if (!isImePunctuationCharacter(data)) {
+    return;
+  }
+
+  clearPendingPunctuationFallback(session);
+  session.pendingPunctuationFallbackText = data;
+  session.pendingPunctuationFallbackTimer = window.setTimeout(() => {
+    if (session.pendingPunctuationFallbackText !== data) {
+      return;
+    }
+
+    session.recentPunctuationCommitText = data;
+    session.recentPunctuationCommitAt = Date.now();
+    clearPendingPunctuationFallback(session);
+    writeTerminalData(session, data);
+  }, PUNCTUATION_FALLBACK_DELAY_MS);
+}
+
+function reconcilePunctuationFallback(session: CachedTerminalSession, data: string): boolean {
+  if (session.pendingPunctuationFallbackText === data) {
+    clearPendingPunctuationFallback(session);
+    return false;
+  }
+
+  if (
+    session.recentPunctuationCommitText === data &&
+    Date.now() - session.recentPunctuationCommitAt <= PUNCTUATION_FALLBACK_DEDUPE_WINDOW_MS
+  ) {
+    session.recentPunctuationCommitText = null;
+    session.recentPunctuationCommitAt = 0;
+    return true;
+  }
+
+  return false;
 }
 
 // Suppress Device Attributes (DA) responses at the parser level.
@@ -210,7 +283,7 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
     allowTransparency: true,
     convertEol: true,
     cursorBlink: false,
-    fontFamily: "Iosevka, SFMono-Regular, Consolas, monospace",
+    fontFamily: TERMINAL_FONT_FAMILY,
     fontSize: 12,
     lineHeight: 1,
     macOptionClickForcesSelection: true,
@@ -227,6 +300,10 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
   const fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
   terminal.open(hostElement);
+  if (terminal.textarea) {
+    terminal.textarea.style.fontFamily = TERMINAL_FONT_FAMILY;
+    terminal.textarea.style.fontSize = `${DEFAULT_TERMINAL_FONT_SIZE}px`;
+  }
 
   suppressDeviceAttributeResponses(terminal);
 
@@ -234,6 +311,10 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
     fitAddon,
     fontScale: 1,
     hostElement,
+    pendingPunctuationFallbackText: null,
+    pendingPunctuationFallbackTimer: null,
+    recentPunctuationCommitAt: 0,
+    recentPunctuationCommitText: null,
     ownerId: null,
     status: DEFAULT_TERMINAL_STATUS,
     statusListeners: new Set(),
@@ -254,6 +335,11 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
 
   // Ctrl+Shift+C = copy selection, Ctrl+Shift+V = paste from clipboard
   terminal.attachCustomKeyEventHandler((event) => {
+    // Let native IME composition flow through untouched.
+    if (event.isComposing || event.key === "Process" || event.keyCode === 229) {
+      return true;
+    }
+
     if (event.type !== "keydown") {
       return true;
     }
@@ -280,6 +366,20 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
     }
 
     return true;
+  });
+
+  terminal.textarea?.addEventListener("input", (event) => {
+    if (
+      !(event instanceof InputEvent) ||
+      event.isComposing ||
+      event.inputType !== "insertText" ||
+      !event.data ||
+      !isImePunctuationCharacter(event.data)
+    ) {
+      return;
+    }
+
+    schedulePunctuationFallback(session, event.data);
   });
 
   // Workaround for xterm.js regression #4781: Shift+drag selection
@@ -334,15 +434,11 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
       return;
     }
 
-    if (!session.readyForInput) {
-      session.pendingWrites.push(data);
+    if (reconcilePunctuationFallback(session, data)) {
       return;
     }
 
-    void writeTerminal(targetId, data).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      terminal.writeln(`\r\n[write failed] ${message}`);
-    });
+    writeTerminalData(session, data);
   });
 
   terminal.onResize(({ cols, rows }) => {
