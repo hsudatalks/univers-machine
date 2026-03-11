@@ -2,10 +2,8 @@ use chrono::{DateTime, Utc};
 use comfy_table::{presets::UTF8_FULL_CONDENSED, Cell, Color, Table};
 use univers_daemon_core::agent::event::SessionSnapshot;
 
-const DAEMON_URL: &str = "http://127.0.0.1:3100";
-
-pub async fn show_status(all: bool, json: bool) -> anyhow::Result<()> {
-    let sessions = fetch_sessions(all).await?;
+pub async fn show_status(all: bool, json: bool, port: u16) -> anyhow::Result<()> {
+    let sessions = fetch_sessions(all, port).await?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&sessions)?);
@@ -21,18 +19,22 @@ pub async fn show_status(all: bool, json: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn fetch_sessions(all: bool) -> anyhow::Result<Vec<SessionSnapshot>> {
-    let url = if all {
-        format!("{DAEMON_URL}/status/all")
+async fn fetch_sessions(all: bool, port: u16) -> anyhow::Result<Vec<SessionSnapshot>> {
+    let path = if all {
+        "/api/agents/sessions/all"
     } else {
-        format!("{DAEMON_URL}/status")
+        "/api/agents/sessions"
     };
+    let url = format!("http://127.0.0.1:{port}{path}");
 
-    // Try daemon HTTP first (legacy endpoints for backward compat)
+    // Try daemon HTTP first
     match reqwest::get(&url).await {
         Ok(resp) if resp.status().is_success() => {
-            let sessions: Vec<SessionSnapshot> = resp.json().await?;
-            return Ok(sessions);
+            let body: serde_json::Value = resp.json().await?;
+            if let Some(data) = body.get("data") {
+                let sessions: Vec<SessionSnapshot> = serde_json::from_value(data.clone())?;
+                return Ok(sessions);
+            }
         }
         _ => {}
     }
@@ -40,8 +42,7 @@ async fn fetch_sessions(all: bool) -> anyhow::Result<Vec<SessionSnapshot>> {
     // Fallback to direct SQLite read
     let include_ended = all;
     let rows = tokio::task::spawn_blocking(move || {
-        let db =
-            univers_daemon_core::agent::db::Db::open().map_err(|e| anyhow::anyhow!("{e}"))?;
+        let db = univers_daemon_core::agent::db::Db::open().map_err(|e| anyhow::anyhow!("{e}"))?;
         db.list_sessions(include_ended)
             .map_err(|e| anyhow::anyhow!("{e}"))
     })

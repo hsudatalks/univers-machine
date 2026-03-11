@@ -2,8 +2,13 @@ use chrono::{DateTime, Utc};
 use comfy_table::{presets::UTF8_FULL_CONDENSED, Cell, Color, Table};
 use univers_daemon_core::agent::event::SessionSnapshot;
 
-pub async fn show_status(all: bool, json: bool, port: u16) -> anyhow::Result<()> {
-    let sessions = fetch_sessions(all, port).await?;
+pub async fn show_status(
+    all: bool,
+    json: bool,
+    port: u16,
+    auth_token: Option<&str>,
+) -> anyhow::Result<()> {
+    let sessions = fetch_sessions(all, port, auth_token).await?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&sessions)?);
@@ -19,7 +24,11 @@ pub async fn show_status(all: bool, json: bool, port: u16) -> anyhow::Result<()>
     Ok(())
 }
 
-async fn fetch_sessions(all: bool, port: u16) -> anyhow::Result<Vec<SessionSnapshot>> {
+async fn fetch_sessions(
+    all: bool,
+    port: u16,
+    auth_token: Option<&str>,
+) -> anyhow::Result<Vec<SessionSnapshot>> {
     let path = if all {
         "/api/agents/sessions/all"
     } else {
@@ -28,7 +37,12 @@ async fn fetch_sessions(all: bool, port: u16) -> anyhow::Result<Vec<SessionSnaps
     let url = format!("http://127.0.0.1:{port}{path}");
 
     // Try daemon HTTP first
-    match reqwest::get(&url).await {
+    let client = reqwest::Client::new();
+    let mut request = client.get(url);
+    if let Some(token) = auth_token {
+        request = request.bearer_auth(token);
+    }
+    match request.send().await {
         Ok(resp) if resp.status().is_success() => {
             // Parse ApiResponse wrapper
             let body: serde_json::Value = resp.json().await?;
@@ -43,8 +57,7 @@ async fn fetch_sessions(all: bool, port: u16) -> anyhow::Result<Vec<SessionSnaps
     // Fallback to direct SQLite read
     let include_ended = all;
     let rows = tokio::task::spawn_blocking(move || {
-        let db =
-            univers_daemon_core::agent::db::Db::open().map_err(|e| anyhow::anyhow!("{e}"))?;
+        let db = univers_daemon_core::agent::db::Db::open().map_err(|e| anyhow::anyhow!("{e}"))?;
         db.list_sessions(include_ended)
             .map_err(|e| anyhow::anyhow!("{e}"))
     })

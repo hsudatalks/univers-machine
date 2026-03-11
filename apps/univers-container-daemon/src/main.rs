@@ -6,6 +6,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use univers_daemon_core::agent::db::Db;
 use univers_daemon_core::agent::event::HookEvent;
 
+const DEFAULT_DAEMON_PORT: u16 = 3100;
+
 #[derive(Parser)]
 #[command(
     name = "univers-container-daemon",
@@ -21,11 +23,15 @@ enum Commands {
     /// Start the background HTTP daemon
     Daemon {
         /// Port to listen on
-        #[arg(short, long, default_value = "3100")]
+        #[arg(short, long, default_value_t = DEFAULT_DAEMON_PORT)]
         port: u16,
     },
     /// Process a hook event from stdin (forwards to daemon, falls back to SQLite)
-    Event,
+    Event {
+        /// Daemon port (for HTTP forward)
+        #[arg(long, env = "UNIVERS_CONTAINER_DAEMON_PORT", default_value_t = DEFAULT_DAEMON_PORT)]
+        port: u16,
+    },
     /// Show active sessions
     Status {
         /// Include ended sessions
@@ -37,12 +43,23 @@ enum Commands {
         /// Watch mode (refresh every 2s)
         #[arg(short, long)]
         watch: bool,
+        /// Daemon port (for HTTP fetch)
+        #[arg(long, env = "UNIVERS_CONTAINER_DAEMON_PORT", default_value_t = DEFAULT_DAEMON_PORT)]
+        port: u16,
     },
     /// Clean old ended sessions
     Clean {
         /// Hours threshold (default: 24)
         #[arg(long, default_value = "24")]
         hours: u32,
+    },
+    /// Check installer status
+    Install {
+        /// Software name to check/install
+        name: String,
+        /// Actually perform install (default: check only)
+        #[arg(long)]
+        run: bool,
     },
 }
 
@@ -64,22 +81,27 @@ async fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::Event => {
-            if let Err(e) = handle_event_cmd().await {
+        Commands::Event { port } => {
+            if let Err(e) = handle_event_cmd(port).await {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
         }
-        Commands::Status { all, json, watch } => {
+        Commands::Status {
+            all,
+            json,
+            watch,
+            port,
+        } => {
             if watch {
                 loop {
                     print!("\x1b[2J\x1b[H");
-                    if let Err(e) = status::show_status(all, json).await {
+                    if let Err(e) = status::show_status(all, json, port).await {
                         eprintln!("Error: {e}");
                     }
                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 }
-            } else if let Err(e) = status::show_status(all, json).await {
+            } else if let Err(e) = status::show_status(all, json, port).await {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
@@ -103,10 +125,16 @@ async fn main() {
                 }
             }
         }
+        Commands::Install { name, run } => {
+            if let Err(e) = handle_install_cmd(&name, run).await {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
     }
 }
 
-async fn handle_event_cmd() -> anyhow::Result<()> {
+async fn handle_event_cmd(port: u16) -> anyhow::Result<()> {
     let buf = tokio::task::spawn_blocking(|| {
         use std::io::Read;
         let mut buf = String::new();
@@ -120,7 +148,7 @@ async fn handle_event_cmd() -> anyhow::Result<()> {
     // Try to forward to daemon via HTTP
     let client = reqwest::Client::new();
     match client
-        .post("http://127.0.0.1:3100/event")
+        .post(format!("http://127.0.0.1:{port}/api/agents/event"))
         .json(&ev)
         .send()
         .await
@@ -157,6 +185,43 @@ async fn handle_event_cmd() -> anyhow::Result<()> {
         Ok::<_, anyhow::Error>(())
     })
     .await??;
+
+    Ok(())
+}
+
+async fn handle_install_cmd(name: &str, run: bool) -> anyhow::Result<()> {
+    let registry = univers_daemon_core::installer::InstallerRegistry::with_defaults();
+
+    if run {
+        println!("Installing {name}...");
+        let result = registry.install(name).await?;
+        if result.success {
+            println!(
+                "Success: {}{}",
+                result.message,
+                result
+                    .version
+                    .map(|v| format!(" (version: {v})"))
+                    .unwrap_or_default()
+            );
+        } else {
+            eprintln!("Failed: {}", result.message);
+            std::process::exit(1);
+        }
+    } else {
+        let status = registry.check_status(name).await?;
+        if status.installed {
+            println!(
+                "{name}: installed{}",
+                status
+                    .version
+                    .map(|v| format!(" (version: {v})"))
+                    .unwrap_or_default()
+            );
+        } else {
+            println!("{name}: not installed");
+        }
+    }
 
     Ok(())
 }
