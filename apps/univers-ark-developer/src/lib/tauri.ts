@@ -19,6 +19,13 @@ import type {
   ManagedMachine,
   RemoteDirectoryListing,
   RemoteFilePreview,
+  SecretAssignmentInput,
+  SecretAssignmentRecord,
+  SecretCredentialInput,
+  SecretCredentialRecord,
+  SecretInventory,
+  SecretProviderInput,
+  SecretProviderRecord,
   ServiceStatus,
   TerminalExitEvent,
   TerminalOutputEvent,
@@ -614,6 +621,75 @@ export async function updateTargetsConfig(content: string): Promise<void> {
   }
 
   return invoke<void>("update_targets_config", { content });
+}
+
+export async function loadSecretInventory(): Promise<SecretInventory> {
+  if (!isTauri()) {
+    return {
+      dbPath: "",
+      storeBackend: "unavailable",
+      providers: [],
+      credentials: [],
+      assignments: [],
+      auditEvents: [],
+    };
+  }
+
+  return invoke<SecretInventory>("load_secret_inventory");
+}
+
+export async function upsertSecretProvider(
+  input: SecretProviderInput,
+): Promise<SecretProviderRecord> {
+  if (!isTauri()) {
+    throw new Error("Secret provider management requires the Tauri backend.");
+  }
+
+  return invoke<SecretProviderRecord>("upsert_secret_provider", { input });
+}
+
+export async function deleteSecretProvider(providerId: string): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("Secret provider management requires the Tauri backend.");
+  }
+
+  return invoke<void>("delete_secret_provider", { providerId });
+}
+
+export async function upsertSecretCredential(
+  input: SecretCredentialInput,
+): Promise<SecretCredentialRecord> {
+  if (!isTauri()) {
+    throw new Error("Secret credential management requires the Tauri backend.");
+  }
+
+  return invoke<SecretCredentialRecord>("upsert_secret_credential", { input });
+}
+
+export async function deleteSecretCredential(credentialId: string): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("Secret credential management requires the Tauri backend.");
+  }
+
+  return invoke<void>("delete_secret_credential", { credentialId });
+}
+
+export async function upsertSecretAssignment(
+  input: SecretAssignmentInput,
+): Promise<SecretAssignmentRecord> {
+  if (!isTauri()) {
+    throw new Error("Secret assignment management requires the Tauri backend.");
+  }
+
+  return invoke<SecretAssignmentRecord>("upsert_secret_assignment", { input });
+}
+
+export async function deleteSecretAssignment(assignmentId: string): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("Secret assignment management requires the Tauri backend.");
+  }
+
+  return invoke<void>("delete_secret_assignment", { assignmentId });
 }
 
 export async function attachTerminal(

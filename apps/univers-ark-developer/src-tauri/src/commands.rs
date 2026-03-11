@@ -25,11 +25,14 @@ use crate::{
         ConnectivityDiagnostics, ConnectivityState, ContainerDashboard, DashboardDiagnostics,
         DashboardState, GithubProjectState, GithubPullRequestDetail, MachineImportCandidate,
         ManagedServer, PortRangeDiagnostics, RemoteDirectoryListing, RemoteFilePreview,
-        RuntimeActivityDiagnostics, RuntimeActivityState, SchedulerState, TerminalDiagnostics,
+        RuntimeActivityDiagnostics, RuntimeActivityState, SchedulerState, SecretAssignmentInput,
+        SecretAssignmentRecord, SecretCredentialInput, SecretCredentialRecord,
+        SecretInventory, SecretProviderInput, SecretProviderRecord, TerminalDiagnostics,
         TerminalSnapshot, TerminalState, TunnelDiagnostics, TunnelState, TunnelStatus,
     },
     runtime::{read_runtime_targets_file, resolve_runtime_web_surface, surface_key},
     scheduler::scheduler_budget_diagnostics,
+    secret_management::SecretManagementState,
     service_registry::{
         emit_command_service_status, emit_dashboard_service_statuses, sync_registered_web_services,
     },
@@ -940,6 +943,7 @@ pub(crate) fn load_app_diagnostics(
     dashboard_state: State<'_, DashboardState>,
     activity_state: State<'_, RuntimeActivityState>,
     scheduler_state: State<'_, SchedulerState>,
+    secret_management_state: State<'_, SecretManagementState>,
 ) -> Result<AppDiagnostics, String> {
     let activity = current_runtime_activity(activity_state.inner());
     let scheduler = scheduler_budget_diagnostics(&activity, scheduler_state.inner());
@@ -995,6 +999,7 @@ pub(crate) fn load_app_diagnostics(
         .lock()
         .map(|value| value.clone())
         .map_err(|_| String::from("Failed to inspect dashboard telemetry"))?;
+    let secret_management = secret_management_state.diagnostics()?;
 
     Ok(AppDiagnostics {
         process_id: std::process::id(),
@@ -1069,7 +1074,63 @@ pub(crate) fn load_app_diagnostics(
             next_due_in_ms: dashboard_telemetry.next_due_in_ms,
             due_now_count: dashboard_telemetry.due_now_count,
         },
+        secret_management,
     })
+}
+
+#[tauri::command]
+pub(crate) fn load_secret_inventory(
+    secret_management_state: State<'_, SecretManagementState>,
+) -> Result<SecretInventory, String> {
+    secret_management_state.load_inventory()
+}
+
+#[tauri::command]
+pub(crate) fn upsert_secret_provider(
+    input: SecretProviderInput,
+    secret_management_state: State<'_, SecretManagementState>,
+) -> Result<SecretProviderRecord, String> {
+    secret_management_state.upsert_provider(input)
+}
+
+#[tauri::command]
+pub(crate) fn delete_secret_provider(
+    provider_id: String,
+    secret_management_state: State<'_, SecretManagementState>,
+) -> Result<(), String> {
+    secret_management_state.delete_provider(&provider_id)
+}
+
+#[tauri::command]
+pub(crate) fn upsert_secret_credential(
+    input: SecretCredentialInput,
+    secret_management_state: State<'_, SecretManagementState>,
+) -> Result<SecretCredentialRecord, String> {
+    secret_management_state.upsert_credential(input)
+}
+
+#[tauri::command]
+pub(crate) fn delete_secret_credential(
+    credential_id: String,
+    secret_management_state: State<'_, SecretManagementState>,
+) -> Result<(), String> {
+    secret_management_state.delete_credential(&credential_id)
+}
+
+#[tauri::command]
+pub(crate) fn upsert_secret_assignment(
+    input: SecretAssignmentInput,
+    secret_management_state: State<'_, SecretManagementState>,
+) -> Result<SecretAssignmentRecord, String> {
+    secret_management_state.upsert_assignment(input)
+}
+
+#[tauri::command]
+pub(crate) fn delete_secret_assignment(
+    assignment_id: String,
+    secret_management_state: State<'_, SecretManagementState>,
+) -> Result<(), String> {
+    secret_management_state.delete_assignment(&assignment_id)
 }
 
 #[tauri::command]

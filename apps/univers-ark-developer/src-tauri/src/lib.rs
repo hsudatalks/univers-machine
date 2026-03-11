@@ -12,6 +12,7 @@ mod models;
 mod proxy;
 mod runtime;
 mod scheduler;
+mod secret_management;
 mod service_registry;
 mod settings;
 mod shell;

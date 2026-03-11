@@ -651,6 +651,10 @@
     width: 100%;
     justify-content: flex-start;
   }
+
+  .settings-secret-form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---- Settings Page ---- */
@@ -983,6 +987,88 @@
 
 .settings-server-message {
   font-style: italic;
+}
+
+.settings-secret-form-grid {
+  display: grid;
+  gap: 0.6rem 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-secret-tabs {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.settings-secret-tab-bar {
+  padding: 0;
+}
+
+.settings-secret-tab-panel {
+  height: auto;
+  overflow: visible;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.settings-secret-form-grid-full {
+  grid-column: 1 / -1;
+}
+
+.settings-secret-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.settings-secret-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.settings-secret-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--panel);
+}
+
+.settings-secret-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.settings-secret-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.settings-secret-meta {
+  font-family: "Iosevka", "SFMono-Regular", "Consolas", monospace;
+  font-size: 0.74rem;
+  color: var(--border-strong);
+  word-break: break-all;
+}
+
+.settings-secret-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+}
+
+.settings-secret-checkbox input {
+  accent-color: var(--ring);
 }
 
 /* ---- Settings Editor ---- */

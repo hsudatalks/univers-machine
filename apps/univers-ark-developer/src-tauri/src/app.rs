@@ -8,6 +8,7 @@ use crate::{
         TerminalState, TunnelState,
     },
     scheduler::{start_background_scheduler, stop_background_scheduler},
+    secret_management::SecretManagementState,
     tunnel::stop_all_tunnels,
 };
 use tauri::{
@@ -218,6 +219,7 @@ pub(crate) fn run() {
         .manage(ConnectivityState::default())
         .manage(RuntimeActivityState::default())
         .manage(SchedulerState::default())
+        .manage(SecretManagementState::new().expect("failed to initialize secret management"))
         // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right/Up
         // on Windows, Cmd+Alt+Left/Right/Up on macOS) are handled by the menu
         // accelerators in build_app_menu, not by global shortcuts.
@@ -294,6 +296,13 @@ pub(crate) fn run() {
             commands::update_targets_config,
             commands::load_app_settings,
             commands::load_app_diagnostics,
+            commands::load_secret_inventory,
+            commands::upsert_secret_provider,
+            commands::delete_secret_provider,
+            commands::upsert_secret_credential,
+            commands::delete_secret_credential,
+            commands::upsert_secret_assignment,
+            commands::delete_secret_assignment,
             commands::save_app_settings,
             commands::update_runtime_activity
         ])

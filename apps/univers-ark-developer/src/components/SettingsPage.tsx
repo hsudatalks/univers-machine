@@ -12,12 +12,19 @@ import { loadAppDiagnostics, loadTargetsConfig, updateTargetsConfig } from "../l
 import { parseTargetsConfig, stringifyTargetsConfig } from "../lib/targets-config";
 import { ConnectionStatusLight } from "./ConnectionStatusLight";
 import { ProfileDialog } from "./ProfileDialog";
+import { SecretSettingsSection } from "./SecretSettingsSection";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { ServerDialog } from "./ServerDialog";
 
-type SettingsTab = "appearance" | "configuration" | "profiles" | "machines" | "diagnostics";
+type SettingsTab =
+  | "appearance"
+  | "configuration"
+  | "profiles"
+  | "machines"
+  | "secrets"
+  | "diagnostics";
 
 interface SettingsPageProps {
   appSettings: AppSettings;
@@ -228,6 +235,7 @@ export function SettingsPage({
               ["configuration", "Configuration"],
               ["profiles", "Profiles"],
               ["machines", "Machines"],
+              ["secrets", "Secrets"],
               ["diagnostics", "Diagnostics"],
             ] as Array<[SettingsTab, string]>
           ).map(([tab, label]) => (
@@ -465,6 +473,10 @@ export function SettingsPage({
             </section>
           </TabsContent>
 
+          <TabsContent className="settings-tab-panel" value="secrets">
+            <SecretSettingsSection active={activeTab === "secrets"} machines={machines} />
+          </TabsContent>
+
           <TabsContent className="settings-tab-panel" value="diagnostics">
             <section className="settings-section">
               <div className="settings-section-heading">
@@ -518,6 +530,39 @@ export function SettingsPage({
                       <div className="settings-runtime-row">
                         <strong>Tunnel ports</strong>
                         {diagnostics.internalTunnelPorts.start}-{diagnostics.internalTunnelPorts.end}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="settings-runtime-card">
+                    <div className="settings-runtime-header">
+                      <div className="settings-runtime-copy">
+                        <span className="settings-runtime-label">Secret Management</span>
+                        <span className="settings-runtime-key">
+                          sqlite metadata + OS credential store
+                        </span>
+                      </div>
+                    </div>
+                    <div className="settings-runtime-grid">
+                      <div className="settings-runtime-row">
+                        <strong>Database</strong>
+                        <span className="settings-runtime-url">
+                          {diagnostics.secretManagement.dbPath}
+                        </span>
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Store backend</strong>
+                        {diagnostics.secretManagement.storeBackend}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Providers</strong>
+                        {diagnostics.secretManagement.providerCount} · <strong>Credentials</strong>{" "}
+                        {diagnostics.secretManagement.credentialCount}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Assignments</strong>
+                        {diagnostics.secretManagement.assignmentCount} · <strong>Audit events</strong>{" "}
+                        {diagnostics.secretManagement.auditEventCount}
                       </div>
                     </div>
                   </section>

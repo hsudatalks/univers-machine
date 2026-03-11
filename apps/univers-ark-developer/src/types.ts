@@ -292,6 +292,96 @@ export interface TerminalDiagnostics {
   sessionCount: number;
 }
 
+export type SecretAssignmentTargetKind = "machine" | "container";
+
+export interface SecretManagementDiagnostics {
+  dbPath: string;
+  storeBackend: string;
+  providerCount: number;
+  credentialCount: number;
+  assignmentCount: number;
+  auditEventCount: number;
+}
+
+export interface SecretProviderRecord {
+  id: string;
+  label: string;
+  providerKind: string;
+  baseUrl: string;
+  description: string;
+  createdAtMs: number;
+  updatedAtMs: number;
+}
+
+export interface SecretCredentialRecord {
+  id: string;
+  providerId: string;
+  label: string;
+  description: string;
+  hasSecret: boolean;
+  secretBackend: string;
+  createdAtMs: number;
+  updatedAtMs: number;
+  lastRotatedAtMs: number | null;
+}
+
+export interface SecretAssignmentRecord {
+  id: string;
+  credentialId: string;
+  targetKind: SecretAssignmentTargetKind;
+  targetId: string;
+  envVar: string;
+  filePath: string;
+  enabled: boolean;
+  createdAtMs: number;
+  updatedAtMs: number;
+}
+
+export interface SecretAuditEventRecord {
+  id: number;
+  eventKind: string;
+  entityKind: string;
+  entityId: string;
+  detail: string;
+  createdAtMs: number;
+}
+
+export interface SecretInventory {
+  dbPath: string;
+  storeBackend: string;
+  providers: SecretProviderRecord[];
+  credentials: SecretCredentialRecord[];
+  assignments: SecretAssignmentRecord[];
+  auditEvents: SecretAuditEventRecord[];
+}
+
+export interface SecretProviderInput {
+  id?: string;
+  label: string;
+  providerKind?: string;
+  baseUrl?: string;
+  description?: string;
+}
+
+export interface SecretCredentialInput {
+  id?: string;
+  providerId: string;
+  label: string;
+  description?: string;
+  secretValue?: string | null;
+  clearSecret?: boolean;
+}
+
+export interface SecretAssignmentInput {
+  id?: string;
+  credentialId: string;
+  targetKind: SecretAssignmentTargetKind;
+  targetId: string;
+  envVar?: string;
+  filePath?: string;
+  enabled?: boolean;
+}
+
 export interface AppDiagnostics {
   processId: number;
   channel: "dev" | "prod" | string;
@@ -304,6 +394,7 @@ export interface AppDiagnostics {
   tunnels: TunnelDiagnostics;
   connectivity: ConnectivityDiagnostics;
   dashboards: DashboardDiagnostics;
+  secretManagement: SecretManagementDiagnostics;
 }
 
 export interface TerminalSnapshot {
