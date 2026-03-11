@@ -57,6 +57,10 @@ import {
 const DEFAULT_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TOOL_PANEL_WIDTH_REM = 22;
+type EditingMachineState = {
+  initialTab: "general" | "connection" | "discovery" | "containers";
+  machineId: string;
+};
 
 function resolvePreferredTarget(
   bootstrap: AppBootstrap,
@@ -185,7 +189,7 @@ function App() {
   );
   const [isAddMachineDialogOpen, setIsAddMachineDialogOpen] = useState(false);
   const [isCreatingMachine, setIsCreatingMachine] = useState(false);
-  const [editingMachineId, setEditingMachineId] = useState<string | null>(null);
+  const [editingMachine, setEditingMachine] = useState<EditingMachineState | null>(null);
   const [visitedContainerIds, setVisitedContainerIds] = useState<string[]>([]);
   const [visitedMachineIds, setVisitedMachineIds] = useState<string[]>([]);
   const previousNonSettingsViewRef = useRef<ActiveView>(activeView);
@@ -245,8 +249,8 @@ function App() {
   const previousStartupPrerenderStatesRef = useRef<
     Record<string, string | undefined>
   >({});
-  const editingMachine = editingMachineId && bootstrap
-    ? bootstrap.machines.find((machine) => machine.id === editingMachineId) ?? null
+  const editingMachineRecord = editingMachine && bootstrap
+    ? bootstrap.machines.find((machine) => machine.id === editingMachine.machineId) ?? null
     : null;
   const {
     activeOverviewFocusedTargetId,
@@ -489,6 +493,16 @@ function App() {
     );
   };
 
+  const openMachineSettings = (
+    machineId: string,
+    initialTab: EditingMachineState["initialTab"] = "general",
+  ) => {
+    setEditingMachine({
+      machineId,
+      initialTab,
+    });
+  };
+
   useEffect(() => {
     let unlistenParentView: (() => void) | undefined;
 
@@ -599,6 +613,12 @@ function App() {
             onAddMachine={() => {
               setIsAddMachineDialogOpen(true);
             }}
+            onEditAgentTeam={(machineId) => {
+              openMachineSettings(machineId, "containers");
+            }}
+            onEditMachine={(machineId) => {
+              openMachineSettings(machineId, "general");
+            }}
             onOpenOverview={() => {
               setActiveView({ kind: "overview" });
             }}
@@ -655,7 +675,7 @@ function App() {
             >
               <ServerPage
                 onOpenSettings={() => {
-                  setEditingMachineId(machine.id);
+                  openMachineSettings(machine.id, "general");
                 }}
                 onOpenWorkspace={setContainerView}
                 pageVisible={
@@ -858,16 +878,17 @@ function App() {
         />
       ) : null}
 
-      {editingMachine ? (
+      {editingMachineRecord && editingMachine ? (
         <ServerDialog
           onClose={() => {
-            setEditingMachineId(null);
+            setEditingMachine(null);
           }}
           onSaved={() => {
-            setEditingMachineId(null);
+            setEditingMachine(null);
             void refreshInventory();
           }}
-          server={editingMachine}
+          initialTab={editingMachine.initialTab}
+          server={editingMachineRecord}
         />
       ) : null}
     </main>

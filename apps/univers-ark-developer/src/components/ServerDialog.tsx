@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 type ServerDialogTab = "general" | "connection" | "discovery" | "containers";
 
 interface ServerDialogProps {
+  initialTab?: ServerDialogTab;
   onClose: () => void;
   onSaved: () => void;
   server?: ManagedMachine | null;
@@ -25,12 +26,13 @@ interface ServerDialogProps {
 }
 
 export function ServerDialog({
+  initialTab = "general",
   onClose,
   onSaved,
   server,
   defaultProfileId = "",
 }: ServerDialogProps) {
-  const [activeTab, setActiveTab] = useState<ServerDialogTab>("general");
+  const [activeTab, setActiveTab] = useState<ServerDialogTab>(initialTab);
   const [config, setConfig] = useState<TargetsConfigDocument | null>(null);
   const [form, setForm] = useState<MachineConfig>(createEmptyMachine(defaultProfileId));
   const [originalId, setOriginalId] = useState<string | null>(server?.id ?? null);
@@ -80,6 +82,10 @@ export function ServerDialog({
   useEffect(() => {
     void loadServerConfig();
   }, [loadServerConfig]);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab, server?.id]);
 
   const profileOptions = useMemo(
     () => Object.keys(config?.profiles ?? {}).sort(),

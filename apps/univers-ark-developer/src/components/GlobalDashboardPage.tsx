@@ -1,4 +1,4 @@
-import { Activity, Boxes, LayoutDashboard, Server, SquareTerminal } from "lucide-react";
+import { Boxes, LayoutDashboard, Server, Settings2, SquareTerminal } from "lucide-react";
 import { visibleContainers } from "../lib/container-visibility";
 import { primaryBrowserSurface } from "../lib/target-services";
 import type {
@@ -20,6 +20,8 @@ interface OverviewEntry {
 
 interface GlobalDashboardPageProps {
   onAddMachine: () => void;
+  onEditAgentTeam: (machineId: string) => void;
+  onEditMachine: (machineId: string) => void;
   onOpenOverview: () => void;
   onOpenMachine: (machineId: string) => void;
   onOpenWorkspace: (targetId: string) => void;
@@ -35,6 +37,8 @@ function serviceKey(targetId: string, serviceId: string): string {
 
 export function GlobalDashboardPage({
   onAddMachine,
+  onEditAgentTeam,
+  onEditMachine,
   onOpenOverview,
   onOpenMachine,
   onOpenWorkspace,
@@ -107,6 +111,17 @@ export function GlobalDashboardPage({
                     <div className="server-dashboard-row-actions">
                       <ConnectionStatusLight state={machine.state} />
                       <Button
+                        aria-label={`Edit ${machine.label}`}
+                        onClick={() => {
+                          onEditMachine(machine.id);
+                        }}
+                        size="icon"
+                        title="Machine settings"
+                        variant="ghost"
+                      >
+                        <Settings2 size={14} />
+                      </Button>
+                      <Button
                         onClick={() => {
                           onOpenMachine(machine.id);
                         }}
@@ -151,6 +166,17 @@ export function GlobalDashboardPage({
                       {primary ? (
                         <Badge variant="neutral">{primary.label}</Badge>
                       ) : null}
+                      <Button
+                        aria-label={`Edit ${container.label}`}
+                        onClick={() => {
+                          onEditAgentTeam(machine.id);
+                        }}
+                        size="icon"
+                        title="Container settings"
+                        variant="ghost"
+                      >
+                        <Settings2 size={14} />
+                      </Button>
                       {target ? (
                         <Button
                           onClick={() => {
@@ -197,31 +223,6 @@ export function GlobalDashboardPage({
                   </div>
                 </div>
               ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/80 bg-card/95">
-            <CardHeader>
-              <CardTitle className="dashboard-section-title">
-                <Activity size={16} />
-                Governance
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="dashboard-actions-list">
-                <li className="dashboard-action-item">
-                  <span className="dashboard-action-title">Dashboard</span>
-                  <p className="dashboard-copy">
-                    Software-wide operational view across machines and agent teams.
-                  </p>
-                </li>
-                <li className="dashboard-action-item">
-                  <span className="dashboard-action-title">Overview</span>
-                  <p className="dashboard-copy">
-                    High-density terminal wall for direct supervision and quick drill-down.
-                  </p>
-                </li>
-              </ul>
             </CardContent>
           </Card>
         </div>
