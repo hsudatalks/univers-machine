@@ -62,10 +62,14 @@ pub(crate) fn mark_runtime_recovery(
     activity_state: &RuntimeActivityState,
     duration: Duration,
 ) -> u64 {
-    let recovering_until_ms = now_epoch_ms().saturating_add(duration.as_millis() as u64);
+    let now_ms = now_epoch_ms();
+    let recovering_until_ms = now_ms.saturating_add(duration.as_millis() as u64);
     activity_state
         .recovering_until_ms
         .store(recovering_until_ms, Ordering::Release);
+    activity_state
+        .last_recovery_started_at_ms
+        .store(now_ms, Ordering::Release);
     activity_state
         .recovery_generation
         .fetch_add(1, Ordering::AcqRel)

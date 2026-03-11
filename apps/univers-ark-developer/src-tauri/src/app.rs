@@ -293,6 +293,7 @@ pub(crate) fn run() {
             commands::load_targets_config,
             commands::update_targets_config,
             commands::load_app_settings,
+            commands::load_app_diagnostics,
             commands::save_app_settings,
             commands::update_runtime_activity
         ])

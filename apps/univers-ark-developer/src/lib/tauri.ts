@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  AppDiagnostics,
   AppSettings,
   AppBootstrap,
   ConnectivityStatusBatch,
@@ -453,6 +454,14 @@ export async function loadAppSettings(): Promise<AppSettings> {
   }
 
   return invoke<AppSettings>("load_app_settings");
+}
+
+export async function loadAppDiagnostics(): Promise<AppDiagnostics> {
+  if (!isTauri()) {
+    throw new Error("Diagnostics are only available in the desktop app.");
+  }
+
+  return invoke<AppDiagnostics>("load_app_diagnostics");
 }
 
 export async function saveAppSettings(settings: AppSettings): Promise<AppSettings> {

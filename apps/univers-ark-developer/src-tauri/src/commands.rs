@@ -1,5 +1,5 @@
 use crate::{
-    activity::update_runtime_activity as apply_runtime_activity,
+    activity::{current_runtime_activity, update_runtime_activity as apply_runtime_activity},
     config::{
         execute_target_command_via_russh, read_bootstrap_data, read_server_inventory,
         read_targets_config, resolve_raw_target, restart_container as restart_remote_container,
@@ -21,12 +21,15 @@ use crate::{
         merge_github_pull_request as execute_github_pull_request_merge, open_external_url,
     },
     models::{
-        command_service, tmux_command_service, AppBootstrap, AppSettings, ConnectivityState,
-        ContainerDashboard, DashboardState, GithubProjectState, GithubPullRequestDetail,
-        MachineImportCandidate, ManagedServer, RemoteDirectoryListing, RemoteFilePreview,
-        RuntimeActivityState, TerminalSnapshot, TerminalState, TunnelState, TunnelStatus,
+        command_service, tmux_command_service, AppBootstrap, AppDiagnostics, AppSettings,
+        ConnectivityDiagnostics, ConnectivityState, ContainerDashboard, DashboardDiagnostics,
+        DashboardState, GithubProjectState, GithubPullRequestDetail, MachineImportCandidate,
+        ManagedServer, PortRangeDiagnostics, RemoteDirectoryListing, RemoteFilePreview,
+        RuntimeActivityDiagnostics, RuntimeActivityState, TerminalDiagnostics, TerminalSnapshot,
+        TerminalState, TunnelDiagnostics, TunnelState, TunnelStatus,
     },
     runtime::{read_runtime_targets_file, resolve_runtime_web_surface, surface_key},
+    scheduler::scheduler_budget_diagnostics,
     service_registry::{
         emit_command_service_status, emit_dashboard_service_statuses, sync_registered_web_services,
     },
@@ -44,7 +47,11 @@ use crate::{
     },
 };
 use serde::Deserialize;
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::PathBuf,
+    sync::atomic::Ordering,
+};
 use tauri::{async_runtime, AppHandle, State};
 use univers_ark_russh::SshConfigResolver;
 
@@ -903,6 +910,123 @@ pub(crate) fn update_targets_config(content: String) -> Result<(), String> {
 #[tauri::command]
 pub(crate) fn load_app_settings(app_handle: AppHandle) -> Result<AppSettings, String> {
     read_app_settings(&app_handle)
+}
+
+fn count_states<'a>(
+    states: impl Iterator<Item = &'a str>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::<String, usize>::new();
+    for state in states {
+        *counts.entry(state.to_string()).or_insert(0) += 1;
+    }
+    counts
+}
+
+#[tauri::command]
+pub(crate) fn load_app_diagnostics(
+    terminal_state: State<'_, TerminalState>,
+    tunnel_state: State<'_, TunnelState>,
+    connectivity_state: State<'_, ConnectivityState>,
+    dashboard_state: State<'_, DashboardState>,
+    activity_state: State<'_, RuntimeActivityState>,
+) -> Result<AppDiagnostics, String> {
+    let activity = current_runtime_activity(activity_state.inner());
+    let scheduler = scheduler_budget_diagnostics(&activity);
+
+    let terminal_sessions = terminal_state
+        .sessions
+        .lock()
+        .map_err(|_| String::from("Failed to inspect terminal sessions"))?;
+
+    let desired_tunnels = tunnel_state
+        .desired_tunnels
+        .lock()
+        .map_err(|_| String::from("Failed to inspect desired tunnel registrations"))?;
+    let tunnel_sessions = tunnel_state
+        .sessions
+        .lock()
+        .map_err(|_| String::from("Failed to inspect active tunnel sessions"))?;
+    let tunnel_ports = tunnel_state
+        .local_ports
+        .lock()
+        .map_err(|_| String::from("Failed to inspect tunnel local ports"))?;
+    let tunnel_statuses = tunnel_state
+        .status_snapshots
+        .lock()
+        .map_err(|_| String::from("Failed to inspect tunnel status snapshots"))?;
+
+    let machine_snapshots = connectivity_state
+        .machine_snapshots
+        .lock()
+        .map_err(|_| String::from("Failed to inspect machine connectivity snapshots"))?;
+    let container_snapshots = connectivity_state
+        .target_snapshots
+        .lock()
+        .map_err(|_| String::from("Failed to inspect container connectivity snapshots"))?;
+
+    let dashboard_sessions = dashboard_state
+        .sessions
+        .lock()
+        .map_err(|_| String::from("Failed to inspect dashboard registrations"))?;
+
+    Ok(AppDiagnostics {
+        process_id: std::process::id(),
+        channel: if cfg!(debug_assertions) {
+            String::from("dev")
+        } else {
+            String::from("prod")
+        },
+        config_path: targets_file_path().display().to_string(),
+        surface_ports: PortRangeDiagnostics {
+            start: crate::constants::SURFACE_PORT_START,
+            end: crate::constants::SURFACE_PORT_END,
+        },
+        internal_tunnel_ports: PortRangeDiagnostics {
+            start: crate::constants::INTERNAL_TUNNEL_PORT_START,
+            end: crate::constants::INTERNAL_TUNNEL_PORT_END,
+        },
+        activity: RuntimeActivityDiagnostics {
+            visible: activity.visible,
+            focused: activity.focused,
+            online: activity.online,
+            recovering: activity.recovering,
+            recovery_generation: activity.recovery_generation,
+            last_recovery_started_at_ms: activity_state
+                .last_recovery_started_at_ms
+                .load(Ordering::Acquire),
+            active_machine_id: activity.active_machine_id.clone(),
+            active_target_id: activity.active_target_id.clone(),
+        },
+        scheduler,
+        terminals: TerminalDiagnostics {
+            session_count: terminal_sessions.len(),
+        },
+        tunnels: TunnelDiagnostics {
+            desired_count: desired_tunnels.len(),
+            session_count: tunnel_sessions.len(),
+            ready_session_count: tunnel_sessions
+                .values()
+                .filter(|session| session.ready.load(Ordering::Acquire))
+                .count(),
+            local_port_count: tunnel_ports.len(),
+            status_counts: count_states(tunnel_statuses.values().map(|status| status.state.as_str())),
+        },
+        connectivity: ConnectivityDiagnostics {
+            machine_snapshot_count: machine_snapshots.len(),
+            container_snapshot_count: container_snapshots.len(),
+            machine_state_counts: count_states(
+                machine_snapshots.values().map(|snapshot| snapshot.state.as_str()),
+            ),
+            container_state_counts: count_states(
+                container_snapshots
+                    .values()
+                    .map(|snapshot| snapshot.state.as_str()),
+            ),
+        },
+        dashboards: DashboardDiagnostics {
+            registered_count: dashboard_sessions.len(),
+        },
+    })
 }
 
 #[tauri::command]

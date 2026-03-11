@@ -228,6 +228,65 @@ export interface AppSettings {
   dashboardRefreshSeconds: number;
 }
 
+export interface PortRangeDiagnostics {
+  start: number;
+  end: number;
+}
+
+export interface RuntimeActivityDiagnostics {
+  visible: boolean;
+  focused: boolean;
+  online: boolean;
+  recovering: boolean;
+  recoveryGeneration: number;
+  lastRecoveryStartedAtMs: number;
+  activeMachineId: string | null;
+  activeTargetId: string | null;
+}
+
+export interface SchedulerBudgetDiagnostics {
+  maxTunnelReconciles: number;
+  maxConnectivityProbes: number;
+  maxDashboardRefreshes: number;
+}
+
+export interface TunnelDiagnostics {
+  desiredCount: number;
+  sessionCount: number;
+  readySessionCount: number;
+  localPortCount: number;
+  statusCounts: Record<string, number>;
+}
+
+export interface ConnectivityDiagnostics {
+  machineSnapshotCount: number;
+  containerSnapshotCount: number;
+  machineStateCounts: Record<string, number>;
+  containerStateCounts: Record<string, number>;
+}
+
+export interface DashboardDiagnostics {
+  registeredCount: number;
+}
+
+export interface TerminalDiagnostics {
+  sessionCount: number;
+}
+
+export interface AppDiagnostics {
+  processId: number;
+  channel: "dev" | "prod" | string;
+  configPath: string;
+  surfacePorts: PortRangeDiagnostics;
+  internalTunnelPorts: PortRangeDiagnostics;
+  activity: RuntimeActivityDiagnostics;
+  scheduler: SchedulerBudgetDiagnostics;
+  terminals: TerminalDiagnostics;
+  tunnels: TunnelDiagnostics;
+  connectivity: ConnectivityDiagnostics;
+  dashboards: DashboardDiagnostics;
+}
+
 export interface TerminalSnapshot {
   targetId: string;
   output: string;

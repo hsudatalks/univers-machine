@@ -3,7 +3,8 @@ use crate::{
     connectivity::{run_connectivity_scheduler_cycle, ConnectivitySchedulerState},
     dashboard::run_dashboard_scheduler_cycle,
     models::{
-        ConnectivityState, DashboardState, RuntimeActivityState, SchedulerState, TunnelState,
+        ConnectivityState, DashboardState, RuntimeActivityState, SchedulerBudgetDiagnostics,
+        SchedulerState, TunnelState,
     },
     tunnel::{run_tunnel_supervisor_cycle, TunnelSupervisorState},
 };
@@ -60,6 +61,17 @@ fn scheduler_budget(activity: &RuntimeActivitySnapshot) -> SchedulerBudget {
         max_tunnel_reconciles: 1,
         max_connectivity_probes: 2,
         max_dashboard_refreshes: 1,
+    }
+}
+
+pub(crate) fn scheduler_budget_diagnostics(
+    activity: &RuntimeActivitySnapshot,
+) -> SchedulerBudgetDiagnostics {
+    let budget = scheduler_budget(activity);
+    SchedulerBudgetDiagnostics {
+        max_tunnel_reconciles: budget.max_tunnel_reconciles,
+        max_connectivity_probes: budget.max_connectivity_probes,
+        max_dashboard_refreshes: budget.max_dashboard_refreshes,
     }
 }
 
