@@ -529,6 +529,51 @@ function App() {
   }, [activeView.kind, homeViewMode, setHomeViewMode]);
 
   useEffect(() => {
+    const machines = bootstrap?.machines ?? [];
+
+    if (activeView.kind !== "machine" || machines.length <= 1) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        !isPlatformModifier(event) ||
+        !event.altKey ||
+        event.shiftKey ||
+        (event.key !== "ArrowLeft" && event.key !== "ArrowRight") ||
+        (isEditableEventTarget(event.target) && !isXtermHelperTextarea(event.target))
+      ) {
+        return;
+      }
+
+      const currentIndex =
+        machines.findIndex((machine) => machine.id === activeView.machineId);
+
+      if (currentIndex === -1) {
+        return;
+      }
+
+      const nextIndex =
+        event.key === "ArrowLeft" ? currentIndex - 1 : currentIndex + 1;
+      const nextMachine = machines[nextIndex];
+
+      if (!nextMachine) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      openMachineView(nextMachine.id);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [activeView, bootstrap]);
+
+  useEffect(() => {
     const handleHashChange = () => {
       const nextView =
         parseActiveViewFromHash(window.location.hash) ?? { kind: "home" as const };

@@ -22,7 +22,9 @@ function adjacentOverviewTargetId(
     }
 
     const nextIndex =
-      direction === "left" ? currentIndex - 1 : currentIndex + 1;
+      direction === "left"
+        ? (currentIndex - 1 + targetIds.length) % targetIds.length
+        : (currentIndex + 1) % targetIds.length;
 
     return targetIds[nextIndex] ?? currentTargetId;
   }
