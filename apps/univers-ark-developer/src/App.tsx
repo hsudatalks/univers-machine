@@ -62,10 +62,28 @@ const MIN_TOOL_PANEL_WIDTH_REM = 22;
 const STARTUP_PRERENDER_INITIAL_BATCH = 2;
 const STARTUP_PRERENDER_BATCH_SIZE = 2;
 const STARTUP_PRERENDER_BATCH_INTERVAL_MS = 1500;
+const IS_MAC = navigator.platform.toUpperCase().includes("MAC");
 type EditingMachineState = {
   initialTab: "general" | "connection" | "discovery" | "containers";
   machineId: string;
 };
+
+function isPlatformModifier(event: KeyboardEvent): boolean {
+  return IS_MAC ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+}
+
+function isEditableEventTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable
+  );
+}
 
 function resolvePreferredTarget(
   bootstrap: AppBootstrap,
@@ -421,6 +439,34 @@ function App() {
       previousNonSettingsViewRef.current = activeView;
     }
   }, [activeView]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        !isPlatformModifier(event) ||
+        event.altKey ||
+        event.shiftKey ||
+        event.code !== "KeyS" ||
+        isEditableEventTarget(event.target)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setActiveView((current) =>
+        current.kind === "settings"
+          ? previousNonSettingsViewRef.current
+          : { kind: "settings" },
+      );
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, []);
 
   useEffect(() => {
     const handleHashChange = () => {
