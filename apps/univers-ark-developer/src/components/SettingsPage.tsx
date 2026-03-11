@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import type {
+  AppDiagnostics,
   AppSettings,
   ManagedMachine,
   ThemeMode,
 } from "../types";
 import { visibleContainers } from "../lib/container-visibility";
-import { loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
+import { listBrowserFrameSnapshots } from "../lib/browser-cache";
+import { loadAppDiagnostics, loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
 import { parseTargetsConfig, stringifyTargetsConfig } from "../lib/targets-config";
 import { ConnectionStatusLight } from "./ConnectionStatusLight";
 import { ProfileDialog } from "./ProfileDialog";
@@ -14,7 +16,7 @@ import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { ServerDialog } from "./ServerDialog";
 
-type SettingsTab = "appearance" | "configuration" | "profiles" | "machines";
+type SettingsTab = "appearance" | "configuration" | "profiles" | "machines" | "diagnostics";
 
 interface SettingsPageProps {
   appSettings: AppSettings;
@@ -43,6 +45,9 @@ export function SettingsPage({
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [profileIds, setProfileIds] = useState<string[]>([]);
   const [defaultProfileId, setDefaultProfileId] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<AppDiagnostics | null>(null);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
+  const [diagnosticsRefreshing, setDiagnosticsRefreshing] = useState(false);
 
   const refreshProfiles = () => {
     void loadTargetsConfig()
@@ -73,6 +78,75 @@ export function SettingsPage({
     refreshProfiles();
   }, [configPath]);
 
+  useEffect(() => {
+    if (activeTab !== "diagnostics") {
+      return;
+    }
+
+    let cancelled = false;
+    let intervalId: number | undefined;
+
+    const refreshDiagnostics = (showBusy = false) => {
+      if (showBusy) {
+        setDiagnosticsRefreshing(true);
+      }
+      void loadAppDiagnostics()
+        .then((snapshot) => {
+          if (cancelled) {
+            return;
+          }
+          setDiagnostics(snapshot);
+          setDiagnosticsError(null);
+        })
+        .catch((error) => {
+          if (cancelled) {
+            return;
+          }
+          setDiagnosticsError(error instanceof Error ? error.message : String(error));
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setDiagnosticsRefreshing(false);
+          }
+        });
+    };
+
+    refreshDiagnostics(true);
+    intervalId = window.setInterval(() => refreshDiagnostics(false), 2000);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [activeTab]);
+
+  const formatCounts = (counts: Record<string, number>) => {
+    const entries = Object.entries(counts).sort(([left], [right]) => left.localeCompare(right));
+    if (entries.length === 0) {
+      return "none";
+    }
+
+    return entries.map(([key, count]) => `${key}:${count}`).join(" · ");
+  };
+
+  const formatTimestamp = (timestampMs: number) => {
+    if (!timestampMs) {
+      return "none";
+    }
+
+    return new Date(timestampMs).toLocaleString();
+  };
+
+  const browserFrames = listBrowserFrameSnapshots();
+  const browserFrameStateCounts = browserFrames.reduce<Record<string, number>>((counts, frame) => {
+    counts[frame.sessionState] = (counts[frame.sessionState] ?? 0) + 1;
+    return counts;
+  }, {});
+  const ownedBrowserFrameCount = browserFrames.filter((frame) => frame.hasOwner).length;
+  const prerenderedBrowserFrameCount = browserFrames.length - ownedBrowserFrameCount;
+
   return (
     <div className="settings-page">
       <header className="panel-header settings-header">
@@ -96,6 +170,7 @@ export function SettingsPage({
               ["configuration", "Configuration"],
               ["profiles", "Profiles"],
               ["machines", "Machines"],
+              ["diagnostics", "Diagnostics"],
             ] as Array<[SettingsTab, string]>
           ).map(([tab, label]) => (
             <TabsTrigger className="settings-tab" key={tab} value={tab}>
@@ -293,6 +368,228 @@ export function SettingsPage({
                     </button>
                   ))}
                 </div>
+              )}
+            </section>
+          </TabsContent>
+
+          <TabsContent className="settings-tab-panel" value="diagnostics">
+            <section className="settings-section">
+              <div className="settings-section-heading">
+                <h3 className="settings-section-title">Diagnostics</h3>
+                <Button
+                  onClick={() => {
+                    setDiagnosticsRefreshing(true);
+                    void loadAppDiagnostics()
+                      .then((snapshot) => {
+                        setDiagnostics(snapshot);
+                        setDiagnosticsError(null);
+                      })
+                      .catch((error) => {
+                        setDiagnosticsError(error instanceof Error ? error.message : String(error));
+                      })
+                      .finally(() => setDiagnosticsRefreshing(false));
+                  }}
+                  size="sm"
+                  variant="outline"
+                >
+                  {diagnosticsRefreshing ? "Refreshing…" : "Refresh"}
+                </Button>
+              </div>
+              <p className="settings-editor-hint">
+                Process-local runtime diagnostics. Dev and prod already use separate config files and
+                port ranges; cross-process coordination is mainly about shared resource pressure, not
+                state corruption.
+              </p>
+              {diagnosticsError ? (
+                <p className="settings-empty">{diagnosticsError}</p>
+              ) : diagnostics ? (
+                <div className="settings-diagnostics-grid">
+                  <section className="settings-runtime-card">
+                    <div className="settings-runtime-header">
+                      <div className="settings-runtime-copy">
+                        <span className="settings-runtime-label">Process</span>
+                        <span className="settings-runtime-key">
+                          {diagnostics.channel} · pid {diagnostics.processId}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="settings-runtime-grid">
+                      <div className="settings-runtime-row">
+                        <strong>Config</strong>
+                        <span className="settings-runtime-url">{diagnostics.configPath}</span>
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Surface ports</strong>
+                        {diagnostics.surfacePorts.start}-{diagnostics.surfacePorts.end}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Tunnel ports</strong>
+                        {diagnostics.internalTunnelPorts.start}-{diagnostics.internalTunnelPorts.end}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="settings-runtime-card">
+                    <div className="settings-runtime-header">
+                      <div className="settings-runtime-copy">
+                        <span className="settings-runtime-label">Activity</span>
+                        <span className="settings-runtime-key">frontend hint -&gt; scheduler</span>
+                      </div>
+                    </div>
+                    <div className="settings-runtime-grid">
+                      <div className="settings-runtime-row">
+                        <strong>Visible</strong>
+                        {diagnostics.activity.visible ? "yes" : "no"} · <strong>Focused</strong>{" "}
+                        {diagnostics.activity.focused ? "yes" : "no"} · <strong>Online</strong>{" "}
+                        {diagnostics.activity.online ? "yes" : "no"}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Recovering</strong>
+                        {diagnostics.activity.recovering ? "yes" : "no"}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Recovery generation</strong>
+                        {diagnostics.activity.recoveryGeneration}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Last recovery</strong>
+                        {formatTimestamp(diagnostics.activity.lastRecoveryStartedAtMs)}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Active machine</strong>
+                        {diagnostics.activity.activeMachineId ?? "none"}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Active target</strong>
+                        {diagnostics.activity.activeTargetId ?? "none"}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="settings-runtime-card">
+                    <div className="settings-runtime-header">
+                      <div className="settings-runtime-copy">
+                        <span className="settings-runtime-label">Scheduler Budget</span>
+                        <span className="settings-runtime-key">per scheduler cycle</span>
+                      </div>
+                    </div>
+                    <div className="settings-runtime-grid">
+                      <div className="settings-runtime-row">
+                        <strong>Tunnel reconciles</strong>
+                        {diagnostics.scheduler.maxTunnelReconciles}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Connectivity probes</strong>
+                        {diagnostics.scheduler.maxConnectivityProbes}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Dashboard refreshes</strong>
+                        {diagnostics.scheduler.maxDashboardRefreshes}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="settings-runtime-card">
+                    <div className="settings-runtime-header">
+                      <div className="settings-runtime-copy">
+                        <span className="settings-runtime-label">Terminals</span>
+                        <span className="settings-runtime-key">active russh terminal sessions</span>
+                      </div>
+                    </div>
+                    <div className="settings-runtime-grid">
+                      <div className="settings-runtime-row">
+                        <strong>Sessions</strong>
+                        {diagnostics.terminals.sessionCount}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="settings-runtime-card">
+                    <div className="settings-runtime-header">
+                      <div className="settings-runtime-copy">
+                        <span className="settings-runtime-label">Browser Cache</span>
+                        <span className="settings-runtime-key">hidden iframe / prerender pool</span>
+                      </div>
+                    </div>
+                    <div className="settings-runtime-grid">
+                      <div className="settings-runtime-row">
+                        <strong>Total frames</strong>
+                        {browserFrames.length} · <strong>Owned</strong> {ownedBrowserFrameCount} ·{" "}
+                        <strong>Parked</strong> {prerenderedBrowserFrameCount}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>States</strong>
+                        {formatCounts(browserFrameStateCounts)}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="settings-runtime-card">
+                    <div className="settings-runtime-header">
+                      <div className="settings-runtime-copy">
+                        <span className="settings-runtime-label">Tunnels</span>
+                        <span className="settings-runtime-key">session + desired state</span>
+                      </div>
+                    </div>
+                    <div className="settings-runtime-grid">
+                      <div className="settings-runtime-row">
+                        <strong>Desired</strong>
+                        {diagnostics.tunnels.desiredCount} · <strong>Sessions</strong>{" "}
+                        {diagnostics.tunnels.sessionCount} · <strong>Ready</strong>{" "}
+                        {diagnostics.tunnels.readySessionCount}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Local ports</strong>
+                        {diagnostics.tunnels.localPortCount}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>States</strong>
+                        {formatCounts(diagnostics.tunnels.statusCounts)}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="settings-runtime-card">
+                    <div className="settings-runtime-header">
+                      <div className="settings-runtime-copy">
+                        <span className="settings-runtime-label">Connectivity</span>
+                        <span className="settings-runtime-key">machine + container snapshots</span>
+                      </div>
+                    </div>
+                    <div className="settings-runtime-grid">
+                      <div className="settings-runtime-row">
+                        <strong>Machines</strong>
+                        {diagnostics.connectivity.machineSnapshotCount} · <strong>Containers</strong>{" "}
+                        {diagnostics.connectivity.containerSnapshotCount}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Machine states</strong>
+                        {formatCounts(diagnostics.connectivity.machineStateCounts)}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Container states</strong>
+                        {formatCounts(diagnostics.connectivity.containerStateCounts)}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="settings-runtime-card">
+                    <div className="settings-runtime-header">
+                      <div className="settings-runtime-copy">
+                        <span className="settings-runtime-label">Dashboards</span>
+                        <span className="settings-runtime-key">registered background refreshes</span>
+                      </div>
+                    </div>
+                    <div className="settings-runtime-grid">
+                      <div className="settings-runtime-row">
+                        <strong>Registered</strong>
+                        {diagnostics.dashboards.registeredCount}
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              ) : (
+                <p className="settings-empty">Loading diagnostics…</p>
               )}
             </section>
           </TabsContent>

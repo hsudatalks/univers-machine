@@ -842,6 +842,12 @@
   gap: 0.25rem;
 }
 
+.settings-diagnostics-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
+}
+
 .settings-runtime-row {
   font-size: 0.78rem;
   line-height: 1.45;
