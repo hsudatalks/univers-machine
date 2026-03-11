@@ -20,6 +20,19 @@ interface TerminalPaneProps {
   title?: string;
 }
 
+const DEFAULT_TERMINAL_SCROLLBACK = 1500;
+const TMUX_TERMINAL_SCROLLBACK = 0;
+
+function preferredTerminalScrollback(target: DeveloperTarget): number {
+  const startupCommand = target.terminalStartupCommand?.trim() ?? "";
+  const terminalCommand = target.terminalCommand.trim();
+  const commandText = `${startupCommand}\n${terminalCommand}`;
+
+  return commandText.includes("tmux-mobile-view attach")
+    ? TMUX_TERMINAL_SCROLLBACK
+    : DEFAULT_TERMINAL_SCROLLBACK;
+}
+
 export function TerminalPane({
   active = true,
   actions,
@@ -48,6 +61,7 @@ export function TerminalPane({
     claimTerminalSession(target.id, ownerId, mountElement, {
       autoFocus,
       fontScale,
+      scrollback: preferredTerminalScrollback(target),
     });
 
     const syncLayout = () => {

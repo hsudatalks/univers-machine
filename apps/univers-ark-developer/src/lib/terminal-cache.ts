@@ -36,6 +36,7 @@ interface CachedTerminalSession {
 
 const DEFAULT_TERMINAL_STATUS = "Connecting";
 const DEFAULT_TERMINAL_FONT_SIZE = 12;
+const DEFAULT_TERMINAL_SCROLLBACK = 1500;
 const TERMINAL_FONT_FAMILY =
   '"SFMono-Regular", Menlo, Monaco, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", Consolas, monospace';
 const PUNCTUATION_FALLBACK_DELAY_MS = 72;
@@ -114,6 +115,19 @@ function applyTerminalFontScale(
   if (session.terminal.textarea) {
     session.terminal.textarea.style.fontSize = `${session.terminal.options.fontSize}px`;
   }
+}
+
+function applyTerminalScrollback(
+  session: CachedTerminalSession,
+  scrollback: number | undefined,
+) {
+  const nextScrollback = Math.max(0, Math.trunc(scrollback ?? DEFAULT_TERMINAL_SCROLLBACK));
+
+  if (session.terminal.options.scrollback === nextScrollback) {
+    return;
+  }
+
+  session.terminal.options.scrollback = nextScrollback;
 }
 
 function isImePunctuationCharacter(value: string): boolean {
@@ -288,7 +302,7 @@ function createTerminalSession(targetId: string): CachedTerminalSession {
     lineHeight: 1,
     macOptionClickForcesSelection: true,
     rightClickSelectsWord: true,
-    scrollback: 1500,
+    scrollback: DEFAULT_TERMINAL_SCROLLBACK,
     theme: {
       background: "#0d1117",
       cursor: "#d6f3dd",
@@ -506,7 +520,7 @@ export function claimTerminalSession(
   targetId: string,
   ownerId: symbol,
   mountElement: HTMLDivElement,
-  options?: { autoFocus?: boolean; fontScale?: number },
+  options?: { autoFocus?: boolean; fontScale?: number; scrollback?: number },
 ) {
   const session = terminalSession(targetId);
 
@@ -516,6 +530,7 @@ export function claimTerminalSession(
 
   session.ownerId = ownerId;
   applyTerminalFontScale(session, options?.fontScale);
+  applyTerminalScrollback(session, options?.scrollback);
 
   if (!session.hasAttachedSnapshot || session.status !== "Connected") {
     void refreshTerminalSnapshot(session);
