@@ -1,4 +1,4 @@
-import type { OrchestrationViewMode } from "../hooks/useOrchestrationViewMode";
+import type { HomeViewMode } from "../hooks/useOrchestrationViewMode";
 import { ConnectionStatusLight } from "./ConnectionStatusLight";
 import { GithubPopover } from "./GithubPopover";
 import { Badge } from "./ui/badge";
@@ -13,21 +13,14 @@ type StatusBarProps = {
   activeMachineId?: string;
   activeStatusLabel: string;
   containerCount: number;
-  isOrchestrationActive: boolean;
+  isHomeActive: boolean;
   isSidebarHidden: boolean;
   machineEntries: MachineNavEntry[];
   onNavigateMachine?: (machineId: string) => void;
-  onSetOrchestrationViewMode: (viewMode: OrchestrationViewMode) => void;
+  onSetHomeViewMode: (viewMode: HomeViewMode) => void;
   onOpenSettings: () => void;
-  onResetOverviewZoom: () => void;
   onToggleSidebar: () => void;
-  onZoomInOverview: () => void;
-  onZoomOutOverview: () => void;
-  orchestrationViewMode: OrchestrationViewMode;
-  overviewZoom: number;
-  overviewZoomDefault: number;
-  overviewZoomMax: number;
-  overviewZoomMin: number;
+  homeViewMode: HomeViewMode;
   reachableContainerCount: number;
   serverCount: number;
 };
@@ -36,21 +29,14 @@ export function StatusBar({
   activeMachineId,
   activeStatusLabel,
   containerCount,
-  isOrchestrationActive,
+  isHomeActive,
   isSidebarHidden,
   machineEntries,
   onNavigateMachine,
-  onSetOrchestrationViewMode,
+  onSetHomeViewMode,
   onOpenSettings,
-  onResetOverviewZoom,
   onToggleSidebar,
-  onZoomInOverview,
-  onZoomOutOverview,
-  orchestrationViewMode,
-  overviewZoom,
-  overviewZoomDefault,
-  overviewZoomMax,
-  overviewZoomMin,
+  homeViewMode,
   reachableContainerCount,
   serverCount,
 }: StatusBarProps) {
@@ -147,63 +133,36 @@ export function StatusBar({
               </svg>
             </Button>
           </div>
-        ) : isOrchestrationActive ? (
-          <>
-            <div className="status-bar-view-switcher" aria-label="Orchestration views" role="tablist">
-              {(["grid", "focus"] as const).map((viewMode) => (
-                <Button
-                  aria-pressed={orchestrationViewMode === viewMode}
-                  className={`status-bar-view-button ${orchestrationViewMode === viewMode ? "is-active" : ""
-                    }`}
-                  key={viewMode}
-                  onClick={() => {
-                    onSetOrchestrationViewMode(viewMode);
-                  }}
-                  size="sm"
-                  title={viewMode === "grid" ? "Show grid view" : "Show focus view"}
-                  type="button"
-                  variant="ghost"
-                >
-                  {viewMode === "grid" ? "Grid" : "Focus"}
-                </Button>
-              ))}
-            </div>
-            <div className="status-bar-zoom" aria-label="Orchestration zoom controls">
+        ) : isHomeActive ? (
+          <div className="status-bar-view-switcher" aria-label="Home views" role="tablist">
+            {(["dashboard", "grid", "focus"] as const).map((viewMode) => (
               <Button
-                aria-label="Zoom out orchestration terminals"
-                className="status-bar-button"
-                disabled={overviewZoom <= overviewZoomMin}
-                onClick={onZoomOutOverview}
+                aria-pressed={homeViewMode === viewMode}
+                className={`status-bar-view-button ${homeViewMode === viewMode ? "is-active" : ""
+                  }`}
+                key={viewMode}
+                onClick={() => {
+                  onSetHomeViewMode(viewMode);
+                }}
                 size="sm"
-                title="Zoom out orchestration terminals"
+                title={
+                  viewMode === "dashboard"
+                    ? "Show dashboard view"
+                    : viewMode === "grid"
+                      ? "Show grid view"
+                      : "Show focus view"
+                }
+                type="button"
                 variant="ghost"
               >
-                -
+                {viewMode === "dashboard"
+                  ? "Dashboard"
+                  : viewMode === "grid"
+                    ? "Grid"
+                    : "Focus"}
               </Button>
-              <Button
-                aria-label="Reset orchestration zoom"
-                className="status-bar-zoom-readout"
-                disabled={overviewZoom === overviewZoomDefault}
-                onClick={onResetOverviewZoom}
-                size="sm"
-                title="Reset orchestration zoom"
-                variant="ghost"
-              >
-                {Math.round(overviewZoom * 100)}%
-              </Button>
-              <Button
-                aria-label="Zoom in orchestration terminals"
-                className="status-bar-button"
-                disabled={overviewZoom >= overviewZoomMax}
-                onClick={onZoomInOverview}
-                size="sm"
-                title="Zoom in orchestration terminals"
-                variant="ghost"
-              >
-                +
-              </Button>
-            </div>
-          </>
+            ))}
+          </div>
         ) : null}
       </div>
 

@@ -93,13 +93,13 @@ function adjacentOverviewTargetId(
 }
 
 interface UseOverviewNavigationOptions {
-  activeViewKind: "dashboard" | "overview" | "settings" | "machine" | "container";
+  isNavigationActive: boolean;
   onOpenWorkspace: (targetId: string) => void;
   targetIds: string[];
 }
 
 export function useOverviewNavigation({
-  activeViewKind,
+  isNavigationActive,
   onOpenWorkspace,
   targetIds,
 }: UseOverviewNavigationOptions) {
@@ -122,7 +122,7 @@ export function useOverviewNavigation({
   const openContainerViewFromShortcut = useEffectEvent(onOpenWorkspace);
 
   useEffect(() => {
-    if (activeViewKind !== "overview" || !activeOverviewFocusedTargetId) {
+    if (!isNavigationActive || !activeOverviewFocusedTargetId) {
       return;
     }
 
@@ -137,10 +137,10 @@ export function useOverviewNavigation({
       block: "nearest",
       inline: "nearest",
     });
-  }, [activeOverviewFocusedTargetId, activeViewKind]);
+  }, [activeOverviewFocusedTargetId, isNavigationActive]);
 
   useEffect(() => {
-    if (activeViewKind !== "overview") {
+    if (!isNavigationActive) {
       return;
     }
 
@@ -220,7 +220,7 @@ export function useOverviewNavigation({
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [activeOverviewFocusedTargetId, activeViewKind, targetIds]);
+  }, [activeOverviewFocusedTargetId, isNavigationActive, targetIds]);
 
   return {
     activeOverviewFocusedTargetId,

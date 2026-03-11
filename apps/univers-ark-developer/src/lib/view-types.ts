@@ -1,6 +1,5 @@
 export type ActiveView =
-  | { kind: "dashboard" }
-  | { kind: "overview" }
+  | { kind: "home" }
   | { kind: "settings" }
   | { kind: "machine"; machineId: string }
   | { kind: "container"; targetId: string };
@@ -23,10 +22,10 @@ export function parseActiveViewFromHash(hash: string): ActiveView | null {
   const [route, ...rest] = normalized.replace(/^\/+/, "").split("/");
 
   switch (route) {
+    case "home":
     case "dashboard":
-      return { kind: "dashboard" };
     case "overview":
-      return { kind: "overview" };
+      return { kind: "home" };
     case "settings":
       return { kind: "settings" };
     case "machine": {
@@ -44,10 +43,8 @@ export function parseActiveViewFromHash(hash: string): ActiveView | null {
 
 export function hashForActiveView(view: ActiveView): string {
   switch (view.kind) {
-    case "dashboard":
-      return "#/dashboard";
-    case "overview":
-      return "#/overview";
+    case "home":
+      return "#/home";
     case "settings":
       return "#/settings";
     case "machine":
@@ -59,10 +56,8 @@ export function hashForActiveView(view: ActiveView): string {
 
 export function sameActiveView(left: ActiveView, right: ActiveView): boolean {
   switch (left.kind) {
-    case "dashboard":
-      return right.kind === "dashboard";
-    case "overview":
-      return right.kind === "overview";
+    case "home":
+      return right.kind === "home";
     case "settings":
       return right.kind === "settings";
     case "machine":

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { OrchestrationViewMode } from "../hooks/useOrchestrationViewMode";
+import type { HomeViewMode } from "../hooks/useOrchestrationViewMode";
 import { connectionStatusClass } from "../lib/connectivity-state";
 import { TerminalCard } from "./TerminalCard";
 import type { DeveloperTarget, ManagedContainer, ManagedMachine } from "../types";
@@ -16,7 +16,7 @@ interface OverviewPageProps {
   onFocusTarget: (targetId: string) => void;
   onOpenWorkspace: (targetId: string) => void;
   onRefreshInventory: () => void;
-  orchestrationViewMode: OrchestrationViewMode;
+  homeViewMode: Exclude<HomeViewMode, "dashboard">;
   overviewContainers: OverviewEntry[];
   overviewZoom: number;
   overviewZoomStyle: CSSProperties;
@@ -76,7 +76,7 @@ export function OverviewPage({
   onFocusTarget,
   onOpenWorkspace,
   onRefreshInventory,
-  orchestrationViewMode,
+  homeViewMode,
   overviewContainers,
   overviewZoom,
   overviewZoomStyle,
@@ -153,7 +153,7 @@ export function OverviewPage({
   const focusScale = Math.min(1.45, Math.max(1.08, Number((overviewZoom + 0.18).toFixed(2))));
 
   useEffect(() => {
-    if (orchestrationViewMode !== "focus" || focusedTargetOrderIndex < 0) {
+    if (homeViewMode !== "focus" || focusedTargetOrderIndex < 0) {
       previousFocusedTargetOrderIndexRef.current =
         focusedTargetOrderIndex >= 0 ? focusedTargetOrderIndex : null;
       return;
@@ -178,7 +178,7 @@ export function OverviewPage({
     }
 
     previousFocusedTargetOrderIndexRef.current = focusedTargetOrderIndex;
-  }, [focusableEntries.length, focusedTargetOrderIndex, orchestrationViewMode]);
+  }, [focusableEntries.length, focusedTargetOrderIndex, homeViewMode]);
 
   const renderOverviewCard = (
     entry: OverviewCardEntry,
@@ -225,7 +225,7 @@ export function OverviewPage({
     );
   };
 
-  if (orchestrationViewMode === "focus" && focusedEntry) {
+  if (homeViewMode === "focus" && focusedEntry) {
     return (
       <section className="page-section">
         <div

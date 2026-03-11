@@ -1,26 +1,32 @@
 import { useEffect, useState } from "react";
 
-export type OrchestrationViewMode = "grid" | "focus";
+export type HomeViewMode = "dashboard" | "grid" | "focus";
 
-const ORCHESTRATION_VIEW_MODE_STORAGE_KEY =
+const HOME_VIEW_MODE_STORAGE_KEY = "univers-ark-developer:home-view-mode";
+const LEGACY_ORCHESTRATION_VIEW_MODE_STORAGE_KEY =
   "univers-ark-developer:orchestration-view-mode";
 
-function isOrchestrationViewMode(value: string | null): value is OrchestrationViewMode {
-  return value === "grid" || value === "focus";
+function isHomeViewMode(value: string | null): value is HomeViewMode {
+  return value === "dashboard" || value === "grid" || value === "focus";
 }
 
-export function useOrchestrationViewMode() {
-  const [orchestrationViewMode, setOrchestrationViewMode] =
-    useState<OrchestrationViewMode>(() => {
+export function useHomeViewMode() {
+  const [homeViewMode, setHomeViewMode] = useState<HomeViewMode>(() => {
       if (typeof window === "undefined") {
-        return "grid";
+        return "dashboard";
       }
 
-      const stored = window.localStorage.getItem(
-        ORCHESTRATION_VIEW_MODE_STORAGE_KEY,
+      const stored = window.localStorage.getItem(HOME_VIEW_MODE_STORAGE_KEY);
+
+      if (isHomeViewMode(stored)) {
+        return stored;
+      }
+
+      const legacyStored = window.localStorage.getItem(
+        LEGACY_ORCHESTRATION_VIEW_MODE_STORAGE_KEY,
       );
 
-      return isOrchestrationViewMode(stored) ? stored : "grid";
+      return isHomeViewMode(legacyStored) ? legacyStored : "dashboard";
     });
 
   useEffect(() => {
@@ -28,14 +34,11 @@ export function useOrchestrationViewMode() {
       return;
     }
 
-    window.localStorage.setItem(
-      ORCHESTRATION_VIEW_MODE_STORAGE_KEY,
-      orchestrationViewMode,
-    );
-  }, [orchestrationViewMode]);
+    window.localStorage.setItem(HOME_VIEW_MODE_STORAGE_KEY, homeViewMode);
+  }, [homeViewMode]);
 
   return {
-    orchestrationViewMode,
-    setOrchestrationViewMode,
+    homeViewMode,
+    setHomeViewMode,
   };
 }

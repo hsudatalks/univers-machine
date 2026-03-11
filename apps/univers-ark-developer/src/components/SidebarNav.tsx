@@ -11,7 +11,7 @@ import {
   SidebarMenuItem,
   SidebarMenuSub,
 } from "./ui/sidebar";
-import { ChevronRight, LayoutDashboard, LayoutGrid, Server, SquareTerminal } from "lucide-react";
+import { ChevronRight, Home, Server, SquareTerminal } from "lucide-react";
 
 interface SidebarNavProps {
   activeMachineId?: string;
@@ -19,12 +19,10 @@ interface SidebarNavProps {
   availableTargetIds: string[];
   bootstrap: AppBootstrap;
   expandedMachineIds: string[];
-  isDashboardActive: boolean;
-  isOverviewActive: boolean;
-  isOverviewLayout?: boolean;
+  isHomeActive: boolean;
+  isHomeLayout?: boolean;
   onSelectContainer: (targetId: string) => void;
-  onSelectDashboard: () => void;
-  onSelectOverview: () => void;
+  onSelectHome: () => void;
   onSelectMachine: (machineId: string) => void;
   onToggleMachine: (machineId: string) => void;
 }
@@ -43,12 +41,10 @@ export function SidebarNav({
   availableTargetIds,
   bootstrap,
   expandedMachineIds,
-  isDashboardActive,
-  isOverviewActive,
-  isOverviewLayout = false,
+  isHomeActive,
+  isHomeLayout = false,
   onSelectContainer,
-  onSelectDashboard,
-  onSelectOverview,
+  onSelectHome,
   onSelectMachine,
   onToggleMachine,
 }: SidebarNavProps) {
@@ -63,33 +59,20 @@ export function SidebarNav({
   );
 
   return (
-    <Sidebar className={`sidebar ${isOverviewLayout ? "sidebar-overview" : ""}`}>
+    <Sidebar className={`sidebar ${isHomeLayout ? "sidebar-overview" : ""}`}>
       <SidebarContent className="sidebar-nav" aria-label="Workspace navigation">
         <SidebarGroup>
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton
                 className="sidebar-node-root"
-                isActive={isDashboardActive}
-                onClick={onSelectDashboard}
+                isActive={isHomeActive}
+                onClick={onSelectHome}
                 type="button"
               >
                 <span className="sidebar-node-copy">
-                  <LayoutDashboard size={14} />
-                  <span className="sidebar-node-label">Dashboard</span>
-                </span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                className="sidebar-node-root"
-                isActive={isOverviewActive}
-                onClick={onSelectOverview}
-                type="button"
-              >
-                <span className="sidebar-node-copy">
-                  <LayoutGrid size={14} />
-                  <span className="sidebar-node-label">Orchestration</span>
+                  <Home size={14} />
+                  <span className="sidebar-node-label">Home</span>
                 </span>
               </SidebarMenuButton>
             </SidebarMenuItem>

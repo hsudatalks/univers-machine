@@ -30,13 +30,9 @@ import { useAppearance } from "./hooks/useAppearance";
 import { useContainerWorkspace } from "./hooks/useContainerWorkspace";
 import { useOverviewNavigation } from "./hooks/useOverviewNavigation";
 import {
-  OVERVIEW_ZOOM_DEFAULT,
-  OVERVIEW_ZOOM_MAX,
-  OVERVIEW_ZOOM_MIN,
-  OVERVIEW_ZOOM_STEP,
   useOverviewZoom,
 } from "./hooks/useOverviewZoom";
-import { useOrchestrationViewMode } from "./hooks/useOrchestrationViewMode";
+import { useHomeViewMode } from "./hooks/useOrchestrationViewMode";
 import { useServiceStatuses } from "./hooks/useServiceStatuses";
 import { useSidebarState } from "./hooks/useSidebarState";
 import { useTunnelStatuses } from "./hooks/useTunnelStatuses";
@@ -56,6 +52,7 @@ import {
   sameActiveView,
   type ActiveView,
 } from "./lib/view-types";
+
 const DEFAULT_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TOOL_PANEL_WIDTH_REM = 22;
@@ -63,6 +60,8 @@ const STARTUP_PRERENDER_INITIAL_BATCH = 2;
 const STARTUP_PRERENDER_BATCH_SIZE = 2;
 const STARTUP_PRERENDER_BATCH_INTERVAL_MS = 1500;
 const IS_MAC = navigator.platform.toUpperCase().includes("MAC");
+const HOME_VIEW_MODES = ["dashboard", "grid", "focus"] as const;
+
 type EditingMachineState = {
   initialTab: "general" | "connection" | "discovery" | "containers";
   machineId: string;
@@ -82,6 +81,13 @@ function isEditableEventTarget(target: EventTarget | null): boolean {
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLSelectElement ||
     target.isContentEditable
+  );
+}
+
+function isXtermHelperTextarea(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLTextAreaElement &&
+    target.classList.contains("xterm-helper-textarea")
   );
 }
 
@@ -218,7 +224,7 @@ function App() {
     () => typeof navigator === "undefined" || navigator.onLine,
   );
   const [activeView, setActiveView] = useState<ActiveView>(
-    () => parseActiveViewFromHash(window.location.hash) ?? { kind: "dashboard" },
+    () => parseActiveViewFromHash(window.location.hash) ?? { kind: "home" },
   );
   const [isAddMachineDialogOpen, setIsAddMachineDialogOpen] = useState(false);
   const [isCreatingMachine, setIsCreatingMachine] = useState(false);
@@ -241,10 +247,8 @@ function App() {
     setExpandedMachineIds,
   } = useWorkbenchBootstrap();
   const { isSidebarHidden, setIsSidebarHidden } = useSidebarState();
-  const { overviewZoom, setOverviewZoom, clampOverviewZoom, roundOverviewZoom } =
-    useOverviewZoom();
-  const { orchestrationViewMode, setOrchestrationViewMode } =
-    useOrchestrationViewMode();
+  const { overviewZoom } = useOverviewZoom();
+  const { homeViewMode, setHomeViewMode } = useHomeViewMode();
   const { tunnelStatuses, setTunnelStatus } = useTunnelStatuses();
   const { serviceStatuses } = useServiceStatuses();
   const {
@@ -297,7 +301,7 @@ function App() {
     registerOverviewCardElement,
     setOverviewFocusedTargetId,
   } = useOverviewNavigation({
-    activeViewKind: activeView.kind,
+    isNavigationActive: activeView.kind === "home" && homeViewMode !== "dashboard",
     onOpenWorkspace: setContainerView,
     targetIds: overviewTerminalTargets.map((target) => target.id),
   });
@@ -306,12 +310,12 @@ function App() {
       return activeView.targetId;
     }
 
-    if (activeView.kind === "overview") {
+    if (activeView.kind === "home" && homeViewMode !== "dashboard") {
       return activeOverviewFocusedTargetId || null;
     }
 
     return null;
-  }, [activeOverviewFocusedTargetId, activeView]);
+  }, [activeOverviewFocusedTargetId, activeView, homeViewMode]);
   const activeRuntimeMachineId = useMemo(() => {
     if (activeView.kind === "machine") {
       return activeView.machineId;
@@ -321,7 +325,7 @@ function App() {
       return activeContainerMachine?.id ?? activeContainerTarget?.machineId ?? null;
     }
 
-    if (activeView.kind === "overview" && activeRuntimeTargetId) {
+    if (activeView.kind === "home" && homeViewMode !== "dashboard" && activeRuntimeTargetId) {
       return targetById.get(activeRuntimeTargetId)?.machineId ?? null;
     }
 
@@ -331,6 +335,7 @@ function App() {
     activeContainerTarget?.machineId,
     activeRuntimeTargetId,
     activeView,
+    homeViewMode,
     targetById,
   ]);
 
@@ -469,9 +474,64 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        activeView.kind !== "home" ||
+        !isPlatformModifier(event) ||
+        event.altKey ||
+        (event.key !== "Tab" &&
+          event.code !== "Digit1" &&
+          event.code !== "Digit2" &&
+          event.code !== "Digit3") ||
+        (isEditableEventTarget(event.target) && !isXtermHelperTextarea(event.target))
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (event.code === "Digit1" && !event.shiftKey) {
+        setHomeViewMode("dashboard");
+        return;
+      }
+
+      if (event.code === "Digit2" && !event.shiftKey) {
+        setHomeViewMode("grid");
+        return;
+      }
+
+      if (event.code === "Digit3" && !event.shiftKey) {
+        setHomeViewMode("focus");
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const currentIndex = HOME_VIEW_MODES.indexOf(homeViewMode);
+      const nextIndex =
+        currentIndex === -1
+          ? 0
+          : (currentIndex +
+              (event.shiftKey ? HOME_VIEW_MODES.length - 1 : 1)) %
+            HOME_VIEW_MODES.length;
+
+      setHomeViewMode(HOME_VIEW_MODES[nextIndex]);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [activeView.kind, homeViewMode, setHomeViewMode]);
+
+  useEffect(() => {
     const handleHashChange = () => {
       const nextView =
-        parseActiveViewFromHash(window.location.hash) ?? { kind: "dashboard" as const };
+        parseActiveViewFromHash(window.location.hash) ?? { kind: "home" as const };
 
       setActiveView((current) =>
         sameActiveView(current, nextView) ? current : nextView,
@@ -589,14 +649,14 @@ function App() {
       activeView.kind === "machine" &&
       !bootstrap.machines.some((machine) => machine.id === activeView.machineId)
     ) {
-      nextView = { kind: "dashboard" };
+      nextView = { kind: "home" };
     }
 
     if (
       activeView.kind === "container" &&
       !bootstrap.targets.some((target) => target.id === activeView.targetId)
     ) {
-      nextView = { kind: "dashboard" };
+      nextView = { kind: "home" };
     }
 
     if (!sameActiveView(activeView, nextView)) {
@@ -732,11 +792,11 @@ function App() {
             return { kind: "machine", machineId: machine.id };
           }
 
-          return { kind: "dashboard" };
+          return { kind: "home" };
         }
 
-        if (current.kind === "machine" || current.kind === "overview") {
-          return { kind: "dashboard" };
+        if (current.kind === "machine" || current.kind === "home") {
+          return { kind: "home" };
         }
 
         return current;
@@ -758,23 +818,21 @@ function App() {
     return <ShellState label="Loading" message="Preparing target definitions." />;
   }
 
-  const isOverviewView =
-    activeView.kind === "overview" || activeView.kind === "settings";
+  const isHomeLayout =
+    activeView.kind === "home" || activeView.kind === "settings";
   const activeStatusLabel =
-    activeView.kind === "dashboard"
-      ? "Dashboard"
-      : activeView.kind === "overview"
-        ? "Orchestration"
-        : activeView.kind === "settings"
-          ? "Settings"
-          : activeView.kind === "machine"
-            ? `Machine ${visitedMachines.find((machine) => machine.id === activeView.machineId)?.label ?? activeView.machineId}`
-            : `Container ${activeContainerTarget?.label ?? activeView.targetId}`;
+    activeView.kind === "home"
+      ? "Home"
+      : activeView.kind === "settings"
+        ? "Settings"
+        : activeView.kind === "machine"
+          ? `Machine ${visitedMachines.find((machine) => machine.id === activeView.machineId)?.label ?? activeView.machineId}`
+          : `Container ${activeContainerTarget?.label ?? activeView.targetId}`;
 
   return (
-    <main className={`shell ${isOverviewView ? "shell-overview" : ""} ${isSidebarHidden ? "shell-sidebar-hidden" : ""}`}>
+    <main className={`shell ${isHomeLayout ? "shell-overview" : ""} ${isSidebarHidden ? "shell-sidebar-hidden" : ""}`}>
       <section
-        className={`shell-layout ${isOverviewView ? "shell-layout-overview" : ""} ${isSidebarHidden ? "shell-layout-sidebar-hidden" : ""}`}
+        className={`shell-layout ${isHomeLayout ? "shell-layout-overview" : ""} ${isSidebarHidden ? "shell-layout-sidebar-hidden" : ""}`}
       >
         {!isSidebarHidden ? (
           <SidebarNav
@@ -789,15 +847,11 @@ function App() {
             availableTargetIds={bootstrap.targets.map((target) => target.id)}
             bootstrap={bootstrap}
             expandedMachineIds={expandedMachineIds}
-            isDashboardActive={activeView.kind === "dashboard"}
-            isOverviewActive={activeView.kind === "overview"}
-            isOverviewLayout={isOverviewView}
+            isHomeActive={activeView.kind === "home"}
+            isHomeLayout={isHomeLayout}
             onSelectContainer={setContainerView}
-            onSelectDashboard={() => {
-              setActiveView({ kind: "dashboard" });
-            }}
-            onSelectOverview={() => {
-              setActiveView({ kind: "overview" });
+            onSelectHome={() => {
+              setActiveView({ kind: "home" });
             }}
             onSelectMachine={openMachineView}
             onToggleMachine={toggleMachineExpansion}
@@ -805,55 +859,53 @@ function App() {
         ) : null}
 
         <section
-          className={`content-shell ${isOverviewView ? "content-shell-overview" : ""} ${activeView.kind === "container" ? "content-shell-container" : ""}`}
+          className={`content-shell ${isHomeLayout ? "content-shell-overview" : ""} ${activeView.kind === "container" ? "content-shell-container" : ""}`}
         >
           <section
-            className={`content-page ${activeView.kind === "dashboard" ? "" : "is-hidden"}`}
+            className={`content-page content-page-overview ${activeView.kind === "home" ? "" : "is-hidden"}`}
           >
-            <GlobalDashboardPage
-              onAddMachine={() => {
-                setIsAddMachineDialogOpen(true);
-              }}
-              onEditAgentTeam={(machineId) => {
-                openMachineSettings(machineId, "containers");
-              }}
-              onEditMachine={(machineId) => {
-                openMachineSettings(machineId, "general");
-              }}
-              onOpenOverview={() => {
-                setActiveView({ kind: "overview" });
-              }}
-              onOpenMachine={openMachineView}
-              onOpenWorkspace={setContainerView}
-              overviewContainers={overviewContainers}
-              serviceStatuses={serviceStatuses}
-              machines={bootstrap.machines}
-              standaloneTargets={standaloneTargets}
-            />
-          </section>
-
-          <section
-            className={`content-page content-page-overview ${activeView.kind === "overview" ? "" : "is-hidden"}`}
-          >
-            <OverviewPage
-              activeFocusedTargetId={activeOverviewFocusedTargetId}
-              onFocusTarget={setOverviewFocusedTargetId}
-              onOpenWorkspace={setContainerView}
-              onRefreshInventory={refreshInventory}
-              isRefreshing={isRefreshing}
-              orchestrationViewMode={orchestrationViewMode}
-              overviewContainers={overviewContainers}
-              overviewZoom={overviewZoom}
-              overviewZoomStyle={{
-                "--overview-terminal-grid-min-width": `${30 * overviewZoom}rem`,
-                "--overview-terminal-card-height": `${32 * overviewZoom}rem`,
-                "--overview-terminal-min-height": `${30 * overviewZoom}rem`,
-                "--overview-focus-side-card-height": `${16 * overviewZoom}rem`,
-              } as CSSProperties}
-              pageVisible={activeView.kind === "overview"}
-              registerOverviewCardElement={registerOverviewCardElement}
-              standaloneTargets={standaloneTargets}
-            />
+            {homeViewMode === "dashboard" ? (
+              <GlobalDashboardPage
+                onAddMachine={() => {
+                  setIsAddMachineDialogOpen(true);
+                }}
+                onEditAgentTeam={(machineId) => {
+                  openMachineSettings(machineId, "containers");
+                }}
+                onEditMachine={(machineId) => {
+                  openMachineSettings(machineId, "general");
+                }}
+                onOpenGrid={() => {
+                  setHomeViewMode("grid");
+                }}
+                onOpenMachine={openMachineView}
+                onOpenWorkspace={setContainerView}
+                overviewContainers={overviewContainers}
+                serviceStatuses={serviceStatuses}
+                machines={bootstrap.machines}
+                standaloneTargets={standaloneTargets}
+              />
+            ) : (
+              <OverviewPage
+                activeFocusedTargetId={activeOverviewFocusedTargetId}
+                onFocusTarget={setOverviewFocusedTargetId}
+                onOpenWorkspace={setContainerView}
+                onRefreshInventory={refreshInventory}
+                isRefreshing={isRefreshing}
+                homeViewMode={homeViewMode}
+                overviewContainers={overviewContainers}
+                overviewZoom={overviewZoom}
+                overviewZoomStyle={{
+                  "--overview-terminal-grid-min-width": `${30 * overviewZoom}rem`,
+                  "--overview-terminal-card-height": `${32 * overviewZoom}rem`,
+                  "--overview-terminal-min-height": `${30 * overviewZoom}rem`,
+                  "--overview-focus-side-card-height": `${16 * overviewZoom}rem`,
+                } as CSSProperties}
+                pageVisible={activeView.kind === "home"}
+                registerOverviewCardElement={registerOverviewCardElement}
+                standaloneTargets={standaloneTargets}
+              />
+            )}
           </section>
 
           <section
@@ -1023,11 +1075,11 @@ function App() {
         activeMachineId={activeView.kind === "machine" ? activeView.machineId : undefined}
         activeStatusLabel={activeStatusLabel}
         containerCount={overviewContainers.length}
-        isOrchestrationActive={activeView.kind === "overview"}
+        isHomeActive={activeView.kind === "home"}
         isSidebarHidden={isSidebarHidden}
         machineEntries={bootstrap.machines.map((machine) => ({ id: machine.id, label: machine.label }))}
         onNavigateMachine={openMachineView}
-        onSetOrchestrationViewMode={setOrchestrationViewMode}
+        onSetHomeViewMode={setHomeViewMode}
         onOpenSettings={() => {
           setActiveView((current) =>
             current.kind === "settings"
@@ -1035,27 +1087,10 @@ function App() {
               : { kind: "settings" },
           );
         }}
-        onResetOverviewZoom={() => {
-          setOverviewZoom(OVERVIEW_ZOOM_DEFAULT);
-        }}
         onToggleSidebar={() => {
           setIsSidebarHidden((current) => !current);
         }}
-        onZoomInOverview={() => {
-          setOverviewZoom((current) =>
-            roundOverviewZoom(clampOverviewZoom(current + OVERVIEW_ZOOM_STEP)),
-          );
-        }}
-        onZoomOutOverview={() => {
-          setOverviewZoom((current) =>
-            roundOverviewZoom(clampOverviewZoom(current - OVERVIEW_ZOOM_STEP)),
-          );
-        }}
-        orchestrationViewMode={orchestrationViewMode}
-        overviewZoom={overviewZoom}
-        overviewZoomDefault={OVERVIEW_ZOOM_DEFAULT}
-        overviewZoomMax={OVERVIEW_ZOOM_MAX}
-        overviewZoomMin={OVERVIEW_ZOOM_MIN}
+        homeViewMode={homeViewMode}
         reachableContainerCount={reachableContainerCount}
         serverCount={bootstrap.machines.length}
       />

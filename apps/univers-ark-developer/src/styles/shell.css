@@ -154,22 +154,6 @@
   height: 0.82rem;
 }
 
-.status-bar-zoom {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1rem;
-}
-
-.status-bar-zoom-readout {
-  min-width: 2.9rem;
-  height: 1.5rem;
-  padding: 0 0.35rem;
-  border-radius: 0.4rem;
-  font-family: var(--font-mono);
-  font-size: 0.64rem;
-  color: var(--foreground);
-}
-
 .status-bar-machine-nav {
   display: inline-flex;
   align-items: center;

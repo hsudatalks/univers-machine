@@ -330,7 +330,7 @@ export function useContainerWorkspace({
         event.preventDefault();
         event.stopPropagation();
         onSetOverviewFocus(targetId);
-        onSetActiveView({ kind: "overview" });
+        onSetActiveView({ kind: "home" });
         return;
       }
 
