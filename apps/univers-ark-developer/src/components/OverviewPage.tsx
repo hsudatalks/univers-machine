@@ -150,6 +150,7 @@ export function OverviewPage({
         ? "right"
         : "left";
   const sideScale = Math.max(0.82, Number((overviewZoom - 0.15).toFixed(2)));
+  const focusScale = Math.min(1.45, Math.max(1.08, Number((overviewZoom + 0.18).toFixed(2))));
 
   useEffect(() => {
     if (orchestrationViewMode !== "focus" || focusedTargetOrderIndex < 0) {
@@ -246,6 +247,7 @@ export function OverviewPage({
           <div className="overview-focus-main">
             {renderOverviewCard(focusedEntry, {
               isFocused: true,
+              scale: focusScale,
             })}
           </div>
 
