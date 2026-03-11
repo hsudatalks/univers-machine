@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AppSettings,
   AppBootstrap,
+  ConnectivityStatusBatch,
   ConnectivityStatusEvent,
   ContainerDashboard,
   ContainerDashboardUpdate,
@@ -21,6 +22,7 @@ import type {
   TerminalExitEvent,
   TerminalOutputEvent,
   TerminalSnapshot,
+  TunnelStatusBatch,
   TunnelStatus,
 } from "../types";
 import { browserSurfaceById } from "./target-services";
@@ -724,6 +726,18 @@ export async function listenTunnelStatus(
   });
 }
 
+export async function listenTunnelStatusBatch(
+  handler: (payload: TunnelStatusBatch) => void,
+): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => undefined;
+  }
+
+  return listen<TunnelStatusBatch>("tunnel-status-batch", (event) => {
+    handler(event.payload);
+  });
+}
+
 export async function listenConnectivityStatus(
   handler: (payload: ConnectivityStatusEvent) => void,
 ): Promise<UnlistenFn> {
@@ -732,6 +746,18 @@ export async function listenConnectivityStatus(
   }
 
   return listen<ConnectivityStatusEvent>("connectivity-status", (event) => {
+    handler(event.payload);
+  });
+}
+
+export async function listenConnectivityStatusBatch(
+  handler: (payload: ConnectivityStatusBatch) => void,
+): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => undefined;
+  }
+
+  return listen<ConnectivityStatusBatch>("connectivity-status-batch", (event) => {
     handler(event.payload);
   });
 }

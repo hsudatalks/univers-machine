@@ -252,6 +252,8 @@ export interface TunnelStatus {
   message: string;
 }
 
+export type TunnelStatusBatch = TunnelStatus[];
+
 export interface ConnectivityStatusEvent {
   entity: "machine" | "container";
   machineId: string;
@@ -260,6 +262,8 @@ export interface ConnectivityStatusEvent {
   message: string;
   reachable: boolean;
 }
+
+export type ConnectivityStatusBatch = ConnectivityStatusEvent[];
 
 export interface ServiceStatus {
   targetId: string;

@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import {
-  listenConnectivityStatus,
+  listenConnectivityStatusBatch,
   loadBootstrap,
   refreshBootstrap,
 } from "../lib/tauri";
-import type { AppBootstrap, ConnectivityStatusEvent } from "../types";
+import type {
+  AppBootstrap,
+  ConnectivityStatusBatch,
+  ConnectivityStatusEvent,
+} from "../types";
 
 function applyConnectivityStatus(
   bootstrap: AppBootstrap,
@@ -40,6 +44,13 @@ function applyConnectivityStatus(
       };
     }),
   };
+}
+
+function applyConnectivityStatuses(
+  bootstrap: AppBootstrap,
+  statuses: ConnectivityStatusBatch,
+): AppBootstrap {
+  return statuses.reduce(applyConnectivityStatus, bootstrap);
 }
 
 export function useWorkbenchBootstrap() {
@@ -81,10 +92,12 @@ export function useWorkbenchBootstrap() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
 
-    void listenConnectivityStatus((status) => {
-      setBootstrap((current) =>
-        current ? applyConnectivityStatus(current, status) : current,
-      );
+    void listenConnectivityStatusBatch((statuses) => {
+      startTransition(() => {
+        setBootstrap((current) =>
+          current ? applyConnectivityStatuses(current, statuses) : current,
+        );
+      });
     }).then((dispose) => {
       unlisten = dispose;
     });

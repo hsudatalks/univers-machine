@@ -35,6 +35,7 @@ import {
   OVERVIEW_ZOOM_STEP,
   useOverviewZoom,
 } from "./hooks/useOverviewZoom";
+import { useOrchestrationViewMode } from "./hooks/useOrchestrationViewMode";
 import { useServiceStatuses } from "./hooks/useServiceStatuses";
 import { useSidebarState } from "./hooks/useSidebarState";
 import { useTunnelStatuses } from "./hooks/useTunnelStatuses";
@@ -57,6 +58,9 @@ import {
 const DEFAULT_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TERMINAL_PANEL_WIDTH_REM = 35;
 const MIN_TOOL_PANEL_WIDTH_REM = 22;
+const STARTUP_PRERENDER_INITIAL_BATCH = 2;
+const STARTUP_PRERENDER_BATCH_SIZE = 2;
+const STARTUP_PRERENDER_BATCH_INTERVAL_MS = 1500;
 type EditingMachineState = {
   initialTab: "general" | "connection" | "discovery" | "containers";
   machineId: string;
@@ -184,6 +188,10 @@ function clampTerminalPanelWidth(value: number, workspaceWidth: number): number 
 }
 
 function App() {
+  const [isDocumentVisible, setIsDocumentVisible] = useState(
+    () =>
+      typeof document === "undefined" || document.visibilityState === "visible",
+  );
   const [activeView, setActiveView] = useState<ActiveView>(
     () => parseActiveViewFromHash(window.location.hash) ?? { kind: "dashboard" },
   );
@@ -210,6 +218,8 @@ function App() {
   const { isSidebarHidden, setIsSidebarHidden } = useSidebarState();
   const { overviewZoom, setOverviewZoom, clampOverviewZoom, roundOverviewZoom } =
     useOverviewZoom();
+  const { orchestrationViewMode, setOrchestrationViewMode } =
+    useOrchestrationViewMode();
   const { tunnelStatuses, setTunnelStatus } = useTunnelStatuses();
   const { serviceStatuses } = useServiceStatuses();
   const {
@@ -243,6 +253,7 @@ function App() {
         : [],
     [bootstrap],
   );
+  const [startupPrerenderBudget, setStartupPrerenderBudget] = useState(0);
   const [startupPrerenderVersions, setStartupPrerenderVersions] = useState<
     Record<string, number>
   >({});
@@ -252,6 +263,10 @@ function App() {
   const editingMachineRecord = editingMachine && bootstrap
     ? bootstrap.machines.find((machine) => machine.id === editingMachine.machineId) ?? null
     : null;
+  const activeStartupPrerenderDescriptors = useMemo(
+    () => startupPrerenderDescriptors.slice(0, startupPrerenderBudget),
+    [startupPrerenderBudget, startupPrerenderDescriptors],
+  );
   const {
     activeOverviewFocusedTargetId,
     registerOverviewCardElement,
@@ -270,6 +285,60 @@ function App() {
     const initialTarget = resolvePreferredTarget(bootstrap);
     setOverviewFocusedTargetId((current) => current || initialTarget?.id || "");
   }, [bootstrap, setOverviewFocusedTargetId]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsDocumentVisible(document.visibilityState === "visible");
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (startupPrerenderDescriptors.length === 0) {
+      setStartupPrerenderBudget(0);
+      return;
+    }
+
+    if (!isDocumentVisible) {
+      return;
+    }
+
+    const initialBudget = Math.min(
+      STARTUP_PRERENDER_INITIAL_BATCH,
+      startupPrerenderDescriptors.length,
+    );
+
+    if (startupPrerenderBudget === 0) {
+      setStartupPrerenderBudget(initialBudget);
+      return;
+    }
+
+    if (startupPrerenderBudget >= startupPrerenderDescriptors.length) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setStartupPrerenderBudget((current) =>
+        Math.min(
+          startupPrerenderDescriptors.length,
+          Math.max(initialBudget, current + STARTUP_PRERENDER_BATCH_SIZE),
+        ),
+      );
+    }, STARTUP_PRERENDER_BATCH_INTERVAL_MS);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [
+    isDocumentVisible,
+    startupPrerenderBudget,
+    startupPrerenderDescriptors.length,
+  ]);
 
   useEffect(() => {
     if (activeView.kind !== "settings") {
@@ -314,24 +383,24 @@ function App() {
   }, [activeView]);
 
   useEffect(() => {
-    if (startupPrerenderDescriptors.length === 0) {
+    if (activeStartupPrerenderDescriptors.length === 0) {
       return;
     }
 
     void registerTunnelRequests(
-      startupPrerenderDescriptors.map(({ target, serviceId }) => ({
+      activeStartupPrerenderDescriptors.map(({ target, serviceId }) => ({
         targetId: target.id,
         serviceId,
       })),
       setTunnelStatus,
     );
-  }, [setTunnelStatus, startupPrerenderDescriptors]);
+  }, [activeStartupPrerenderDescriptors, setTunnelStatus]);
 
   useEffect(() => {
     const previousStates = previousStartupPrerenderStatesRef.current;
     const nextReadyKeys: string[] = [];
 
-    for (const descriptor of startupPrerenderDescriptors) {
+    for (const descriptor of activeStartupPrerenderDescriptors) {
       const nextState = tunnelStatuses[descriptor.cacheKey]?.state;
       const previousState = previousStates[descriptor.cacheKey];
 
@@ -355,15 +424,15 @@ function App() {
 
       return next;
     });
-  }, [startupPrerenderDescriptors, tunnelStatuses]);
+  }, [activeStartupPrerenderDescriptors, tunnelStatuses]);
 
   useEffect(() => {
-    if (startupPrerenderDescriptors.length === 0) {
+    if (!isDocumentVisible || activeStartupPrerenderDescriptors.length === 0) {
       return;
     }
 
     preloadBrowserFrames(
-      startupPrerenderDescriptors
+      activeStartupPrerenderDescriptors
         .filter(({ cacheKey, target }) => {
           const state = tunnelStatuses[cacheKey]?.state;
           return isReadyTunnelState(state) || target.transport === "local";
@@ -375,7 +444,12 @@ function App() {
           title: `${target.label} ${surface.label}`,
         })),
     );
-  }, [startupPrerenderDescriptors, startupPrerenderVersions, tunnelStatuses]);
+  }, [
+    activeStartupPrerenderDescriptors,
+    isDocumentVisible,
+    startupPrerenderVersions,
+    tunnelStatuses,
+  ]);
 
   useEffect(() => {
     if (!bootstrap) {
@@ -563,7 +637,7 @@ function App() {
     activeView.kind === "dashboard"
       ? "Dashboard"
       : activeView.kind === "overview"
-        ? "Overview"
+        ? "Orchestration"
         : activeView.kind === "settings"
           ? "Settings"
           : activeView.kind === "machine"
@@ -640,12 +714,14 @@ function App() {
               onOpenWorkspace={setContainerView}
               onRefreshInventory={refreshInventory}
               isRefreshing={isRefreshing}
+              orchestrationViewMode={orchestrationViewMode}
               overviewContainers={overviewContainers}
               overviewZoom={overviewZoom}
               overviewZoomStyle={{
                 "--overview-terminal-grid-min-width": `${30 * overviewZoom}rem`,
                 "--overview-terminal-card-height": `${32 * overviewZoom}rem`,
                 "--overview-terminal-min-height": `${30 * overviewZoom}rem`,
+                "--overview-focus-side-card-height": `${16 * overviewZoom}rem`,
               } as CSSProperties}
               pageVisible={activeView.kind === "overview"}
               registerOverviewCardElement={registerOverviewCardElement}
@@ -819,8 +895,9 @@ function App() {
       <StatusBar
         activeStatusLabel={activeStatusLabel}
         containerCount={overviewContainers.length}
-        isOverviewView={isOverviewView}
+        isOrchestrationActive={activeView.kind === "overview"}
         isSidebarHidden={isSidebarHidden}
+        onSetOrchestrationViewMode={setOrchestrationViewMode}
         onOpenSettings={() => {
           setActiveView((current) =>
             current.kind === "settings"
@@ -844,6 +921,7 @@ function App() {
             roundOverviewZoom(clampOverviewZoom(current - OVERVIEW_ZOOM_STEP)),
           );
         }}
+        orchestrationViewMode={orchestrationViewMode}
         overviewZoom={overviewZoom}
         overviewZoomDefault={OVERVIEW_ZOOM_DEFAULT}
         overviewZoomMax={OVERVIEW_ZOOM_MAX}
