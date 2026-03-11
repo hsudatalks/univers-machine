@@ -187,6 +187,7 @@ fn render_surface(
         id: surface.id.clone(),
         label: replace_remote_placeholders(&surface.label, context),
         service_type,
+        background_prerender: surface.background_prerender,
         tunnel_command: replace_remote_placeholders(&surface.tunnel_command, context),
         local_url: replace_remote_placeholders(&surface.local_url, context),
         remote_url: replace_remote_placeholders(&surface.remote_url, context),

@@ -5,7 +5,8 @@ use crate::{
         SURFACE_PORT_START,
     },
     models::{
-        web_service, BrowserSurface, DeveloperService, DeveloperTarget, TargetsFile, TunnelState,
+        web_service, BrowserSurface, DeveloperService, DeveloperTarget, MachineTransport,
+        TargetsFile, TunnelState,
     },
 };
 use std::net::TcpListener;
@@ -239,22 +240,24 @@ pub(crate) fn surface_local_port(surface: &BrowserSurface) -> Result<u16, String
 }
 
 fn hydrate_surface(
-    target_id: &str,
+    target: &DeveloperTarget,
     surface: &BrowserSurface,
     tunnel_state: &TunnelState,
 ) -> Result<BrowserSurface, String> {
-    if surface.tunnel_command.trim().is_empty() {
+    if !should_manage_surface_tunnel(target, surface) {
         return Ok(surface.clone());
     }
 
-    let local_port = allocate_surface_port(tunnel_state, target_id, &surface.id)?;
+    let local_port = allocate_surface_port(tunnel_state, &target.id, &surface.id)?;
     let mut runtime_surface = surface.clone();
 
-    runtime_surface.tunnel_command = resolve_runtime_tunnel_command(
-        &runtime_surface.tunnel_command,
-        &runtime_surface.remote_url,
-        local_port,
-    );
+    if !runtime_surface.tunnel_command.trim().is_empty() {
+        runtime_surface.tunnel_command = resolve_runtime_tunnel_command(
+            &runtime_surface.tunnel_command,
+            &runtime_surface.remote_url,
+            local_port,
+        );
+    }
     runtime_surface.local_url = resolve_runtime_local_url(
         &runtime_surface.local_url,
         &runtime_surface.remote_url,
@@ -273,7 +276,7 @@ fn hydrate_target(
             .surfaces
             .iter()
             .map(|surface| {
-                hydrate_surface(&target.id, surface, tunnel_state)
+                hydrate_surface(target, surface, tunnel_state)
                     .map(|hydrated_surface| web_service(&hydrated_surface))
             })
             .collect::<Result<Vec<_>, _>>()?
@@ -304,10 +307,14 @@ fn hydrate_service(
     let mut hydrated_service = service.clone();
 
     if let Some(browser_surface) = &service.web {
-        hydrated_service.web = Some(hydrate_surface(&target.id, browser_surface, tunnel_state)?);
+        hydrated_service.web = Some(hydrate_surface(target, browser_surface, tunnel_state)?);
     }
 
     Ok(hydrated_service)
+}
+
+fn should_manage_surface_tunnel(target: &DeveloperTarget, surface: &BrowserSurface) -> bool {
+    !surface.tunnel_command.trim().is_empty() || matches!(target.transport, MachineTransport::Ssh)
 }
 
 pub(crate) fn read_runtime_targets_file(tunnel_state: &TunnelState) -> Result<TargetsFile, String> {
@@ -355,4 +362,63 @@ pub(crate) fn resolve_runtime_web_surface(
 
 pub(crate) fn internal_probe_url(port: u16) -> String {
     format!("http://{}:{}/", SURFACE_HOST, port)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{BrowserServiceType, ContainerWorkspace, DeveloperTarget};
+    use url::Url;
+
+    fn fixture_target(transport: MachineTransport) -> DeveloperTarget {
+        DeveloperTarget {
+            id: String::from("mechanism-dev::workflow-dev"),
+            machine_id: String::from("mechanism-dev"),
+            container_id: String::from("workflow-dev"),
+            transport,
+            container_kind: crate::models::ManagedContainerKind::Managed,
+            label: String::from("Workflow"),
+            host: String::from("mechanism-dev"),
+            description: String::new(),
+            terminal_command: String::new(),
+            terminal_startup_command: String::new(),
+            notes: vec![],
+            workspace: ContainerWorkspace::default(),
+            services: vec![web_service(&BrowserSurface {
+                id: String::from("development"),
+                label: String::from("Development"),
+                service_type: BrowserServiceType::Vite,
+                background_prerender: true,
+                tunnel_command: String::new(),
+                local_url: String::from("http://127.0.0.1:3432/"),
+                remote_url: String::from("http://127.0.0.1:3432/"),
+                vite_hmr_tunnel_command: String::new(),
+            })],
+            surfaces: vec![],
+        }
+    }
+
+    #[test]
+    fn hydrates_ssh_services_without_explicit_tunnel_commands() {
+        let tunnel_state = TunnelState::default();
+        let hydrated = hydrate_target(&fixture_target(MachineTransport::Ssh), &tunnel_state)
+            .expect("target should hydrate");
+        let surface = hydrated.services[0].web.as_ref().expect("web surface");
+        let local_url = Url::parse(&surface.local_url).expect("valid local url");
+
+        assert_eq!(local_url.host_str(), Some(SURFACE_HOST));
+        assert_ne!(local_url.port_or_known_default(), Some(3432));
+        assert!(surface.tunnel_command.is_empty());
+    }
+
+    #[test]
+    fn keeps_legacy_local_services_direct_without_tunnel_commands() {
+        let tunnel_state = TunnelState::default();
+        let hydrated = hydrate_target(&fixture_target(MachineTransport::Local), &tunnel_state)
+            .expect("target should hydrate");
+        let surface = hydrated.services[0].web.as_ref().expect("web surface");
+
+        assert_eq!(surface.local_url, "http://127.0.0.1:3432/");
+        assert!(surface.tunnel_command.is_empty());
+    }
 }

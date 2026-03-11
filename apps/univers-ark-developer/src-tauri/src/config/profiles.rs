@@ -175,6 +175,7 @@ mod tests {
                             id: String::from("development"),
                             label: String::from("Development"),
                             service_type: BrowserServiceType::Vite,
+                            background_prerender: true,
                             tunnel_command: String::new(),
                             local_url: String::from("http://127.0.0.1:3432/"),
                             remote_url: String::from("http://127.0.0.1:3432/"),

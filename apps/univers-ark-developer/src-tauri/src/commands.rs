@@ -366,7 +366,7 @@ fn restart_tunnel_inner(
     register_desired_tunnel(tunnel_inner, target_id, service_id);
     let surface = resolve_runtime_web_surface(target_id, service_id, tunnel_inner)?;
 
-    if surface.tunnel_command.trim().is_empty() {
+    if !should_manage_runtime_surface_tunnel(target_id, &surface)? {
         return Ok(direct_tunnel_status(target_id, &surface));
     }
 
@@ -382,6 +382,21 @@ fn restart_tunnel_inner(
     }
 
     start_tunnel(app, tunnel_inner, target_id, &surface)
+}
+
+fn should_manage_runtime_surface_tunnel(
+    target_id: &str,
+    surface: &crate::models::BrowserSurface,
+) -> Result<bool, String> {
+    if !surface.tunnel_command.trim().is_empty() {
+        return Ok(true);
+    }
+
+    let target = resolve_raw_target(target_id)?;
+    Ok(matches!(
+        target.transport,
+        crate::models::MachineTransport::Ssh
+    ))
 }
 
 #[tauri::command]
@@ -549,7 +564,7 @@ pub(crate) async fn ensure_tunnel(
         register_desired_tunnel(&tunnel_inner, &target_id, &service_id);
         let surface = resolve_runtime_web_surface(&target_id, &service_id, &tunnel_inner)?;
 
-        if surface.tunnel_command.trim().is_empty() {
+        if !should_manage_runtime_surface_tunnel(&target_id, &surface)? {
             return Ok(direct_tunnel_status(&target_id, &surface));
         }
 

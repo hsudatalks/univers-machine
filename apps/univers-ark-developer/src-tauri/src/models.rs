@@ -59,6 +59,8 @@ pub(crate) struct BrowserSurface {
     pub(crate) label: String,
     #[serde(default)]
     pub(crate) service_type: BrowserServiceType,
+    #[serde(default)]
+    pub(crate) background_prerender: bool,
     pub(crate) tunnel_command: String,
     pub(crate) local_url: String,
     pub(crate) remote_url: String,
