@@ -1,9 +1,14 @@
 use crate::{
+    activity::{
+        current_runtime_activity, detect_runtime_suspend_gap,
+        RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS,
+    },
     config::{resolve_raw_target, resolve_target_ssh_chain, run_target_shell_command},
     models::{
         ContainerAgentInfo, ContainerDashboard, ContainerDashboardUpdate, ContainerProjectInfo,
         ContainerRuntimeInfo, ContainerServiceInfo, ContainerTmuxInfo, ContainerTmuxSessionInfo,
         DashboardMonitor, DashboardState, DeveloperTarget, EndpointProbeType,
+        RuntimeActivityState,
     },
     service_registry::emit_dashboard_service_statuses,
 };
@@ -14,7 +19,7 @@ use std::{
         Arc,
     },
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Runtime, State};
 use univers_ark_russh::{execute_chain, ClientOptions as RusshClientOptions};
@@ -809,6 +814,7 @@ fn stop_dashboard_monitor_inner(
 pub(crate) fn start_dashboard_monitor<R: Runtime>(
     app: AppHandle<R>,
     dashboard_state: State<'_, DashboardState>,
+    activity_state: State<'_, RuntimeActivityState>,
     target_id: String,
     refresh_seconds: u64,
 ) -> Result<(), String> {
@@ -825,24 +831,43 @@ pub(crate) fn start_dashboard_monitor<R: Runtime>(
         .map_err(|_| String::from("Dashboard monitor state is unavailable"))?
         .insert(target_id.clone(), monitor);
 
-    thread::spawn(move || loop {
-        emit_dashboard_update(
-            &app,
-            &target_id,
-            refresh_seconds,
-            load_container_dashboard(&target_id),
-        );
+    let activity_state = activity_state.inner().clone();
 
-        if refresh_seconds == 0 || stop_requested.load(Ordering::Relaxed) {
-            break;
-        }
+    thread::spawn(move || {
+        let mut last_tick_at = Instant::now();
 
-        let sleep_chunks = refresh_seconds.saturating_mul(4);
-        for _ in 0..sleep_chunks {
-            if stop_requested.load(Ordering::Relaxed) {
-                return;
+        loop {
+            let now = Instant::now();
+            let _gap_detected =
+                detect_runtime_suspend_gap(&activity_state, &mut last_tick_at, now);
+            let activity = current_runtime_activity(&activity_state);
+
+            emit_dashboard_update(
+                &app,
+                &target_id,
+                refresh_seconds,
+                load_container_dashboard(&target_id),
+            );
+
+            if refresh_seconds == 0 || stop_requested.load(Ordering::Relaxed) {
+                break;
             }
-            thread::sleep(Duration::from_millis(250));
+
+            let effective_refresh_seconds = if activity.is_foreground() {
+                refresh_seconds
+            } else if !activity.online {
+                RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS.max(refresh_seconds.max(1) * 2)
+            } else {
+                refresh_seconds.max(RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS)
+            };
+
+            let sleep_chunks = effective_refresh_seconds.saturating_mul(4);
+            for _ in 0..sleep_chunks {
+                if stop_requested.load(Ordering::Relaxed) {
+                    return;
+                }
+                thread::sleep(Duration::from_millis(250));
+            }
         }
     });
 

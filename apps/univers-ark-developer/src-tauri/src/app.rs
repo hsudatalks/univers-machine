@@ -4,7 +4,10 @@ use crate::{
     config::initialize_targets_file_path,
     connectivity::start_connectivity_monitor,
     dashboard::stop_all_dashboard_monitors,
-    models::{ConnectivityState, DashboardState, ServiceState, TerminalState, TunnelState},
+    models::{
+        ConnectivityState, DashboardState, RuntimeActivityState, ServiceState, TerminalState,
+        TunnelState,
+    },
     tunnel::{start_tunnel_supervisor, stop_all_tunnels},
 };
 use tauri::{
@@ -213,6 +216,7 @@ pub(crate) fn run() {
         .manage(ServiceState::default())
         .manage(DashboardState::default())
         .manage(ConnectivityState::default())
+        .manage(RuntimeActivityState::default())
         // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right/Up
         // on Windows, Cmd+Alt+Left/Right/Up on macOS) are handled by the menu
         // accelerators in build_app_menu, not by global shortcuts.
@@ -233,10 +237,12 @@ pub(crate) fn run() {
             start_tunnel_supervisor(
                 app.handle().clone(),
                 app.state::<TunnelState>().inner().clone(),
+                app.state::<RuntimeActivityState>().inner().clone(),
             );
             start_connectivity_monitor(
                 app.handle().clone(),
                 app.state::<ConnectivityState>().inner().clone(),
+                app.state::<RuntimeActivityState>().inner().clone(),
             );
 
             std::thread::spawn(|| match cleanup_stale_ssh_tunnels() {
@@ -288,7 +294,8 @@ pub(crate) fn run() {
             commands::load_targets_config,
             commands::update_targets_config,
             commands::load_app_settings,
-            commands::save_app_settings
+            commands::save_app_settings,
+            commands::update_runtime_activity
         ])
         .build(tauri::generate_context!())
         .expect("error while building univers-ark-developer")

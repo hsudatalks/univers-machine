@@ -1,8 +1,11 @@
 use crate::{
+    activity::{
+        current_runtime_activity, detect_runtime_suspend_gap, RUNTIME_BACKGROUND_MONITOR_INTERVAL,
+    },
     config::{read_server_inventory, resolve_raw_target, resolve_target_ssh_chain},
     models::{
         ConnectivitySnapshot, ConnectivityState, ConnectivityStatusEvent, MachineTransport,
-        ManagedServer, TerminalState, TunnelState,
+        ManagedServer, RuntimeActivityState, TerminalState, TunnelState,
     },
     tunnel::tunnel_session_is_alive,
 };
@@ -712,8 +715,15 @@ fn run_connectivity_probe_cycle<R: Runtime>(
     app: &AppHandle<R>,
     connectivity_state: &ConnectivityState,
     monitor_state: &mut ConnectivityMonitorState,
+    force_recovery_refresh: bool,
 ) {
     let now = Instant::now();
+    if force_recovery_refresh {
+        monitor_state.inventory_cache = None;
+        for schedule in monitor_state.probe_schedules.values_mut() {
+            schedule.next_due_at = now;
+        }
+    }
     let mut pending_events = Vec::new();
     let Some(machines) = load_inventory(
         connectivity_state,
@@ -867,16 +877,38 @@ fn run_connectivity_probe_cycle<R: Runtime>(
 pub(crate) fn start_connectivity_monitor<R: Runtime>(
     app: AppHandle<R>,
     connectivity_state: ConnectivityState,
+    activity_state: RuntimeActivityState,
 ) {
     let stop_requested = connectivity_state.stop_requested.clone();
 
     thread::spawn(move || {
         let mut monitor_state = ConnectivityMonitorState::default();
+        let mut last_tick_at = Instant::now();
+        let mut last_recovery_generation = 0;
 
         while !stop_requested.load(Ordering::Relaxed) {
-            run_connectivity_probe_cycle(&app, &connectivity_state, &mut monitor_state);
+            let now = Instant::now();
+            let gap_detected = detect_runtime_suspend_gap(&activity_state, &mut last_tick_at, now);
+            let activity = current_runtime_activity(&activity_state);
+            let recovery_generation_changed =
+                activity.recovery_generation != last_recovery_generation;
+            last_recovery_generation = activity.recovery_generation;
 
-            let sleep_chunks = CONNECTIVITY_MONITOR_TICK.as_millis() / 250;
+            run_connectivity_probe_cycle(
+                &app,
+                &connectivity_state,
+                &mut monitor_state,
+                gap_detected || recovery_generation_changed,
+            );
+
+            let sleep_interval = if activity.recovering || activity.is_foreground() {
+                CONNECTIVITY_MONITOR_TICK
+            } else if !activity.online {
+                RUNTIME_BACKGROUND_MONITOR_INTERVAL.max(CONNECTIVITY_READY_RECHECK_INTERVAL)
+            } else {
+                RUNTIME_BACKGROUND_MONITOR_INTERVAL
+            };
+            let sleep_chunks = sleep_interval.as_millis() / 250;
             for _ in 0..sleep_chunks.max(1) {
                 if stop_requested.load(Ordering::Relaxed) {
                     return;

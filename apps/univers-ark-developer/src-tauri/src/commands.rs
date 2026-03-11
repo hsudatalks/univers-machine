@@ -1,4 +1,5 @@
 use crate::{
+    activity::update_runtime_activity as apply_runtime_activity,
     config::{
         execute_target_command_via_russh, read_bootstrap_data, read_server_inventory,
         read_targets_config, resolve_raw_target, restart_container as restart_remote_container,
@@ -23,7 +24,7 @@ use crate::{
         command_service, tmux_command_service, AppBootstrap, AppSettings, ConnectivityState,
         ContainerDashboard, DashboardState, GithubProjectState, GithubPullRequestDetail,
         MachineImportCandidate, ManagedServer, RemoteDirectoryListing, RemoteFilePreview,
-        TerminalSnapshot, TerminalState, TunnelState, TunnelStatus,
+        RuntimeActivityState, TerminalSnapshot, TerminalState, TunnelState, TunnelStatus,
     },
     runtime::{read_runtime_targets_file, resolve_runtime_web_surface, surface_key},
     service_registry::{
@@ -69,6 +70,14 @@ struct TailscalePeer {
     active: bool,
     #[serde(default)]
     os: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RuntimeActivityInput {
+    visible: bool,
+    focused: bool,
+    online: bool,
 }
 
 fn sanitize_machine_id(value: &str) -> String {
@@ -776,10 +785,11 @@ pub(crate) async fn load_container_dashboard(
 pub(crate) fn start_dashboard_monitor(
     app: AppHandle,
     dashboard_state: State<'_, DashboardState>,
+    activity_state: State<'_, RuntimeActivityState>,
     target_id: String,
     refresh_seconds: u64,
 ) -> Result<(), String> {
-    spawn_dashboard_monitor(app, dashboard_state, target_id, refresh_seconds)
+    spawn_dashboard_monitor(app, dashboard_state, activity_state, target_id, refresh_seconds)
 }
 
 #[tauri::command]
@@ -901,4 +911,18 @@ pub(crate) fn save_app_settings(
     settings: AppSettings,
 ) -> Result<AppSettings, String> {
     write_app_settings(&app_handle, settings)
+}
+
+#[tauri::command]
+pub(crate) fn update_runtime_activity(
+    activity: RuntimeActivityInput,
+    activity_state: State<'_, RuntimeActivityState>,
+) -> Result<(), String> {
+    apply_runtime_activity(
+        activity_state.inner(),
+        activity.visible,
+        activity.focused,
+        activity.online,
+    );
+    Ok(())
 }

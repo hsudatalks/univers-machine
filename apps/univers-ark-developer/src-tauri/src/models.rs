@@ -672,6 +672,15 @@ pub(crate) struct ConnectivityState {
     pub(crate) stop_requested: Arc<AtomicBool>,
 }
 
+#[derive(Clone)]
+pub(crate) struct RuntimeActivityState {
+    pub(crate) visible: Arc<AtomicBool>,
+    pub(crate) focused: Arc<AtomicBool>,
+    pub(crate) online: Arc<AtomicBool>,
+    pub(crate) recovering_until_ms: Arc<AtomicU64>,
+    pub(crate) recovery_generation: Arc<AtomicU64>,
+}
+
 impl Clone for TunnelState {
     fn clone(&self) -> Self {
         Self {
@@ -711,6 +720,18 @@ impl Default for TunnelState {
             local_ports: Arc::new(Mutex::new(HashMap::new())),
             status_snapshots: Arc::new(Mutex::new(HashMap::new())),
             next_session_id: AtomicU64::new(1),
+        }
+    }
+}
+
+impl Default for RuntimeActivityState {
+    fn default() -> Self {
+        Self {
+            visible: Arc::new(AtomicBool::new(true)),
+            focused: Arc::new(AtomicBool::new(true)),
+            online: Arc::new(AtomicBool::new(true)),
+            recovering_until_ms: Arc::new(AtomicU64::new(0)),
+            recovery_generation: Arc::new(AtomicU64::new(0)),
         }
     }
 }

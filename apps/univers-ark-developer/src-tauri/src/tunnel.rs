@@ -1,10 +1,13 @@
 use crate::{
+    activity::{
+        current_runtime_activity, detect_runtime_suspend_gap, RUNTIME_BACKGROUND_SUPERVISOR_FLOOR,
+    },
     config::resolve_raw_target,
     config::resolve_target_ssh_chain,
     constants::{TUNNEL_PROBE_INTERVAL, TUNNEL_PROBE_MESSAGE_DELAY, TUNNEL_PROBE_TIMEOUT},
     models::{
         BrowserServiceType, BrowserSurface, MachineTransport, RusshTunnelForward, TunnelProcess,
-        TunnelRegistration, TunnelSession, TunnelState, TunnelStatus,
+        RuntimeActivityState, TunnelRegistration, TunnelSession, TunnelState, TunnelStatus,
     },
     proxy::{proxy_error_message, start_vite_proxy},
     runtime::{
@@ -31,6 +34,7 @@ const TUNNEL_SUPERVISOR_ACTIVE_SLEEP: Duration = Duration::from_millis(200);
 const TUNNEL_SUPERVISOR_MAX_SLEEP: Duration = Duration::from_secs(2);
 const TUNNEL_RETRY_INTERVAL: Duration = Duration::from_secs(2);
 const TUNNEL_READY_PROBE_INTERVAL: Duration = Duration::from_millis(1500);
+const TUNNEL_RECOVERY_STAGGER_STEP: Duration = Duration::from_millis(250);
 
 pub(crate) const TUNNEL_STATUS_BATCH_EVENT: &str = "tunnel-status-batch";
 
@@ -484,6 +488,22 @@ fn schedule_tunnel_retry(tunnel_state: &TunnelState, target_id: &str, service_id
     }
 }
 
+fn stagger_desired_tunnels_for_recovery(tunnel_state: &TunnelState, now: Instant) {
+    let Ok(mut desired) = tunnel_state.desired_tunnels.lock() else {
+        return;
+    };
+
+    let mut keys = desired.keys().cloned().collect::<Vec<_>>();
+    keys.sort();
+
+    for (index, key) in keys.into_iter().enumerate() {
+        if let Some(registration) = desired.get_mut(&key) {
+            registration.next_attempt_at = now
+                + TUNNEL_RECOVERY_STAGGER_STEP.saturating_mul(index as u32);
+        }
+    }
+}
+
 pub(crate) fn reconcile_registered_tunnel(
     app: &AppHandle,
     tunnel_state: &TunnelState,
@@ -557,56 +577,82 @@ pub(crate) fn reconcile_registered_tunnel(
     }
 }
 
-pub(crate) fn start_tunnel_supervisor(app: AppHandle, tunnel_state: TunnelState) {
-    std::thread::spawn(move || loop {
-        let now = Instant::now();
-        let (due_registrations, next_due_at) = tunnel_state
-            .desired_tunnels
-            .lock()
-            .map(|desired| {
-                let mut next_due_at = None;
-                let due_registrations = desired
-                    .values()
-                    .filter_map(|registration| {
-                        if registration.next_attempt_at <= now {
-                            Some(registration.clone())
-                        } else {
-                            next_due_at = Some(
-                                next_due_at
-                                    .map(|current: Instant| current.min(registration.next_attempt_at))
-                                    .unwrap_or(registration.next_attempt_at),
-                            );
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>();
+pub(crate) fn start_tunnel_supervisor(
+    app: AppHandle,
+    tunnel_state: TunnelState,
+    activity_state: RuntimeActivityState,
+) {
+    std::thread::spawn(move || {
+        let mut last_tick_at = Instant::now();
+        let mut last_recovery_generation = 0;
 
-                (due_registrations, next_due_at)
-            })
-            .unwrap_or_default();
+        loop {
+            let now = Instant::now();
+            let gap_detected =
+                detect_runtime_suspend_gap(&activity_state, &mut last_tick_at, now);
+            let activity = current_runtime_activity(&activity_state);
+            let recovery_generation_changed =
+                activity.recovery_generation != last_recovery_generation;
+            last_recovery_generation = activity.recovery_generation;
 
-        for registration in due_registrations {
-            let _ = reconcile_registered_tunnel(
-                &app,
-                &tunnel_state,
-                &registration.target_id,
-                &registration.service_id,
-                true,
-            );
+            if gap_detected || recovery_generation_changed {
+                stagger_desired_tunnels_for_recovery(&tunnel_state, now);
+            }
+
+            let (due_registrations, next_due_at) = tunnel_state
+                .desired_tunnels
+                .lock()
+                .map(|desired| {
+                    let mut next_due_at = None;
+                    let due_registrations = desired
+                        .values()
+                        .filter_map(|registration| {
+                            if registration.next_attempt_at <= now {
+                                Some(registration.clone())
+                            } else {
+                                next_due_at = Some(
+                                    next_due_at
+                                        .map(|current: Instant| {
+                                            current.min(registration.next_attempt_at)
+                                        })
+                                        .unwrap_or(registration.next_attempt_at),
+                                );
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    (due_registrations, next_due_at)
+                })
+                .unwrap_or_default();
+
+            for registration in due_registrations {
+                let _ = reconcile_registered_tunnel(
+                    &app,
+                    &tunnel_state,
+                    &registration.target_id,
+                    &registration.service_id,
+                    true,
+                );
+            }
+
+            let mut sleep_duration = next_due_at
+                .map(|due| {
+                    let remaining = due.saturating_duration_since(Instant::now());
+                    if remaining.is_zero() {
+                        TUNNEL_SUPERVISOR_ACTIVE_SLEEP
+                    } else {
+                        remaining.min(TUNNEL_SUPERVISOR_MAX_SLEEP)
+                    }
+                })
+                .unwrap_or(TUNNEL_SUPERVISOR_MAX_SLEEP);
+
+            if !activity.recovering && (!activity.is_foreground() || !activity.online) {
+                sleep_duration = sleep_duration.max(RUNTIME_BACKGROUND_SUPERVISOR_FLOOR);
+            }
+
+            std::thread::sleep(sleep_duration);
         }
-
-        let sleep_duration = next_due_at
-            .map(|due| {
-                let remaining = due.saturating_duration_since(Instant::now());
-                if remaining.is_zero() {
-                    TUNNEL_SUPERVISOR_ACTIVE_SLEEP
-                } else {
-                    remaining.min(TUNNEL_SUPERVISOR_MAX_SLEEP)
-                }
-            })
-            .unwrap_or(TUNNEL_SUPERVISOR_MAX_SLEEP);
-
-        std::thread::sleep(sleep_duration);
     });
 }
 
