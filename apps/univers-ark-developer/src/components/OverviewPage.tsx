@@ -16,7 +16,7 @@ interface OverviewPageProps {
   onFocusTarget: (targetId: string) => void;
   onOpenWorkspace: (targetId: string) => void;
   onRefreshInventory: () => void;
-  homeViewMode: Exclude<HomeViewMode, "dashboard">;
+  homeViewMode: Exclude<HomeViewMode, "dashboard" | "machines">;
   overviewContainers: OverviewEntry[];
   overviewZoom: number;
   overviewZoomStyle: CSSProperties;

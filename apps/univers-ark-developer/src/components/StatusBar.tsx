@@ -135,7 +135,7 @@ export function StatusBar({
           </div>
         ) : isHomeActive ? (
           <div className="status-bar-view-switcher" aria-label="Home views" role="tablist">
-            {(["dashboard", "grid", "focus"] as const).map((viewMode) => (
+            {(["dashboard", "machines", "grid", "focus"] as const).map((viewMode) => (
               <Button
                 aria-pressed={homeViewMode === viewMode}
                 className={`status-bar-view-button ${homeViewMode === viewMode ? "is-active" : ""
@@ -148,6 +148,8 @@ export function StatusBar({
                 title={
                   viewMode === "dashboard"
                     ? "Show dashboard view"
+                    : viewMode === "machines"
+                      ? "Show machines view"
                     : viewMode === "grid"
                       ? "Show grid view"
                       : "Show focus view"
@@ -157,6 +159,8 @@ export function StatusBar({
               >
                 {viewMode === "dashboard"
                   ? "Dashboard"
+                  : viewMode === "machines"
+                    ? "Machines"
                   : viewMode === "grid"
                     ? "Grid"
                     : "Focus"}

@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 
-export type HomeViewMode = "dashboard" | "grid" | "focus";
+export type HomeViewMode = "dashboard" | "machines" | "grid" | "focus";
 
 const HOME_VIEW_MODE_STORAGE_KEY = "univers-ark-developer:home-view-mode";
 const LEGACY_ORCHESTRATION_VIEW_MODE_STORAGE_KEY =
   "univers-ark-developer:orchestration-view-mode";
 
 function isHomeViewMode(value: string | null): value is HomeViewMode {
-  return value === "dashboard" || value === "grid" || value === "focus";
+  return (
+    value === "dashboard" ||
+    value === "machines" ||
+    value === "grid" ||
+    value === "focus"
+  );
 }
 
 export function useHomeViewMode() {

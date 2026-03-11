@@ -3,6 +3,7 @@ import type { BrowserFrameInstance } from "./components/BrowserPane";
 import { AddMachineDialog } from "./components/AddMachineDialog";
 import { ContainerPage } from "./components/ContainerPage";
 import { GlobalDashboardPage } from "./components/GlobalDashboardPage";
+import { HomeMachinesPage } from "./components/HomeMachinesPage";
 import { OverviewPage } from "./components/OverviewPage";
 import { ServerDialog } from "./components/ServerDialog";
 import { SettingsPage } from "./components/SettingsPage";
@@ -60,7 +61,7 @@ const STARTUP_PRERENDER_INITIAL_BATCH = 2;
 const STARTUP_PRERENDER_BATCH_SIZE = 2;
 const STARTUP_PRERENDER_BATCH_INTERVAL_MS = 1500;
 const IS_MAC = navigator.platform.toUpperCase().includes("MAC");
-const HOME_VIEW_MODES = ["dashboard", "grid", "focus"] as const;
+const HOME_VIEW_MODES = ["dashboard", "machines", "grid", "focus"] as const;
 
 type EditingMachineState = {
   initialTab: "general" | "connection" | "discovery" | "containers";
@@ -301,7 +302,9 @@ function App() {
     registerOverviewCardElement,
     setOverviewFocusedTargetId,
   } = useOverviewNavigation({
-    isNavigationActive: activeView.kind === "home" && homeViewMode !== "dashboard",
+    isNavigationActive:
+      activeView.kind === "home" &&
+      (homeViewMode === "grid" || homeViewMode === "focus"),
     onOpenWorkspace: setContainerView,
     targetIds: overviewTerminalTargets.map((target) => target.id),
   });
@@ -310,7 +313,10 @@ function App() {
       return activeView.targetId;
     }
 
-    if (activeView.kind === "home" && homeViewMode !== "dashboard") {
+    if (
+      activeView.kind === "home" &&
+      (homeViewMode === "grid" || homeViewMode === "focus")
+    ) {
       return activeOverviewFocusedTargetId || null;
     }
 
@@ -325,7 +331,11 @@ function App() {
       return activeContainerMachine?.id ?? activeContainerTarget?.machineId ?? null;
     }
 
-    if (activeView.kind === "home" && homeViewMode !== "dashboard" && activeRuntimeTargetId) {
+    if (
+      activeView.kind === "home" &&
+      (homeViewMode === "grid" || homeViewMode === "focus") &&
+      activeRuntimeTargetId
+    ) {
       return targetById.get(activeRuntimeTargetId)?.machineId ?? null;
     }
 
@@ -482,7 +492,8 @@ function App() {
         (event.key !== "Tab" &&
           event.code !== "Digit1" &&
           event.code !== "Digit2" &&
-          event.code !== "Digit3") ||
+          event.code !== "Digit3" &&
+          event.code !== "Digit4") ||
         (isEditableEventTarget(event.target) && !isXtermHelperTextarea(event.target))
       ) {
         return;
@@ -497,11 +508,16 @@ function App() {
       }
 
       if (event.code === "Digit2" && !event.shiftKey) {
-        setHomeViewMode("grid");
+        setHomeViewMode("machines");
         return;
       }
 
       if (event.code === "Digit3" && !event.shiftKey) {
+        setHomeViewMode("grid");
+        return;
+      }
+
+      if (event.code === "Digit4" && !event.shiftKey) {
         setHomeViewMode("focus");
         return;
       }
@@ -923,12 +939,32 @@ function App() {
                 onOpenGrid={() => {
                   setHomeViewMode("grid");
                 }}
+                onOpenMachines={() => {
+                  setHomeViewMode("machines");
+                }}
                 onOpenMachine={openMachineView}
                 onOpenWorkspace={setContainerView}
                 overviewContainers={overviewContainers}
                 serviceStatuses={serviceStatuses}
                 machines={bootstrap.machines}
                 standaloneTargets={standaloneTargets}
+              />
+            ) : homeViewMode === "machines" ? (
+              <HomeMachinesPage
+                machines={bootstrap.machines}
+                onAddMachine={() => {
+                  setIsAddMachineDialogOpen(true);
+                }}
+                onOpenMachine={openMachineView}
+                overviewZoom={overviewZoom}
+                overviewZoomStyle={{
+                  "--overview-terminal-grid-min-width": `${30 * overviewZoom}rem`,
+                  "--overview-terminal-card-height": `${32 * overviewZoom}rem`,
+                  "--overview-terminal-min-height": `${30 * overviewZoom}rem`,
+                  "--overview-focus-side-card-height": `${16 * overviewZoom}rem`,
+                } as CSSProperties}
+                pageVisible={activeView.kind === "home"}
+                resolveTarget={(targetId) => targetById.get(targetId)}
               />
             ) : (
               <OverviewPage

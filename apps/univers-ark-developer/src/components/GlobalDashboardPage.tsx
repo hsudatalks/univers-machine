@@ -23,6 +23,7 @@ interface GlobalDashboardPageProps {
   onEditAgentTeam: (machineId: string) => void;
   onEditMachine: (machineId: string) => void;
   onOpenGrid: () => void;
+  onOpenMachines: () => void;
   onOpenMachine: (machineId: string) => void;
   onOpenWorkspace: (targetId: string) => void;
   overviewContainers: OverviewEntry[];
@@ -40,6 +41,7 @@ export function GlobalDashboardPage({
   onEditAgentTeam,
   onEditMachine,
   onOpenGrid,
+  onOpenMachines,
   onOpenMachine,
   onOpenWorkspace,
   overviewContainers,
@@ -78,6 +80,10 @@ export function GlobalDashboardPage({
                 <Button onClick={onAddMachine} size="sm">
                   <Server size={14} />
                   Add machine
+                </Button>
+                <Button onClick={onOpenMachines} size="sm" variant="ghost">
+                  <Server size={14} />
+                  Open machines
                 </Button>
                 <Button onClick={onOpenGrid} size="sm" variant="ghost">
                   <LayoutDashboard size={14} />
