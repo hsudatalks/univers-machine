@@ -14,6 +14,7 @@ import {
   executeCommandService,
   listenParentViewRequested,
   restartContainer,
+  updateRuntimeActivity,
 } from "./lib/tauri";
 import {
   backgroundPrerenderBrowserServices,
@@ -192,6 +193,12 @@ function App() {
     () =>
       typeof document === "undefined" || document.visibilityState === "visible",
   );
+  const [isWindowFocused, setIsWindowFocused] = useState(
+    () => typeof document === "undefined" || document.hasFocus(),
+  );
+  const [isNetworkOnline, setIsNetworkOnline] = useState(
+    () => typeof navigator === "undefined" || navigator.onLine,
+  );
   const [activeView, setActiveView] = useState<ActiveView>(
     () => parseActiveViewFromHash(window.location.hash) ?? { kind: "dashboard" },
   );
@@ -290,13 +297,41 @@ function App() {
     const handleVisibilityChange = () => {
       setIsDocumentVisible(document.visibilityState === "visible");
     };
+    const handleFocus = () => {
+      setIsWindowFocused(true);
+    };
+    const handleBlur = () => {
+      setIsWindowFocused(false);
+    };
+    const handleOnline = () => {
+      setIsNetworkOnline(true);
+    };
+    const handleOffline = () => {
+      setIsNetworkOnline(false);
+    };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
   }, []);
+
+  useEffect(() => {
+    void updateRuntimeActivity({
+      visible: isDocumentVisible,
+      focused: isWindowFocused,
+      online: isNetworkOnline,
+    }).catch(() => undefined);
+  }, [isDocumentVisible, isNetworkOnline, isWindowFocused]);
 
   useEffect(() => {
     if (startupPrerenderDescriptors.length === 0) {
@@ -304,7 +339,7 @@ function App() {
       return;
     }
 
-    if (!isDocumentVisible) {
+    if (!isDocumentVisible || !isNetworkOnline) {
       return;
     }
 
@@ -336,6 +371,7 @@ function App() {
     };
   }, [
     isDocumentVisible,
+    isNetworkOnline,
     startupPrerenderBudget,
     startupPrerenderDescriptors.length,
   ]);
@@ -427,7 +463,11 @@ function App() {
   }, [activeStartupPrerenderDescriptors, tunnelStatuses]);
 
   useEffect(() => {
-    if (!isDocumentVisible || activeStartupPrerenderDescriptors.length === 0) {
+    if (
+      !isDocumentVisible ||
+      !isNetworkOnline ||
+      activeStartupPrerenderDescriptors.length === 0
+    ) {
       return;
     }
 
@@ -447,6 +487,7 @@ function App() {
   }, [
     activeStartupPrerenderDescriptors,
     isDocumentVisible,
+    isNetworkOnline,
     startupPrerenderVersions,
     tunnelStatuses,
   ]);

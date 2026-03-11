@@ -463,6 +463,18 @@ export async function saveAppSettings(settings: AppSettings): Promise<AppSetting
   return invoke<AppSettings>("save_app_settings", { settings });
 }
 
+export async function updateRuntimeActivity(activity: {
+  visible: boolean;
+  focused: boolean;
+  online: boolean;
+}): Promise<void> {
+  if (!isTauri()) {
+    return;
+  }
+
+  await invoke("update_runtime_activity", { activity });
+}
+
 export async function loadMachineInventory(): Promise<ManagedMachine[]> {
   if (!isTauri()) {
     return fallbackBootstrap.machines;
