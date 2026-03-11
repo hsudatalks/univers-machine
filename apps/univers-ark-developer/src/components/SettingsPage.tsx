@@ -139,6 +139,21 @@ export function SettingsPage({
     return new Date(timestampMs).toLocaleString();
   };
 
+  const formatDurationMs = (durationMs: number) => {
+    if (durationMs <= 0) {
+      return "now";
+    }
+    if (durationMs < 1000) {
+      return `${durationMs}ms`;
+    }
+    const seconds = durationMs / 1000;
+    if (seconds < 60) {
+      return `${seconds.toFixed(seconds >= 10 ? 0 : 1)}s`;
+    }
+    const minutes = seconds / 60;
+    return `${minutes.toFixed(minutes >= 10 ? 0 : 1)}m`;
+  };
+
   const browserFrames = listBrowserFrameSnapshots();
   const browserFrameStateCounts = browserFrames.reduce<Record<string, number>>((counts, frame) => {
     counts[frame.sessionState] = (counts[frame.sessionState] ?? 0) + 1;
@@ -486,6 +501,18 @@ export function SettingsPage({
                         <strong>Dashboard refreshes</strong>
                         {diagnostics.scheduler.maxDashboardRefreshes}
                       </div>
+                      <div className="settings-runtime-row">
+                        <strong>Next wake</strong>
+                        {formatDurationMs(diagnostics.scheduler.nextWakeInMs)}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Last cycle start</strong>
+                        {formatTimestamp(diagnostics.scheduler.lastCycleStartedAtMs)}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Last cycle end</strong>
+                        {formatTimestamp(diagnostics.scheduler.lastCycleFinishedAtMs)}
+                      </div>
                     </div>
                   </section>
 
@@ -543,6 +570,18 @@ export function SettingsPage({
                         {diagnostics.tunnels.localPortCount}
                       </div>
                       <div className="settings-runtime-row">
+                        <strong>Event rate</strong>
+                        {diagnostics.tunnels.statusEventsPerMinute} batch/min · <strong>Items</strong>{" "}
+                        {diagnostics.tunnels.statusItemsPerMinute}/min · <strong>Reconciles</strong>{" "}
+                        {diagnostics.tunnels.reconcilesPerMinute}/min
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Next due</strong>
+                        {formatDurationMs(diagnostics.tunnels.nextDueInMs)} · <strong>Due now</strong>{" "}
+                        {diagnostics.tunnels.dueNowCount} · <strong>Waiting</strong>{" "}
+                        {diagnostics.tunnels.waitingCount}
+                      </div>
+                      <div className="settings-runtime-row">
                         <strong>States</strong>
                         {formatCounts(diagnostics.tunnels.statusCounts)}
                       </div>
@@ -561,6 +600,22 @@ export function SettingsPage({
                         <strong>Machines</strong>
                         {diagnostics.connectivity.machineSnapshotCount} · <strong>Containers</strong>{" "}
                         {diagnostics.connectivity.containerSnapshotCount}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Event rate</strong>
+                        {diagnostics.connectivity.statusEventsPerMinute} batch/min · <strong>Items</strong>{" "}
+                        {diagnostics.connectivity.statusItemsPerMinute}/min
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Probe rate</strong>
+                        {diagnostics.connectivity.probesPerMinute}/min · <strong>Next due</strong>{" "}
+                        {formatDurationMs(diagnostics.connectivity.nextDueInMs)}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Due now</strong>
+                        {diagnostics.connectivity.dueNowCount} · <strong>Backoff targets</strong>{" "}
+                        {diagnostics.connectivity.backoffTargetCount} · <strong>Max failures</strong>{" "}
+                        {diagnostics.connectivity.maxConsecutiveFailures}
                       </div>
                       <div className="settings-runtime-row">
                         <strong>Machine states</strong>
@@ -584,6 +639,12 @@ export function SettingsPage({
                       <div className="settings-runtime-row">
                         <strong>Registered</strong>
                         {diagnostics.dashboards.registeredCount}
+                      </div>
+                      <div className="settings-runtime-row">
+                        <strong>Update rate</strong>
+                        {diagnostics.dashboards.updatesPerMinute}/min · <strong>Next due</strong>{" "}
+                        {formatDurationMs(diagnostics.dashboards.nextDueInMs)} · <strong>Due now</strong>{" "}
+                        {diagnostics.dashboards.dueNowCount}
                       </div>
                     </div>
                   </section>
