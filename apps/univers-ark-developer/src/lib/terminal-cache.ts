@@ -39,6 +39,7 @@ const DEFAULT_TERMINAL_FONT_SIZE = 12;
 const DEFAULT_TERMINAL_SCROLLBACK = 1500;
 const TERMINAL_FONT_FAMILY =
   '"SFMono-Regular", Menlo, Monaco, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", Consolas, monospace';
+const IME_PUNCTUATION_FALLBACK_CHARACTERS = new Set(["？", "："]);
 const PUNCTUATION_FALLBACK_DELAY_MS = 72;
 const PUNCTUATION_FALLBACK_DEDUPE_WINDOW_MS = 180;
 const terminalSessions = new Map<string, CachedTerminalSession>();
@@ -131,7 +132,7 @@ function applyTerminalScrollback(
 }
 
 function isImePunctuationCharacter(value: string): boolean {
-  return /^[\u3000-\u303f\uff00-\uffef]$/u.test(value);
+  return IME_PUNCTUATION_FALLBACK_CHARACTERS.has(value);
 }
 
 function clearPendingPunctuationFallback(session: CachedTerminalSession) {
