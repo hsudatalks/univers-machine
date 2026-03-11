@@ -81,7 +81,7 @@ export function GlobalDashboardPage({
                 </Button>
                 <Button onClick={onOpenOverview} size="sm" variant="ghost">
                   <LayoutDashboard size={14} />
-                  Open overview
+                  Open orchestration
                 </Button>
               </div>
             </CardContent>

@@ -89,7 +89,7 @@ export function SidebarNav({
               >
                 <span className="sidebar-node-copy">
                   <LayoutGrid size={14} />
-                  <span className="sidebar-node-label">Overview</span>
+                  <span className="sidebar-node-label">Orchestration</span>
                 </span>
               </SidebarMenuButton>
             </SidebarMenuItem>

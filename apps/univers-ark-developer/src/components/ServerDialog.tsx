@@ -38,11 +38,14 @@ export function ServerDialog({
   const [originalId, setOriginalId] = useState<string | null>(server?.id ?? null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleteConfirming, setIsDeleteConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
 
   const isCreateMode = !server;
+  const canDeleteMachine = !isCreateMode && originalId !== "local";
 
   const loadMachineFromDisk = useCallback(
     async (machineId?: string | null) => {
@@ -101,6 +104,7 @@ export function ServerDialog({
 
   const updateField = <K extends keyof MachineConfig>(field: K, value: MachineConfig[K]) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+    setIsDeleteConfirming(false);
     setError(null);
     setSaveMessage(null);
   };
@@ -113,6 +117,7 @@ export function ServerDialog({
         [field]: value,
       },
     }));
+    setIsDeleteConfirming(false);
     setError(null);
     setSaveMessage(null);
   };
@@ -128,6 +133,7 @@ export function ServerDialog({
         containerIndex === index ? { ...container, [field]: value } : container,
       ),
     }));
+    setIsDeleteConfirming(false);
     setError(null);
     setSaveMessage(null);
   };
@@ -151,6 +157,7 @@ export function ServerDialog({
           : container,
       ),
     }));
+    setIsDeleteConfirming(false);
     setError(null);
     setSaveMessage(null);
   };
@@ -170,6 +177,7 @@ export function ServerDialog({
           : container,
       ),
     }));
+    setIsDeleteConfirming(false);
     setError(null);
     setSaveMessage(null);
   };
@@ -258,6 +266,37 @@ export function ServerDialog({
       setError(String(scanError));
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!config || !originalId || !canDeleteMachine) {
+      return;
+    }
+
+    if (!isDeleteConfirming) {
+      setIsDeleteConfirming(true);
+      return;
+    }
+
+    setIsDeleting(true);
+    setIsDeleteConfirming(false);
+    setError(null);
+    setSaveMessage(null);
+
+    try {
+      const nextConfig: TargetsConfigDocument = {
+        ...config,
+        machines: config.machines.filter((entry) => entry.id !== originalId),
+      };
+
+      await updateTargetsConfig(stringifyTargetsConfig(nextConfig));
+      onSaved();
+      onClose();
+    } catch (deleteError) {
+      setError(String(deleteError));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -528,10 +567,40 @@ export function ServerDialog({
         </Tabs>
 
         <footer className="dialog-footer">
-          <Button disabled={isLoading || isSaving || isScanning} onClick={() => void handleSave()}>
-            {isSaving ? "Saving…" : isScanning ? "Scanning…" : "Save"}
+          {canDeleteMachine ? (
+            <div className="dialog-footer-danger-group">
+              {isDeleteConfirming ? (
+                <span className="dialog-footer-danger-copy">
+                  Delete this machine from config?
+                </span>
+              ) : null}
+              <Button
+                className="dialog-footer-danger"
+                disabled={isLoading || isSaving || isScanning || isDeleting}
+                onClick={() => void handleDelete()}
+                variant="ghost"
+              >
+                {isDeleting
+                  ? "Deleting…"
+                  : isDeleteConfirming
+                    ? "Confirm delete"
+                    : "Delete machine"}
+              </Button>
+              {isDeleteConfirming ? (
+                <Button
+                  disabled={isDeleting}
+                  onClick={() => setIsDeleteConfirming(false)}
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          <Button disabled={isLoading || isSaving || isScanning || isDeleting} onClick={() => void handleSave()}>
+            {isSaving ? "Saving…" : isScanning ? "Scanning…" : isDeleting ? "Deleting…" : "Save"}
           </Button>
-          <Button onClick={onClose} variant="outline">
+          <Button disabled={isDeleting} onClick={onClose} variant="outline">
             Close
           </Button>
         </footer>

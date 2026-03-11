@@ -35,3 +35,97 @@
   min-width: var(--overview-terminal-grid-min-width, 30rem);
   min-height: var(--overview-terminal-min-height, 30rem);
 }
+
+.overview-focus-layout {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.95fr) minmax(0, 1.75fr) minmax(15rem, 0.95fr);
+  gap: 0.5rem;
+  overflow: hidden;
+}
+
+.overview-focus-column,
+.overview-focus-main {
+  min-width: 0;
+  min-height: 0;
+}
+
+.overview-focus-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.overview-focus-main {
+  display: grid;
+}
+
+.overview-focus-main > .terminal-card,
+.overview-focus-main > .terminal-card-unavailable {
+  height: 100%;
+  min-width: 0;
+  min-height: calc(var(--overview-focus-side-card-height, 16rem) * 2 + 0.5rem);
+}
+
+.overview-focus-column > .terminal-card,
+.overview-focus-column > .terminal-card-unavailable {
+  height: var(--overview-focus-side-card-height, 16rem);
+  min-width: 0;
+  min-height: var(--overview-focus-side-card-height, 16rem);
+}
+
+@media (max-width: 1360px) {
+  .overview-focus-layout {
+    grid-template-columns: minmax(16rem, 1fr) minmax(0, 1.7fr);
+  }
+
+  .overview-focus-layout.is-compact-right .overview-focus-column-left,
+  .overview-focus-layout.is-compact-left .overview-focus-column-right {
+    display: none;
+  }
+}
+
+@container (min-width: 36.5rem) and (max-width: 56rem) {
+  .terminal-grid {
+    grid-template-columns: repeat(2, minmax(0, 18rem));
+    justify-content: center;
+  }
+
+  .content-page-overview .terminal-card,
+  .content-page-overview .terminal-card-unavailable {
+    width: min(100%, 18rem);
+    min-width: 0;
+    justify-self: center;
+  }
+}
+
+@container (max-width: 36.49rem) {
+  .terminal-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .content-page-overview .terminal-card,
+  .content-page-overview .terminal-card-unavailable {
+    width: 100%;
+    min-width: 0;
+    justify-self: stretch;
+  }
+}
+
+@media (max-width: 960px) {
+  .overview-focus-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-focus-column {
+    display: none;
+  }
+
+  .overview-focus-main > .terminal-card,
+  .overview-focus-main > .terminal-card-unavailable {
+    min-height: var(--overview-terminal-card-height, 32rem);
+  }
+}

@@ -1,3 +1,4 @@
+import type { OrchestrationViewMode } from "../hooks/useOrchestrationViewMode";
 import { ConnectionStatusLight } from "./ConnectionStatusLight";
 import { GithubPopover } from "./GithubPopover";
 import { Badge } from "./ui/badge";
@@ -6,13 +7,15 @@ import { Button } from "./ui/button";
 type StatusBarProps = {
   activeStatusLabel: string;
   containerCount: number;
-  isOverviewView: boolean;
+  isOrchestrationActive: boolean;
   isSidebarHidden: boolean;
+  onSetOrchestrationViewMode: (viewMode: OrchestrationViewMode) => void;
   onOpenSettings: () => void;
   onResetOverviewZoom: () => void;
   onToggleSidebar: () => void;
   onZoomInOverview: () => void;
   onZoomOutOverview: () => void;
+  orchestrationViewMode: OrchestrationViewMode;
   overviewZoom: number;
   overviewZoomDefault: number;
   overviewZoomMax: number;
@@ -24,13 +27,15 @@ type StatusBarProps = {
 export function StatusBar({
   activeStatusLabel,
   containerCount,
-  isOverviewView,
+  isOrchestrationActive,
   isSidebarHidden,
+  onSetOrchestrationViewMode,
   onOpenSettings,
   onResetOverviewZoom,
   onToggleSidebar,
   onZoomInOverview,
   onZoomOutOverview,
+  orchestrationViewMode,
   overviewZoom,
   overviewZoomDefault,
   overviewZoomMax,
@@ -86,6 +91,68 @@ export function StatusBar({
         <ConnectionStatusLight className="status-bar-state-light" state="ready" title="Ready" />
       </div>
 
+      <div className="status-bar-section status-bar-section-center">
+        {isOrchestrationActive ? (
+          <>
+            <div className="status-bar-view-switcher" aria-label="Orchestration views" role="tablist">
+              {(["grid", "focus"] as const).map((viewMode) => (
+                <Button
+                  aria-pressed={orchestrationViewMode === viewMode}
+                  className={`status-bar-view-button ${
+                    orchestrationViewMode === viewMode ? "is-active" : ""
+                  }`}
+                  key={viewMode}
+                  onClick={() => {
+                    onSetOrchestrationViewMode(viewMode);
+                  }}
+                  size="sm"
+                  title={viewMode === "grid" ? "Show grid view" : "Show focus view"}
+                  type="button"
+                  variant="ghost"
+                >
+                  {viewMode === "grid" ? "Grid" : "Focus"}
+                </Button>
+              ))}
+            </div>
+            <div className="status-bar-zoom" aria-label="Orchestration zoom controls">
+              <Button
+                aria-label="Zoom out orchestration terminals"
+                className="status-bar-button"
+                disabled={overviewZoom <= overviewZoomMin}
+                onClick={onZoomOutOverview}
+                size="sm"
+                title="Zoom out orchestration terminals"
+                variant="ghost"
+              >
+                -
+              </Button>
+              <Button
+                aria-label="Reset orchestration zoom"
+                className="status-bar-zoom-readout"
+                disabled={overviewZoom === overviewZoomDefault}
+                onClick={onResetOverviewZoom}
+                size="sm"
+                title="Reset orchestration zoom"
+                variant="ghost"
+              >
+                {Math.round(overviewZoom * 100)}%
+              </Button>
+              <Button
+                aria-label="Zoom in orchestration terminals"
+                className="status-bar-button"
+                disabled={overviewZoom >= overviewZoomMax}
+                onClick={onZoomInOverview}
+                size="sm"
+                title="Zoom in orchestration terminals"
+                variant="ghost"
+              >
+                +
+              </Button>
+            </div>
+          </>
+        ) : null}
+      </div>
+
       <div className="status-bar-section status-bar-section-secondary">
         <span className="status-bar-text">
           <span className="status-bar-metric">{serverCount}</span> srv
@@ -96,43 +163,6 @@ export function StatusBar({
         <span className="status-bar-text">
           <span className="status-bar-metric">{reachableContainerCount}</span> ssh
         </span>
-        {isOverviewView ? (
-          <div className="status-bar-zoom" aria-label="Overview zoom controls">
-            <Button
-              aria-label="Zoom out overview terminals"
-              className="status-bar-button"
-              disabled={overviewZoom <= overviewZoomMin}
-              onClick={onZoomOutOverview}
-              size="sm"
-              title="Zoom out overview terminals"
-              variant="ghost"
-            >
-              -
-            </Button>
-            <Button
-              aria-label="Reset overview zoom"
-              className="status-bar-zoom-readout"
-              disabled={overviewZoom === overviewZoomDefault}
-              onClick={onResetOverviewZoom}
-              size="sm"
-              title="Reset overview zoom"
-              variant="ghost"
-            >
-              {Math.round(overviewZoom * 100)}%
-            </Button>
-            <Button
-              aria-label="Zoom in overview terminals"
-              className="status-bar-button"
-              disabled={overviewZoom >= overviewZoomMax}
-              onClick={onZoomInOverview}
-              size="sm"
-              title="Zoom in overview terminals"
-              variant="ghost"
-            >
-              +
-            </Button>
-          </div>
-        ) : null}
         <GithubPopover />
         <Button
           aria-label="Settings"
