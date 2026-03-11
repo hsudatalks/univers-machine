@@ -302,21 +302,32 @@ function App() {
     registerOverviewCardElement,
     setOverviewFocusedTargetId,
   } = useOverviewNavigation({
-    isNavigationActive:
-      activeView.kind === "home" &&
-      (homeViewMode === "grid" || homeViewMode === "focus"),
-    onOpenWorkspace: setContainerView,
-    targetIds: overviewTerminalTargets.map((target) => target.id),
+    isNavigationActive: activeView.kind === "home" && homeViewMode !== "dashboard",
+    onOpenWorkspace:
+      homeViewMode === "machines"
+        ? (targetId) => {
+            const machine = bootstrap?.machines.find(
+              (item) => item.hostTargetId === targetId,
+            );
+
+            if (machine) {
+              openMachineView(machine.id);
+            }
+          }
+        : setContainerView,
+    targetIds:
+      homeViewMode === "machines"
+        ? (bootstrap?.machines
+            .map((machine) => machine.hostTargetId)
+            .filter((targetId) => Boolean(targetById.get(targetId))) ?? [])
+        : overviewTerminalTargets.map((target) => target.id),
   });
   const activeRuntimeTargetId = useMemo(() => {
     if (activeView.kind === "container") {
       return activeView.targetId;
     }
 
-    if (
-      activeView.kind === "home" &&
-      (homeViewMode === "grid" || homeViewMode === "focus")
-    ) {
+    if (activeView.kind === "home" && homeViewMode !== "dashboard") {
       return activeOverviewFocusedTargetId || null;
     }
 
@@ -331,11 +342,7 @@ function App() {
       return activeContainerMachine?.id ?? activeContainerTarget?.machineId ?? null;
     }
 
-    if (
-      activeView.kind === "home" &&
-      (homeViewMode === "grid" || homeViewMode === "focus") &&
-      activeRuntimeTargetId
-    ) {
+    if (activeView.kind === "home" && homeViewMode !== "dashboard" && activeRuntimeTargetId) {
       return targetById.get(activeRuntimeTargetId)?.machineId ?? null;
     }
 
@@ -951,10 +958,12 @@ function App() {
               />
             ) : homeViewMode === "machines" ? (
               <HomeMachinesPage
+                activeFocusedTargetId={activeOverviewFocusedTargetId}
                 machines={bootstrap.machines}
                 onAddMachine={() => {
                   setIsAddMachineDialogOpen(true);
                 }}
+                onFocusTarget={setOverviewFocusedTargetId}
                 onOpenMachine={openMachineView}
                 overviewZoom={overviewZoom}
                 overviewZoomStyle={{
@@ -964,6 +973,7 @@ function App() {
                   "--overview-focus-side-card-height": `${16 * overviewZoom}rem`,
                 } as CSSProperties}
                 pageVisible={activeView.kind === "home"}
+                registerOverviewCardElement={registerOverviewCardElement}
                 resolveTarget={(targetId) => targetById.get(targetId)}
               />
             ) : (

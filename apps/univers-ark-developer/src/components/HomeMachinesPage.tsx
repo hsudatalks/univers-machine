@@ -4,22 +4,28 @@ import { TerminalCard } from "./TerminalCard";
 import { Button } from "./ui/button";
 
 interface HomeMachinesPageProps {
+  activeFocusedTargetId: string;
   machines: ManagedMachine[];
   onAddMachine: () => void;
+  onFocusTarget: (targetId: string) => void;
   onOpenMachine: (machineId: string) => void;
   overviewZoom: number;
   overviewZoomStyle: CSSProperties;
   pageVisible: boolean;
+  registerOverviewCardElement: (targetId: string, element: HTMLElement | null) => void;
   resolveTarget: (targetId: string) => DeveloperTarget | undefined;
 }
 
 export function HomeMachinesPage({
+  activeFocusedTargetId,
   machines,
   onAddMachine,
+  onFocusTarget,
   onOpenMachine,
   overviewZoom,
   overviewZoomStyle,
   pageVisible,
+  registerOverviewCardElement,
   resolveTarget,
 }: HomeMachinesPageProps) {
   const machineTargets = machines
@@ -38,11 +44,18 @@ export function HomeMachinesPage({
         <div className="terminal-grid" style={overviewZoomStyle}>
           {machineTargets.map(({ machine, target }) => (
             <TerminalCard
+              isGridFocused={target.id === activeFocusedTargetId}
               key={machine.id}
+              onFocusRequest={() => {
+                onFocusTarget(target.id);
+              }}
               onOpenWorkspace={() => {
                 onOpenMachine(machine.id);
               }}
               pageVisible={pageVisible}
+              registerElement={(element) => {
+                registerOverviewCardElement(target.id, element);
+              }}
               scale={overviewZoom}
               target={target}
               title={machine.label}
