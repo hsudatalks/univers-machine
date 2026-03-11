@@ -297,42 +297,60 @@ function App() {
     () => startupPrerenderDescriptors.slice(0, startupPrerenderBudget),
     [startupPrerenderBudget, startupPrerenderDescriptors],
   );
+  const homeMachineTargetIds = useMemo(
+    () =>
+      bootstrap?.machines
+        .map((machine) => machine.hostTargetId)
+        .filter((targetId) => Boolean(targetById.get(targetId))) ?? [],
+    [bootstrap, targetById],
+  );
+  const homeTerminalTargetIds = useMemo(
+    () => overviewTerminalTargets.map((target) => target.id),
+    [overviewTerminalTargets],
+  );
   const {
-    activeOverviewFocusedTargetId,
-    registerOverviewCardElement,
-    setOverviewFocusedTargetId,
+    activeOverviewFocusedTargetId: activeMachineOverviewFocusedTargetId,
+    registerOverviewCardElement: registerMachineOverviewCardElement,
+    setOverviewFocusedTargetId: setMachineOverviewFocusedTargetId,
   } = useOverviewNavigation({
-    isNavigationActive: activeView.kind === "home" && homeViewMode !== "dashboard",
-    onOpenWorkspace:
-      homeViewMode === "machines"
-        ? (targetId) => {
-            const machine = bootstrap?.machines.find(
-              (item) => item.hostTargetId === targetId,
-            );
+    isNavigationActive: activeView.kind === "home" && homeViewMode === "machines",
+    onOpenWorkspace: (targetId) => {
+      const machine = bootstrap?.machines.find(
+        (item) => item.hostTargetId === targetId,
+      );
 
-            if (machine) {
-              openMachineView(machine.id);
-            }
-          }
-        : setContainerView,
-    targetIds:
-      homeViewMode === "machines"
-        ? (bootstrap?.machines
-            .map((machine) => machine.hostTargetId)
-            .filter((targetId) => Boolean(targetById.get(targetId))) ?? [])
-        : overviewTerminalTargets.map((target) => target.id),
+      if (machine) {
+        openMachineView(machine.id);
+      }
+    },
+    targetIds: homeMachineTargetIds,
   });
+  const {
+    activeOverviewFocusedTargetId: activeTerminalOverviewFocusedTargetId,
+    registerOverviewCardElement: registerTerminalOverviewCardElement,
+    setOverviewFocusedTargetId: setTerminalOverviewFocusedTargetId,
+  } = useOverviewNavigation({
+    isNavigationActive:
+      activeView.kind === "home" &&
+      (homeViewMode === "grid" || homeViewMode === "focus"),
+    onOpenWorkspace: setContainerView,
+    targetIds: homeTerminalTargetIds,
+  });
+  const activeHomeFocusedTargetId =
+    homeViewMode === "machines"
+      ? activeMachineOverviewFocusedTargetId
+      : activeTerminalOverviewFocusedTargetId;
   const activeRuntimeTargetId = useMemo(() => {
     if (activeView.kind === "container") {
       return activeView.targetId;
     }
 
     if (activeView.kind === "home" && homeViewMode !== "dashboard") {
-      return activeOverviewFocusedTargetId || null;
+      return activeHomeFocusedTargetId || null;
     }
 
     return null;
-  }, [activeOverviewFocusedTargetId, activeView, homeViewMode]);
+  }, [activeHomeFocusedTargetId, activeView, homeViewMode]);
   const activeRuntimeMachineId = useMemo(() => {
     if (activeView.kind === "machine") {
       return activeView.machineId;
@@ -362,8 +380,22 @@ function App() {
     }
 
     const initialTarget = resolvePreferredTarget(bootstrap);
-    setOverviewFocusedTargetId((current) => current || initialTarget?.id || "");
-  }, [bootstrap, setOverviewFocusedTargetId]);
+    const initialMachineTargetId = bootstrap.machines
+      .map((machine) => machine.hostTargetId)
+      .find((targetId) => Boolean(targetById.get(targetId)));
+
+    setTerminalOverviewFocusedTargetId(
+      (current) => current || initialTarget?.id || "",
+    );
+    setMachineOverviewFocusedTargetId(
+      (current) => current || initialMachineTargetId || "",
+    );
+  }, [
+    bootstrap,
+    setMachineOverviewFocusedTargetId,
+    setTerminalOverviewFocusedTargetId,
+    targetById,
+  ]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -748,7 +780,7 @@ function App() {
     defaultTerminalPanelWidthPx,
     onSetActiveView: setActiveView,
     onSelectContainer: setContainerView,
-    onSetOverviewFocus: setOverviewFocusedTargetId,
+    onSetOverviewFocus: setTerminalOverviewFocusedTargetId,
     onTunnelStatus: setTunnelStatus,
     orderedTargetIds: overviewTerminalTargets.map((target) => target.id),
     serviceStatuses,
@@ -958,12 +990,12 @@ function App() {
               />
             ) : homeViewMode === "machines" ? (
               <HomeMachinesPage
-                activeFocusedTargetId={activeOverviewFocusedTargetId}
+                activeFocusedTargetId={activeMachineOverviewFocusedTargetId}
                 machines={bootstrap.machines}
                 onAddMachine={() => {
                   setIsAddMachineDialogOpen(true);
                 }}
-                onFocusTarget={setOverviewFocusedTargetId}
+                onFocusTarget={setMachineOverviewFocusedTargetId}
                 onOpenMachine={openMachineView}
                 overviewZoom={overviewZoom}
                 overviewZoomStyle={{
@@ -973,13 +1005,13 @@ function App() {
                   "--overview-focus-side-card-height": `${16 * overviewZoom}rem`,
                 } as CSSProperties}
                 pageVisible={activeView.kind === "home"}
-                registerOverviewCardElement={registerOverviewCardElement}
+                registerOverviewCardElement={registerMachineOverviewCardElement}
                 resolveTarget={(targetId) => targetById.get(targetId)}
               />
             ) : (
               <OverviewPage
-                activeFocusedTargetId={activeOverviewFocusedTargetId}
-                onFocusTarget={setOverviewFocusedTargetId}
+                activeFocusedTargetId={activeTerminalOverviewFocusedTargetId}
+                onFocusTarget={setTerminalOverviewFocusedTargetId}
                 onOpenWorkspace={setContainerView}
                 onRefreshInventory={refreshInventory}
                 isRefreshing={isRefreshing}
@@ -993,7 +1025,7 @@ function App() {
                   "--overview-focus-side-card-height": `${16 * overviewZoom}rem`,
                 } as CSSProperties}
                 pageVisible={activeView.kind === "home"}
-                registerOverviewCardElement={registerOverviewCardElement}
+                registerOverviewCardElement={registerTerminalOverviewCardElement}
                 standaloneTargets={standaloneTargets}
               />
             )}
