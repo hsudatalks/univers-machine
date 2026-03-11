@@ -9,6 +9,7 @@ import type {
   DeveloperService,
   DeveloperSurface,
   DeveloperTarget,
+  DiscoveredHttpService,
   GithubMergeMethod,
   GithubPullRequestDetail,
   GithubProjectState,
@@ -603,6 +604,11 @@ export async function scanLocalContainers(): Promise<LocalDockerContainer[]> {
   return invoke<LocalDockerContainer[]>("scan_local_containers");
 }
 
+
+export async function scanLocalhostHttpServices(): Promise<DiscoveredHttpService[]> {
+  if (!isTauri()) return [];
+  return invoke<DiscoveredHttpService[]>("scan_localhost_http_services");
+}
 
 export async function getDockerStats(name: string): Promise<DockerContainerStats> {
   if (!isTauri()) {

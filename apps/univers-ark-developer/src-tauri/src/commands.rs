@@ -1036,6 +1036,234 @@ pub(crate) fn scan_local_containers() -> Result<Vec<LocalDockerContainer>, Strin
     Ok(all)
 }
 
+// ── Localhost HTTP service discovery ─────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DiscoveredHttpService {
+    pub port: u16,
+    pub url: String,
+    pub label: String,
+}
+
+fn get_listening_ports_local() -> Vec<u16> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = std::process::Command::new("netstat")
+            .args(["-ano", "-p", "TCP"])
+            .output();
+        match output {
+            Ok(o) => parse_netstat_windows(&String::from_utf8_lossy(&o.stdout)),
+            Err(_) => Vec::new(),
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("netstat")
+            .args(["-an", "-p", "tcp"])
+            .output();
+        match output {
+            Ok(o) => parse_netstat_unix(&String::from_utf8_lossy(&o.stdout)),
+            Err(_) => Vec::new(),
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("ss")
+            .args(["-tlnp"])
+            .output();
+        match output {
+            Ok(o) => parse_ss_linux(&String::from_utf8_lossy(&o.stdout)),
+            Err(_) => Vec::new(),
+        }
+    }
+}
+
+fn parse_netstat_windows(output: &str) -> Vec<u16> {
+    // Lines like:
+    //   TCP    127.0.0.1:3432         0.0.0.0:0              LISTENING       15234
+    //   TCP    [::]:80                [::]:0                 LISTENING       4
+    let mut ports = Vec::new();
+    for line in output.lines() {
+        let line = line.trim();
+        if !line.to_ascii_uppercase().contains("LISTENING") {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 2 {
+            continue;
+        }
+        let local_addr = parts[1];
+        if let Some(port_str) = local_addr.rsplit(':').next() {
+            if let Ok(port) = port_str.parse::<u16>() {
+                ports.push(port);
+            }
+        }
+    }
+    ports.sort_unstable();
+    ports.dedup();
+    ports
+}
+
+#[cfg(target_os = "macos")]
+fn parse_netstat_unix(output: &str) -> Vec<u16> {
+    // macOS: tcp4  0  0  *.3432  *.*  LISTEN
+    let mut ports = Vec::new();
+    for line in output.lines() {
+        let line = line.trim();
+        if !line.contains("LISTEN") {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 4 {
+            continue;
+        }
+        let local_addr = parts[3];
+        if let Some(port_str) = local_addr.rsplit('.').next() {
+            if let Ok(port) = port_str.parse::<u16>() {
+                ports.push(port);
+            }
+        }
+    }
+    ports.sort_unstable();
+    ports.dedup();
+    ports
+}
+
+#[cfg(target_os = "linux")]
+fn parse_ss_linux(output: &str) -> Vec<u16> {
+    // ss -tlnp: LISTEN 0  128  0.0.0.0:3432  ...
+    let mut ports = Vec::new();
+    for line in output.lines() {
+        let line = line.trim();
+        if !line.starts_with("LISTEN") {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 4 {
+            continue;
+        }
+        let local_addr = parts[3];
+        if let Some(port_str) = local_addr.rsplit(':').next() {
+            if let Ok(port) = port_str.parse::<u16>() {
+                ports.push(port);
+            }
+        }
+    }
+    ports.sort_unstable();
+    ports.dedup();
+    ports
+}
+
+const NON_HTTP_PORTS: &[u16] = &[
+    1433,  // MSSQL
+    3306,  // MySQL
+    5432,  // PostgreSQL
+    6379,  // Redis
+    6380,  // Redis TLS
+    27017, // MongoDB
+    27018, // MongoDB
+    5671,  // RabbitMQ TLS
+    5672,  // RabbitMQ AMQP
+    4369,  // Erlang epmd
+    9300,  // Elasticsearch transport
+];
+
+fn is_known_non_http(port: u16) -> bool {
+    NON_HTTP_PORTS.contains(&port) || port >= 49152
+}
+
+fn port_label(port: u16) -> String {
+    match port {
+        3000 => "Port 3000 (Node/React)".to_string(),
+        3001 => "Port 3001".to_string(),
+        4173 => "Port 4173 (Vite Preview)".to_string(),
+        5000 => "Port 5000".to_string(),
+        5173 => "Port 5173 (Vite Dev)".to_string(),
+        8000 => "Port 8000".to_string(),
+        8080 => "Port 8080 (HTTP)".to_string(),
+        8081 => "Port 8081".to_string(),
+        8888 => "Port 8888 (Jupyter)".to_string(),
+        9000 => "Port 9000".to_string(),
+        _ => format!("Port {}", port),
+    }
+}
+
+fn extract_html_title(html: &str) -> Option<String> {
+    let lower = html.to_lowercase();
+    let start = lower.find("<title>")?;
+    let end = lower.find("</title>")?;
+    if end <= start + 7 {
+        return None;
+    }
+    let title = html[start + 7..end].trim().to_string();
+    if title.is_empty() {
+        return None;
+    }
+    if title.len() > 40 {
+        Some(format!("{}…", &title[..40]))
+    } else {
+        Some(title)
+    }
+}
+
+fn probe_http_port(port: u16) -> Option<DiscoveredHttpService> {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    let addr = format!("127.0.0.1:{}", port);
+    let stream = TcpStream::connect_timeout(
+        &addr.parse().ok()?,
+        Duration::from_millis(300),
+    )
+    .ok()?;
+    stream.set_read_timeout(Some(Duration::from_millis(500))).ok()?;
+    stream.set_write_timeout(Some(Duration::from_millis(300))).ok()?;
+
+    let mut stream = stream;
+    let request = format!(
+        "GET / HTTP/1.0\r\nHost: localhost:{}\r\nConnection: close\r\n\r\n",
+        port
+    );
+    stream.write_all(request.as_bytes()).ok()?;
+
+    let mut buf = vec![0u8; 4096];
+    let n = stream.read(&mut buf).ok()?;
+    if n == 0 {
+        return None;
+    }
+
+    let response = String::from_utf8_lossy(&buf[..n]);
+    if !response.starts_with("HTTP/") {
+        return None;
+    }
+
+    let label = extract_html_title(&response).unwrap_or_else(|| port_label(port));
+
+    Some(DiscoveredHttpService {
+        port,
+        url: format!("http://127.0.0.1:{}/", port),
+        label,
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn scan_localhost_http_services() -> Result<Vec<DiscoveredHttpService>, String> {
+    async_runtime::spawn_blocking(|| {
+        let all_ports = get_listening_ports_local();
+        let candidate_ports: Vec<u16> = all_ports
+            .into_iter()
+            .filter(|&p| p >= 1024 && !is_known_non_http(p))
+            .collect();
+        let services: Vec<DiscoveredHttpService> =
+            candidate_ports.into_iter().filter_map(probe_http_port).collect();
+        Ok(services)
+    })
+    .await
+    .map_err(|e| format!("Failed to scan localhost services: {}", e))?
+}
+
 #[tauri::command]
 pub(crate) fn update_targets_config(content: String) -> Result<(), String> {
     save_targets_config(&content)

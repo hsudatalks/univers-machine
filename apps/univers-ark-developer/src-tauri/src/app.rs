@@ -291,7 +291,8 @@ pub(crate) fn run() {
             commands::save_app_settings,
             commands::list_local_docker_containers,
             commands::scan_local_containers,
-            commands::get_docker_stats
+            commands::get_docker_stats,
+            commands::scan_localhost_http_services
         ])
         .build(tauri::generate_context!())
         .expect("error while building univers-ark-developer")

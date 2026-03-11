@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { BrowserPane, type BrowserFrameInstance } from "./BrowserPane";
 import { DashboardPane } from "./DashboardPane";
 import { FilesPane } from "./FilesPane";
@@ -6,13 +6,10 @@ import { ServicesPane } from "./ServicesPane";
 import { TerminalPane } from "./TerminalPane";
 import { Button } from "./ui/button";
 import type { ContainerToolPanel } from "../lib/view-types";
-import type {
-  DeveloperSurface,
-  DeveloperTarget,
-  ServiceStatus,
-  TunnelStatus,
-} from "../types";
+import { browserSurfaceIdFromPanel } from "../lib/view-types";
+import type { DeveloperSurface, DeveloperTarget, ServiceStatus, TunnelStatus } from "../types";
 import { FolderOpen, Globe, LayoutDashboard, Rows4 } from "lucide-react";
+import { useLocalhostServiceScan } from "../hooks/useLocalhostServiceScan";
 
 interface ContainerPageProps {
   activeTool: ContainerToolPanel;
@@ -37,6 +34,29 @@ interface ContainerPageProps {
   serviceStatuses: Record<string, ServiceStatus>;
   target: DeveloperTarget;
   workspaceStyle: CSSProperties;
+}
+
+function makeDiscoveredFrame(
+  surface: DeveloperSurface,
+  target: DeveloperTarget,
+  isActive: boolean,
+  version: number,
+): BrowserFrameInstance {
+  return {
+    cacheKey: `${target.id}::${surface.id}`,
+    frameVersion: version,
+    isActive,
+    status: {
+      targetId: target.id,
+      serviceId: surface.id,
+      surfaceId: surface.id,
+      localUrl: surface.localUrl,
+      state: "direct",
+      message: `${surface.label} is directly accessible on localhost.`,
+    },
+    surface,
+    target,
+  };
 }
 
 export function ContainerPage({
@@ -64,6 +84,84 @@ export function ContainerPage({
   workspaceStyle,
 }: ContainerPageProps) {
   const [isRestarting, setIsRestarting] = useState(false);
+  const [discoveredFrameVersions, setDiscoveredFrameVersions] = useState<Record<string, number>>({});
+
+  const discoveredSurfaces = useLocalhostServiceScan(target);
+
+  // Merge discovered surfaces with configured ones, deduplicating by port.
+  const mergedSurfaces = useMemo(() => {
+    const configuredPorts = new Set(
+      allBrowserSurfaces.map((s) => {
+        try {
+          return new URL(s.localUrl).port;
+        } catch {
+          return "";
+        }
+      }),
+    );
+    const novel = discoveredSurfaces.filter((s) => {
+      try {
+        return !configuredPorts.has(new URL(s.localUrl).port);
+      } catch {
+        return false;
+      }
+    });
+    return [...allBrowserSurfaces, ...novel];
+  }, [allBrowserSurfaces, discoveredSurfaces]);
+
+  // Which surface id is active in the browser panel (if any).
+  const activeBrowserSurfaceId = browserSurfaceIdFromPanel(activeTool);
+
+  // If the active surface is a discovered one, build its frame locally.
+  const activeDiscoveredSurface = activeBrowserSurfaceId
+    ? discoveredSurfaces.find((s) => s.id === activeBrowserSurfaceId)
+    : undefined;
+
+  const discoveredActiveFrame = useMemo(
+    () =>
+      activeDiscoveredSurface
+        ? makeDiscoveredFrame(
+            activeDiscoveredSurface,
+            target,
+            true,
+            discoveredFrameVersions[activeDiscoveredSurface.id] ?? 0,
+          )
+        : undefined,
+    [activeDiscoveredSurface, target, discoveredFrameVersions],
+  );
+
+  // Effective frame: discovered overrides the config frame when a discovered surface is selected.
+  const effectiveActiveFrame = discoveredActiveFrame ?? browserFrame;
+
+  // All retained frames: config frame(s) + one frame per discovered surface.
+  const allRetainedFrames = useMemo((): BrowserFrameInstance[] => {
+    const base = browserFrame ? [browserFrame] : [];
+    const discoveredFrames = discoveredSurfaces.map((surface) =>
+      makeDiscoveredFrame(
+        surface,
+        target,
+        activeBrowserSurfaceId === surface.id,
+        discoveredFrameVersions[surface.id] ?? 0,
+      ),
+    );
+    return [...base, ...discoveredFrames];
+  }, [browserFrame, discoveredSurfaces, activeBrowserSurfaceId, target, discoveredFrameVersions]);
+
+  const handleReload = useCallback(() => {
+    if (activeDiscoveredSurface) {
+      setDiscoveredFrameVersions((prev) => ({
+        ...prev,
+        [activeDiscoveredSurface.id]: (prev[activeDiscoveredSurface.id] ?? 0) + 1,
+      }));
+    } else {
+      onReloadBrowser();
+    }
+  }, [activeDiscoveredSurface, onReloadBrowser]);
+
+  const hasBrowserSurfaces = mergedSurfaces.length > 0;
+  const effectivePrimaryPanel =
+    browserPanel ?? (mergedSurfaces[0] ? `browser:${mergedSurfaces[0].id}` as ContainerToolPanel : null);
+
   return (
     <>
       <header className="content-header content-header-container">
@@ -160,17 +258,17 @@ export function ContainerPage({
             <FolderOpen size={16} />
           </Button>
           <Button
-            aria-label={primaryBrowserSurface?.label ?? "Primary browser"}
-            disabled={!primaryBrowserSurface}
-            isActive={activeTool === browserPanel}
+            aria-label={primaryBrowserSurface?.label ?? "Browser"}
+            disabled={!hasBrowserSurfaces}
+            isActive={activeTool.startsWith("browser:")}
             onClick={() => {
-              if (browserPanel) {
-                onSelectTool(browserPanel);
+              if (effectivePrimaryPanel) {
+                onSelectTool(effectivePrimaryPanel);
               }
             }}
             size="icon"
-            title={primaryBrowserSurface?.label ?? "Primary browser"}
-            variant={activeTool === browserPanel ? "default" : "ghost"}
+            title={primaryBrowserSurface?.label ?? "Browser"}
+            variant={activeTool.startsWith("browser:") ? "default" : "ghost"}
           >
             <Globe size={16} />
           </Button>
@@ -259,18 +357,16 @@ export function ContainerPage({
             <FilesPane active={pageVisible} target={target} />
           </div>
 
-          {browserSurface ? (
+          {hasBrowserSurfaces ? (
             <BrowserPane
-              activeFrame={browserFrame}
-              activeServiceId={browserSurface.id}
-              isVisible={activeTool === browserPanel}
-              onReload={onReloadBrowser}
+              activeFrame={effectiveActiveFrame}
+              isVisible={activeTool.startsWith("browser:")}
+              onReload={handleReload}
               onRestart={onReloadBrowser}
-              onSelectSurface={(surfaceId) => onOpenBrowserService(surfaceId)}
-              retainedFrames={browserFrames}
-              services={browserServices}
-              slotLabel={browserSurface.label}
-              surfaces={allBrowserSurfaces}
+              onSelectSurface={(surfaceId) => onSelectTool(`browser:${surfaceId}` as ContainerToolPanel)}
+              retainedFrames={allRetainedFrames}
+              slotLabel={primaryBrowserSurface?.label ?? mergedSurfaces[0]?.label ?? "Browser"}
+              surfaces={mergedSurfaces}
             />
           ) : null}
         </div>

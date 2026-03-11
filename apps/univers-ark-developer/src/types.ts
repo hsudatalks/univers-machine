@@ -4,6 +4,12 @@ export type EndpointProbeType = "http" | "tcp";
 export type MachineTransport = "local" | "ssh";
 export type ManagedContainerKind = "host" | "managed";
 
+export interface DiscoveredHttpService {
+  port: number;
+  url: string;
+  label: string;
+}
+
 export interface DeveloperSurface {
   id: string;
   label: string;
