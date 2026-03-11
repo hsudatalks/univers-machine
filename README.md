@@ -22,10 +22,21 @@
 - 实际配置文件个人化（不同步）
 - 详见 [config/](config/)
 
+### Rust Daemon 组件
+- **univers-daemon-core**: 共享 agent/session、system info、tmux service、installer 能力
+- **univers-machine-daemon**: 面向物理机和虚拟机的 HTTP daemon
+- **univers-container-daemon**: 面向容器环境的 HTTP daemon
+- **univers-ark-developer**: 本地桌面端，用于管理目标机器、容器和工作台
+
 ## 目录结构
 
-```
+``` 
 univers-machine/
+├── apps/
+│   ├── univers-ark-developer/        # 目标机器/容器管理桌面端
+│   ├── univers-daemon-core/          # daemon 共享核心库
+│   ├── univers-machine-daemon/       # 物理机/虚拟机管理 daemon
+│   └── univers-container-daemon/     # 容器管理 daemon
 ├── .claude/skills/machine-manage/    # 机器管理 skill
 │   ├── configs/                      # Tmux 样式配置
 │   ├── scripts/                      # 管理脚本

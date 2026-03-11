@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = [
+    "apps/univers-ark-developer/src-tauri",
+    "apps/univers-container-daemon",
+    "apps/univers-daemon-core",
+    "apps/univers-machine-daemon",
+]

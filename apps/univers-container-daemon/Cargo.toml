@@ -1,0 +1,20 @@
+[package]
+name = "univers-container-daemon"
+version = "0.2.0"
+edition = "2021"
+description = "Container daemon for monitoring active Claude Code sessions and managing services"
+
+[dependencies]
+univers-daemon-core = { path = "../univers-daemon-core" }
+axum = "0.7"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+comfy-table = "7"
+anyhow = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+sysinfo = "0.30"
