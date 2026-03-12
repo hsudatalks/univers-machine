@@ -1,3 +1,5 @@
+#![cfg(desktop)]
+
 use tauri::{
     menu::{
         AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,

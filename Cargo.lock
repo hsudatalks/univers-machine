@@ -6364,7 +6364,6 @@ dependencies = [
  "arboard",
  "csv",
  "keyring",
- "portable-pty",
  "rusqlite",
  "serde",
  "serde_json",

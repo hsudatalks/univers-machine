@@ -3,19 +3,28 @@ mod menu;
 
 use self::{
     lifecycle::{handle_run_event, manage_app_state, setup_app},
-    menu::{build_app_menu, handle_menu_event},
 };
 use crate::commands;
 
+#[cfg(desktop)]
+use self::menu::{build_app_menu, handle_menu_event};
+
 pub(crate) fn run() {
-    manage_app_state(tauri::Builder::default())
+    let builder = manage_app_state(tauri::Builder::default());
+    #[cfg(desktop)]
+    let builder = builder
         // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right/Up
         // on Windows, Cmd+Alt+Left/Right/Up on macOS) are handled by the menu
         // accelerators in build_app_menu, not by global shortcuts.
         .menu(build_app_menu)
         .on_menu_event(|app_handle, event| {
             handle_menu_event(app_handle, event.id().as_ref());
-        })
+        });
+
+    #[cfg(mobile)]
+    let builder = builder;
+
+    builder
         .setup(setup_app)
         .invoke_handler(tauri::generate_handler![
             commands::machine::bootstrap::load_bootstrap,
