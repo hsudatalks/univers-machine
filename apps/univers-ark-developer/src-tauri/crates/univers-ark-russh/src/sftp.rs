@@ -8,7 +8,7 @@ use crate::{
 
 const MAX_DIRECTORY_ENTRIES: usize = 512;
 const MAX_PREVIEW_BYTES: usize = 131_072;
-const DEFAULT_REMOTE_ROOT: &str = "~/repos/hvac-workbench";
+const DEFAULT_REMOTE_ROOT: &str = "~";
 
 pub async fn sftp_list_directory(
     chain: &ResolvedEndpointChain,
@@ -152,25 +152,26 @@ pub async fn sftp_read_file_preview(
 
 async fn expand_remote_path(sftp: &SftpSession, path: &str) -> Result<String, RusshError> {
     if path.starts_with('~') {
-        // Get home directory using canonicalize
-        let home = sftp
-            .canonicalize("~")
-            .await
-            .map_err(|e| RusshError::Sftp(format!("failed to get home directory: {}", e)))?;
-
+        // Try to get the home directory by opening "."
+        // The SFTP session typically starts at the user's home directory
         if path == "~" {
-            return Ok(home);
+            return Ok(".".to_string());
         }
 
-        // Join the rest of the path
+        // For ~/path
         let rest = &path[2..]; // Remove ~/
-        return Ok(format!("{}/{}", home.trim_end_matches('/'), rest));
+        return Ok(format!("./{}", rest));
     }
 
     if path.starts_with('/') {
         return Ok(path.to_string());
     }
 
-    // Relative path - use default remote root
+    // Relative path - use default remote root (~)
+    // Since ~ expands to current directory in SFTP, just use the path as-is
+    if DEFAULT_REMOTE_ROOT == "~" {
+        return Ok(format!("./{}", path));
+    }
+
     Ok(format!("{}/{}", DEFAULT_REMOTE_ROOT, path))
 }
