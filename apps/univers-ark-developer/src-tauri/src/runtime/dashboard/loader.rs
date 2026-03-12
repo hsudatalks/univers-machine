@@ -6,7 +6,7 @@ use crate::{
         ContainerTmuxInfo, ContainerTmuxSessionInfo, DeveloperTarget,
     },
     services::health::{
-        DashboardServicePayload, dashboard_probe_command, into_container_service_infos,
+        dashboard_probe_command, into_container_service_infos, DashboardServicePayload,
     },
 };
 use serde::Deserialize;

@@ -1,6 +1,6 @@
 use super::{
+    current_username, default_known_hosts_path, RawTargetsFile, RemoteContainerServer,
     LOCAL_MACHINE_DESCRIPTION, LOCAL_MACHINE_HOST, LOCAL_MACHINE_ID, LOCAL_MACHINE_LABEL,
-    RawTargetsFile, RemoteContainerServer, current_username, default_known_hosts_path,
 };
 use crate::infra::russh::execute_chain_blocking;
 use crate::machine::{
@@ -12,7 +12,7 @@ use crate::machine::{
     ssh::{machine_host_key_alias, resolved_known_hosts_path},
 };
 use crate::models::{ContainerWorkspace, MachineTransport};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::time::Duration;
 use tauri::{AppHandle, Runtime};
 use univers_ark_russh::{

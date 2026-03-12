@@ -1,6 +1,4 @@
-use crate::models::{
-    ContainerServiceInfo, DeveloperTarget, EndpointProbeType,
-};
+use crate::models::{ContainerServiceInfo, DeveloperTarget, EndpointProbeType};
 use serde::{Deserialize, Serialize};
 use url::Url;
 

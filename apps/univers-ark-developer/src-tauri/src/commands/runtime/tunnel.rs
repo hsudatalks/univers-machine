@@ -12,7 +12,7 @@ use crate::{
         runtime::{resolve_runtime_web_surface, surface_key},
     },
 };
-use tauri::{AppHandle, State, async_runtime};
+use tauri::{async_runtime, AppHandle, State};
 
 fn restart_tunnel_inner(
     app: &AppHandle,

@@ -1,5 +1,8 @@
 use rusqlite::Connection;
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub(crate) struct SqliteStore {
     path: PathBuf,

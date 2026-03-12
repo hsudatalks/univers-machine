@@ -5,9 +5,7 @@ use crate::{
         TunnelStatus,
     },
     services::{
-        projection::{
-            command_service_status, dashboard_service_statuses, tunnel_service_status,
-        },
+        projection::{command_service_status, dashboard_service_statuses, tunnel_service_status},
         runtime::service_key,
     },
 };
@@ -128,7 +126,10 @@ pub(crate) fn emit_command_service_status<R: Runtime>(
     message: impl Into<String>,
 ) {
     register_service(app, target_id, service_id, DeveloperServiceKind::Command);
-    upsert_service_status(app, command_service_status(target_id, service_id, state, message));
+    upsert_service_status(
+        app,
+        command_service_status(target_id, service_id, state, message),
+    );
 }
 
 pub(crate) fn emit_dashboard_service_statuses<R: Runtime>(

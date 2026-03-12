@@ -1,9 +1,9 @@
 use tauri::{
-    AppHandle, Emitter, Runtime,
     menu::{
-        AboutMetadata, HELP_SUBMENU_ID, Menu, MenuItem, PredefinedMenuItem, Submenu,
+        AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
         WINDOW_SUBMENU_ID,
     },
+    AppHandle, Emitter, Runtime,
 };
 
 const TOGGLE_SIDEBAR_MENU_ID: &str = "toggle_sidebar";

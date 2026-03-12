@@ -1,7 +1,7 @@
 use super::targets_file_name;
 use serde_json::Value;
 use std::{fs, path::PathBuf, sync::OnceLock};
-use tauri::{AppHandle, Manager, Runtime, path::BaseDirectory};
+use tauri::{path::BaseDirectory, AppHandle, Manager, Runtime};
 
 const BUNDLED_TARGETS_TEMPLATE_NAME: &str = "developer-targets.json";
 

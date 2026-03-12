@@ -6,8 +6,8 @@ use super::{
 use std::{
     collections::HashMap,
     sync::{
-        Arc, Mutex,
         atomic::{AtomicBool, AtomicU64},
+        Arc, Mutex,
     },
 };
 

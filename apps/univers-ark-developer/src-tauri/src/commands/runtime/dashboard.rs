@@ -7,7 +7,7 @@ use crate::{
     },
     services::registry::emit_dashboard_service_statuses,
 };
-use tauri::{AppHandle, State, async_runtime};
+use tauri::{async_runtime, AppHandle, State};
 
 #[tauri::command]
 pub(crate) async fn load_container_dashboard(

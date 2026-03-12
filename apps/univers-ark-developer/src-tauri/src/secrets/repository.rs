@@ -123,11 +123,8 @@ pub(super) trait SecretRepository: Send + Sync {
         store: &dyn SecretStore,
         input: SecretCredentialInput,
     ) -> Result<SecretCredentialRecord, String>;
-    fn delete_credential(
-        &self,
-        store: &dyn SecretStore,
-        credential_id: &str,
-    ) -> Result<(), String>;
+    fn delete_credential(&self, store: &dyn SecretStore, credential_id: &str)
+        -> Result<(), String>;
     fn upsert_assignment(
         &self,
         input: SecretAssignmentInput,
@@ -160,9 +157,8 @@ impl SqliteSecretRepository {
     }
 
     fn migrate(&self) -> Result<(), String> {
-        self.sqlite
-            .migrate(
-                "CREATE TABLE IF NOT EXISTS secret_providers (
+        self.sqlite.migrate(
+            "CREATE TABLE IF NOT EXISTS secret_providers (
                     id            TEXT PRIMARY KEY,
                     label         TEXT NOT NULL,
                     provider_kind TEXT NOT NULL,
@@ -212,7 +208,7 @@ impl SqliteSecretRepository {
                     ON secret_assignments(credential_id);
                 CREATE INDEX IF NOT EXISTS idx_secret_audit_events_created_at
                     ON secret_audit_events(created_at_ms DESC);",
-            )
+        )
     }
 }
 
@@ -706,7 +702,10 @@ impl SecretRepository for SqliteSecretRepository {
         Ok(())
     }
 
-    fn upsert_assignment(&self, input: SecretAssignmentInput) -> Result<SecretAssignmentRecord, String> {
+    fn upsert_assignment(
+        &self,
+        input: SecretAssignmentInput,
+    ) -> Result<SecretAssignmentRecord, String> {
         let connection = self.connect()?;
         let credential_id = input.credential_id.trim().to_string();
 

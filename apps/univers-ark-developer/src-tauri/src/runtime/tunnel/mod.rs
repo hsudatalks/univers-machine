@@ -1,5 +1,5 @@
 use super::activity::{
-    RUNTIME_BACKGROUND_SUPERVISOR_FLOOR, current_runtime_activity, detect_runtime_suspend_gap,
+    current_runtime_activity, detect_runtime_suspend_gap, RUNTIME_BACKGROUND_SUPERVISOR_FLOOR,
 };
 mod cleanup;
 mod forwarding;

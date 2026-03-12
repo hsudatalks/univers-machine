@@ -1,5 +1,4 @@
 use super::{
-    RawTargetsFile,
     chain::resolve_target_ssh_chain,
     inventory::load_inventory,
     repository::read_raw_targets_file,
@@ -8,6 +7,7 @@ use super::{
         build_host_ssh_command, build_ssh_command, run_target_shell_command_internal,
         shell_single_quote,
     },
+    RawTargetsFile,
 };
 use crate::{
     infra::russh::execute_chain_blocking,

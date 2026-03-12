@@ -1,4 +1,4 @@
-use super::activity::{RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS, current_runtime_activity};
+use super::activity::{current_runtime_activity, RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS};
 mod loader;
 
 use crate::{

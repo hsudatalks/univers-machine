@@ -1,7 +1,8 @@
 use super::{
-    ContainerManagerType, manager_priority,
+    manager_priority,
     repository::read_raw_targets_file,
     ssh::{build_host_ssh_command, shell_single_quote},
+    ContainerManagerType,
 };
 use crate::models::MachineTransport;
 

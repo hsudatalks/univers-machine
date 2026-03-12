@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::{
     collections::VecDeque,
     process::Child,
-    sync::{Arc, Mutex, atomic::AtomicBool},
+    sync::{atomic::AtomicBool, Arc, Mutex},
     time::{Duration, Instant},
 };
 use univers_ark_russh::{LocalForward, PtySession};

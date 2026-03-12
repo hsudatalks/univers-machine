@@ -1,9 +1,9 @@
 use super::{
-    RawTargetsFile, RemoteContainerServer,
     inventory::load_inventory,
     repository::read_raw_targets_file,
     resolve_raw_target,
     ssh::{container_host_key_alias, machine_host_key_alias, resolved_known_hosts_path},
+    RawTargetsFile, RemoteContainerServer,
 };
 use crate::models::{MachineTransport, ManagedContainerKind};
 use std::path::PathBuf;

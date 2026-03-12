@@ -13,8 +13,8 @@ use std::{
 };
 use tauri::{AppHandle, Emitter};
 use univers_ark_russh::{
-    ClientOptions as RusshClientOptions, PtySessionEvent, ResolvedEndpointChain,
-    start_pty_session_chain,
+    start_pty_session_chain, ClientOptions as RusshClientOptions, PtySessionEvent,
+    ResolvedEndpointChain,
 };
 
 pub(crate) fn append_output(output: &Arc<Mutex<String>>, chunk: &str) {

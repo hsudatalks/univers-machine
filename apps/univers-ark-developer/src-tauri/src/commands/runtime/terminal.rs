@@ -10,7 +10,7 @@ use crate::{
         write_to_terminal_session,
     },
 };
-use tauri::{AppHandle, State, async_runtime};
+use tauri::{async_runtime, AppHandle, State};
 
 #[tauri::command]
 pub(crate) async fn attach_terminal(

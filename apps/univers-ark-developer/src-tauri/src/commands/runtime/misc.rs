@@ -5,7 +5,7 @@ use crate::{
     runtime::activity::update_runtime_activity as apply_runtime_activity,
     services::{actions::execute_command_service_action, catalog::tmux_command_service},
 };
-use tauri::{AppHandle, State, async_runtime};
+use tauri::{async_runtime, AppHandle, State};
 
 #[tauri::command]
 pub(crate) async fn restart_tmux(app: AppHandle, target_id: String) -> Result<(), String> {

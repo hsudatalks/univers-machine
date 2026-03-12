@@ -8,8 +8,8 @@ use std::{
     io::{ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
     sync::{
-        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
     },
     time::Duration,
 };

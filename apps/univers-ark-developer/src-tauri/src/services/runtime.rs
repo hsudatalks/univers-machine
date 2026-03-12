@@ -1,10 +1,13 @@
 use crate::{
-    machine::{read_targets_file, resolve_raw_target},
     constants::{
         INTERNAL_TUNNEL_PORT_END, INTERNAL_TUNNEL_PORT_START, SURFACE_HOST, SURFACE_PORT_END,
         SURFACE_PORT_START,
     },
-    models::{BrowserSurface, DeveloperService, DeveloperTarget, MachineTransport, TargetsFile, TunnelState},
+    machine::{read_targets_file, resolve_raw_target},
+    models::{
+        BrowserSurface, DeveloperService, DeveloperTarget, MachineTransport, TargetsFile,
+        TunnelState,
+    },
     services::catalog::web_service,
 };
 use std::net::TcpListener;

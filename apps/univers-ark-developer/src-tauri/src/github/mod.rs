@@ -9,8 +9,8 @@ use std::process::Command;
 
 use self::{
     cli::{
-        GhPullRequest, REPO_FULL_NAME, merge_pull_request, pr_list, pull_request_detail, repo_view,
-        viewer_login,
+        merge_pull_request, pr_list, pull_request_detail, repo_view, viewer_login, GhPullRequest,
+        REPO_FULL_NAME,
     },
     local_repo::{hvac_workbench_repo_path, local_branch, local_status_summary},
 };
