@@ -29,6 +29,14 @@
   grid-column: 1 / -1;
 }
 
+.dashboard-card-header {
+  padding: 1.15rem 1.15rem 0.95rem;
+}
+
+.dashboard-card-content {
+  padding: 0 1.15rem 1.15rem;
+}
+
 .dashboard-summary-bar {
   display: flex;
   align-items: start;
@@ -54,6 +62,10 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+}
+
+.dashboard-summary-button {
+  min-width: 0;
 }
 
 .dashboard-section-title {
@@ -267,6 +279,7 @@
 .dashboard-card-row .server-dashboard-row-actions {
   width: 100%;
   justify-content: space-between;
+  align-items: center;
 }
 
 .dashboard-global-section-label {
@@ -314,5 +327,101 @@
 
   .server-dashboard-row-actions {
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .dashboard-grid {
+    gap: 0.7rem;
+    padding: 0.65rem;
+  }
+
+  .dashboard-card-header {
+    padding: 1rem 1rem 0.8rem;
+  }
+
+  .dashboard-card-content {
+    padding: 0 1rem 1rem;
+  }
+
+  .dashboard-summary-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.8rem;
+    padding-top: 0.7rem;
+  }
+
+  .dashboard-summary-copy {
+    gap: 0.55rem;
+  }
+
+  .dashboard-summary-item {
+    padding: 0.7rem 0.75rem;
+    border-radius: 0.8rem;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    background: color-mix(in srgb, var(--secondary) 26%, transparent);
+  }
+
+  .dashboard-summary-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .dashboard-summary-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dashboard-card-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .server-dashboard-row {
+    gap: 0.7rem;
+    padding: 0.72rem;
+  }
+
+  .server-dashboard-row-title {
+    font-size: 0.8rem;
+  }
+
+  .server-dashboard-row-meta {
+    white-space: normal;
+  }
+
+  .server-dashboard-row-actions {
+    width: 100%;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-row-badge {
+    max-width: 100%;
+  }
+
+  .dashboard-row-open-button {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 420px) {
+  .dashboard-summary-copy {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-summary-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-card-row .server-dashboard-row-actions {
+    justify-content: flex-start;
+  }
+
+  .dashboard-row-open-button {
+    margin-left: 0;
+    width: 100%;
+    justify-content: center;
   }
 }

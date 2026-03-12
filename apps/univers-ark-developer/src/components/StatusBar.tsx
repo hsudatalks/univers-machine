@@ -13,6 +13,7 @@ type StatusBarProps = {
   activeMachineId?: string;
   activeStatusLabel: string;
   containerCount: number;
+  homeViewModes: readonly HomeViewMode[];
   isHomeActive: boolean;
   isSidebarHidden: boolean;
   machineEntries: MachineNavEntry[];
@@ -29,6 +30,7 @@ export function StatusBar({
   activeMachineId,
   activeStatusLabel,
   containerCount,
+  homeViewModes,
   isHomeActive,
   isSidebarHidden,
   machineEntries,
@@ -135,7 +137,7 @@ export function StatusBar({
           </div>
         ) : isHomeActive ? (
           <div className="status-bar-view-switcher" aria-label="Home views" role="tablist">
-            {(["dashboard", "machines", "grid", "focus"] as const).map((viewMode) => (
+            {homeViewModes.map((viewMode) => (
               <Button
                 aria-pressed={homeViewMode === viewMode}
                 className={`status-bar-view-button ${homeViewMode === viewMode ? "is-active" : ""
@@ -150,7 +152,7 @@ export function StatusBar({
                     ? "Show dashboard view"
                     : viewMode === "machines"
                       ? "Show machines view"
-                    : viewMode === "grid"
+                      : viewMode === "grid"
                       ? "Show grid view"
                       : "Show focus view"
                 }
@@ -161,7 +163,7 @@ export function StatusBar({
                   ? "Dashboard"
                   : viewMode === "machines"
                     ? "Machines"
-                  : viewMode === "grid"
+                    : viewMode === "grid"
                     ? "Grid"
                     : "Focus"}
               </Button>

@@ -29,6 +29,7 @@ import { registerTunnelRequests } from "./lib/tunnel-manager";
 import "./App.css";
 import { useAppearance } from "./hooks/useAppearance";
 import { useContainerWorkspace } from "./hooks/useContainerWorkspace";
+import { useMediaQuery } from "./hooks/useMediaQuery";
 import { useOverviewNavigation } from "./hooks/useOverviewNavigation";
 import {
   useOverviewZoom,
@@ -250,6 +251,7 @@ function App() {
   const { isSidebarHidden, setIsSidebarHidden } = useSidebarState();
   const { overviewZoom } = useOverviewZoom();
   const { homeViewMode, setHomeViewMode } = useHomeViewMode();
+  const isCompactHomeLayout = useMediaQuery("(max-width: 960px)");
   const { tunnelStatuses, setTunnelStatus } = useTunnelStatuses();
   const { serviceStatuses } = useServiceStatuses();
   const {
@@ -373,6 +375,14 @@ function App() {
     homeViewMode,
     targetById,
   ]);
+
+  useEffect(() => {
+    if (!isCompactHomeLayout || homeViewMode === "dashboard") {
+      return;
+    }
+
+    setHomeViewMode("dashboard");
+  }, [homeViewMode, isCompactHomeLayout, setHomeViewMode]);
 
   useEffect(() => {
     if (!bootstrap) {
@@ -528,11 +538,13 @@ function App() {
         activeView.kind !== "home" ||
         !isPlatformModifier(event) ||
         event.altKey ||
-        (event.key !== "Tab" &&
-          event.code !== "Digit1" &&
-          event.code !== "Digit2" &&
-          event.code !== "Digit3" &&
-          event.code !== "Digit4") ||
+        (isCompactHomeLayout
+          ? event.code !== "Digit1"
+          : event.key !== "Tab" &&
+            event.code !== "Digit1" &&
+            event.code !== "Digit2" &&
+            event.code !== "Digit3" &&
+            event.code !== "Digit4") ||
         (isEditableEventTarget(event.target) && !isXtermHelperTextarea(event.target))
       ) {
         return;
@@ -543,6 +555,10 @@ function App() {
 
       if (event.code === "Digit1" && !event.shiftKey) {
         setHomeViewMode("dashboard");
+        return;
+      }
+
+      if (isCompactHomeLayout) {
         return;
       }
 
@@ -581,7 +597,7 @@ function App() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [activeView.kind, homeViewMode, setHomeViewMode]);
+  }, [activeView.kind, homeViewMode, isCompactHomeLayout, setHomeViewMode]);
 
   useEffect(() => {
     const machines = bootstrap?.machines ?? [];
@@ -975,12 +991,20 @@ function App() {
                 onEditMachine={(machineId) => {
                   openMachineSettings(machineId, "general");
                 }}
-                onOpenGrid={() => {
-                  setHomeViewMode("grid");
-                }}
-                onOpenMachines={() => {
-                  setHomeViewMode("machines");
-                }}
+                onOpenGrid={
+                  isCompactHomeLayout
+                    ? undefined
+                    : () => {
+                      setHomeViewMode("grid");
+                    }
+                }
+                onOpenMachines={
+                  isCompactHomeLayout
+                    ? undefined
+                    : () => {
+                      setHomeViewMode("machines");
+                    }
+                }
                 onOpenMachine={openMachineView}
                 onOpenWorkspace={setContainerView}
                 overviewContainers={overviewContainers}
@@ -1198,6 +1222,7 @@ function App() {
         activeMachineId={activeView.kind === "machine" ? activeView.machineId : undefined}
         activeStatusLabel={activeStatusLabel}
         containerCount={overviewContainers.length}
+        homeViewModes={isCompactHomeLayout ? ["dashboard"] : HOME_VIEW_MODES}
         isHomeActive={activeView.kind === "home"}
         isSidebarHidden={isSidebarHidden}
         machineEntries={bootstrap.machines.map((machine) => ({ id: machine.id, label: machine.label }))}

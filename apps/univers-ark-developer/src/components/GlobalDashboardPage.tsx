@@ -22,8 +22,8 @@ interface GlobalDashboardPageProps {
   onAddMachine: () => void;
   onEditAgentTeam: (machineId: string) => void;
   onEditMachine: (machineId: string) => void;
-  onOpenGrid: () => void;
-  onOpenMachines: () => void;
+  onOpenGrid?: () => void;
+  onOpenMachines?: () => void;
   onOpenMachine: (machineId: string) => void;
   onOpenWorkspace: (targetId: string) => void;
   overviewContainers: OverviewEntry[];
@@ -58,7 +58,7 @@ export function GlobalDashboardPage({
       <article className="panel tool-panel dashboard-panel global-dashboard-panel">
         <div className="dashboard-grid">
           <Card className="dashboard-card-hero border-border/80 bg-card/95">
-            <CardContent className="dashboard-summary-bar">
+            <CardContent className="dashboard-summary-bar dashboard-card-content">
               <div className="dashboard-summary-copy">
                 <div className="dashboard-summary-item">
                   <span className="dashboard-meta-label">Machines</span>
@@ -77,30 +77,44 @@ export function GlobalDashboardPage({
               </div>
 
               <div className="dashboard-summary-actions">
-                <Button onClick={onAddMachine} size="sm">
+                <Button className="dashboard-summary-button" onClick={onAddMachine} size="sm">
                   <Server size={14} />
                   Add machine
                 </Button>
-                <Button onClick={onOpenMachines} size="sm" variant="ghost">
-                  <Server size={14} />
-                  Open machines
-                </Button>
-                <Button onClick={onOpenGrid} size="sm" variant="ghost">
-                  <LayoutDashboard size={14} />
-                  Open grid
-                </Button>
+                {onOpenMachines ? (
+                  <Button
+                    className="dashboard-summary-button"
+                    onClick={onOpenMachines}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <Server size={14} />
+                    Open machines
+                  </Button>
+                ) : null}
+                {onOpenGrid ? (
+                  <Button
+                    className="dashboard-summary-button"
+                    onClick={onOpenGrid}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <LayoutDashboard size={14} />
+                    Open grid
+                  </Button>
+                ) : null}
               </div>
             </CardContent>
           </Card>
 
           <Card className="dashboard-card-wide border-border/80 bg-card/95">
-            <CardHeader>
+            <CardHeader className="dashboard-card-header">
               <CardTitle className="dashboard-section-title">
                 <Server size={16} />
                 Machines
               </CardTitle>
             </CardHeader>
-            <CardContent className="server-dashboard-list dashboard-card-list">
+            <CardContent className="server-dashboard-list dashboard-card-list dashboard-card-content">
               {machines.map((machine) => {
                 const managedContainers = visibleContainers(machine.containers);
                 const reachable = managedContainers.filter((item) => item.sshReachable).length;
@@ -115,9 +129,10 @@ export function GlobalDashboardPage({
                     </div>
 
                     <div className="server-dashboard-row-actions">
-                      <ConnectionStatusLight state={machine.state} />
+                      <ConnectionStatusLight className="dashboard-row-status" state={machine.state} />
                       <Button
                         aria-label={`Edit ${machine.label}`}
+                        className="dashboard-row-icon-button"
                         onClick={() => {
                           onEditMachine(machine.id);
                         }}
@@ -128,6 +143,7 @@ export function GlobalDashboardPage({
                         <Settings2 size={14} />
                       </Button>
                       <Button
+                        className="dashboard-row-open-button"
                         onClick={() => {
                           onOpenMachine(machine.id);
                         }}
@@ -145,13 +161,13 @@ export function GlobalDashboardPage({
           </Card>
 
           <Card className="dashboard-card-wide border-border/80 bg-card/95">
-            <CardHeader>
+            <CardHeader className="dashboard-card-header">
               <CardTitle className="dashboard-section-title">
                 <Boxes size={16} />
                 Agent teams
               </CardTitle>
             </CardHeader>
-            <CardContent className="server-dashboard-list dashboard-card-list">
+            <CardContent className="server-dashboard-list dashboard-card-list dashboard-card-content">
               {overviewContainers.map(({ container, machine, target }) => {
                 const primary = target ? primaryBrowserSurface(target) : undefined;
                 const webState = primary && target
@@ -168,12 +184,19 @@ export function GlobalDashboardPage({
                     </div>
 
                     <div className="server-dashboard-row-actions">
-                      <ConnectionStatusLight state={container.sshState} title={container.sshState} />
+                      <ConnectionStatusLight
+                        className="dashboard-row-status"
+                        state={container.sshState}
+                        title={container.sshState}
+                      />
                       {primary ? (
-                        <Badge variant="neutral">{primary.label}</Badge>
+                        <Badge className="dashboard-row-badge" variant="neutral">
+                          {primary.label}
+                        </Badge>
                       ) : null}
                       <Button
                         aria-label={`Edit ${container.label}`}
+                        className="dashboard-row-icon-button"
                         onClick={() => {
                           onEditAgentTeam(machine.id);
                         }}
@@ -185,6 +208,7 @@ export function GlobalDashboardPage({
                       </Button>
                       {target ? (
                         <Button
+                          className="dashboard-row-open-button"
                           onClick={() => {
                             onOpenWorkspace(target.id);
                           }}
@@ -217,6 +241,7 @@ export function GlobalDashboardPage({
 
                   <div className="server-dashboard-row-actions">
                     <Button
+                      className="dashboard-row-open-button"
                       onClick={() => {
                         onOpenWorkspace(target.id);
                       }}
