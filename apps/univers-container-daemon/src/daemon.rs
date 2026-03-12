@@ -7,10 +7,11 @@ use crate::dashboard::{
     DashboardServiceInfo, DashboardTmuxInfo,
 };
 use crate::self_daemon::{
-    collect_daemon_info, collect_service_logs, collect_service_status, install_service,
-    record_process_start, restart_service, start_service, stop_service, uninstall_service,
-    DaemonInfo, DaemonServiceLogs, DaemonServiceLogsQuery, DaemonServiceMutationResult,
-    DaemonServiceStatus, InstallDaemonServiceRequest,
+    collect_daemon_info, collect_service_logs, collect_service_status, collect_service_unit_file,
+    install_service, record_process_start, restart_service, start_service, stop_service,
+    uninstall_service, DaemonInfo, DaemonServiceLogs, DaemonServiceLogsQuery,
+    DaemonServiceMutationResult, DaemonServiceStatus, DaemonServiceUnitFile,
+    InstallDaemonServiceRequest,
 };
 use axum::routing::{get, post};
 use axum::{
@@ -53,6 +54,7 @@ pub async fn run_daemon(port: u16) -> anyhow::Result<()> {
         .route("/api/daemon", get(get_daemon_info))
         .route("/api/daemon/service", get(get_daemon_service_status))
         .route("/api/daemon/service/logs", get(get_daemon_service_logs))
+        .route("/api/daemon/service/unit", get(get_daemon_service_unit_file))
         .route("/api/daemon/service/install", post(install_daemon_service))
         .route("/api/daemon/service/start", post(start_daemon_service))
         .route("/api/daemon/service/stop", post(stop_daemon_service))
@@ -167,6 +169,15 @@ async fn get_daemon_service_logs(
     let lines = query.lines.unwrap_or(100);
     match collect_service_logs(lines).await {
         Ok(logs) => Json(ApiResponse::ok(logs)),
+        Err(error) => Json(ApiResponse::err(error.to_string())),
+    }
+}
+
+async fn get_daemon_service_unit_file(
+    State(_state): State<Arc<DaemonState>>,
+) -> Json<ApiResponse<DaemonServiceUnitFile>> {
+    match collect_service_unit_file().await {
+        Ok(unit) => Json(ApiResponse::ok(unit)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
 }

@@ -72,6 +72,15 @@ pub(crate) struct DaemonServiceLogs {
     pub entries: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DaemonServiceUnitFile {
+    pub unit_name: String,
+    pub unit_path: String,
+    pub installed: bool,
+    pub content: Option<String>,
+}
+
 pub(crate) fn record_process_start(port: u16) {
     let _ = STARTED_AT.get_or_init(|| chrono::Utc::now().to_rfc3339());
     let _ = LISTEN_PORT.set(port);
@@ -164,6 +173,10 @@ pub(crate) async fn uninstall_service() -> Result<DaemonServiceMutationResult> {
 
 pub(crate) async fn collect_service_logs(lines: usize) -> Result<DaemonServiceLogs> {
     tokio::task::spawn_blocking(move || collect_service_logs_blocking(lines)).await?
+}
+
+pub(crate) async fn collect_service_unit_file() -> Result<DaemonServiceUnitFile> {
+    tokio::task::spawn_blocking(collect_service_unit_file_blocking).await?
 }
 
 fn install_service_blocking(
@@ -284,6 +297,26 @@ fn collect_service_logs_blocking(lines: usize) -> Result<DaemonServiceLogs> {
         user_session_available,
         logs_available: true,
         entries,
+    })
+}
+
+fn collect_service_unit_file_blocking() -> Result<DaemonServiceUnitFile> {
+    let unit_path = service_unit_path();
+    let installed = unit_path.exists();
+    let content = if installed {
+        Some(
+            std::fs::read_to_string(&unit_path)
+                .with_context(|| format!("Failed to read {}", unit_path.display()))?,
+        )
+    } else {
+        None
+    };
+
+    Ok(DaemonServiceUnitFile {
+        unit_name: UNIT_NAME.into(),
+        unit_path: unit_path.display().to_string(),
+        installed,
+        content,
     })
 }
 

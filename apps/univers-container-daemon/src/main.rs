@@ -6,9 +6,10 @@ mod status;
 
 use clap::{Parser, Subcommand};
 use self_daemon::{
-    collect_daemon_info, collect_service_logs, collect_service_status, install_service,
-    restart_service, start_service, stop_service, uninstall_service, DaemonServiceLogs,
-    DaemonServiceMutationResult, DaemonServiceStatus, InstallDaemonServiceRequest,
+    collect_daemon_info, collect_service_logs, collect_service_status, collect_service_unit_file,
+    install_service, restart_service, start_service, stop_service, uninstall_service,
+    DaemonServiceLogs, DaemonServiceMutationResult, DaemonServiceStatus, DaemonServiceUnitFile,
+    InstallDaemonServiceRequest,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use univers_daemon_core::agent::db::Db;
@@ -95,6 +96,12 @@ enum ServiceCommands {
         /// Number of log lines to fetch
         #[arg(long, default_value_t = 100)]
         lines: usize,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show the installed unit file
+    Cat {
         /// Output as JSON
         #[arg(long)]
         json: bool,
@@ -359,6 +366,10 @@ async fn handle_service_cmd(command: ServiceCommands) -> anyhow::Result<()> {
             let logs = collect_service_logs(lines).await?;
             print_service_logs(&logs, json)?;
         }
+        ServiceCommands::Cat { json } => {
+            let unit = collect_service_unit_file().await?;
+            print_service_unit_file(&unit, json)?;
+        }
         ServiceCommands::Install {
             binary_path,
             working_directory,
@@ -445,6 +456,29 @@ fn print_service_logs(logs: &DaemonServiceLogs, json: bool) -> anyhow::Result<()
     println!("entries:");
     for entry in &logs.entries {
         println!("{entry}");
+    }
+
+    Ok(())
+}
+
+fn print_service_unit_file(unit: &DaemonServiceUnitFile, json: bool) -> anyhow::Result<()> {
+    if json {
+        println!("{}", serde_json::to_string_pretty(unit)?);
+        return Ok(());
+    }
+
+    println!("unit_name: {}", unit.unit_name);
+    println!("unit_path: {}", unit.unit_path);
+    println!("installed: {}", unit.installed);
+    match &unit.content {
+        Some(content) => {
+            println!("content:");
+            print!("{content}");
+            if !content.ends_with('\n') {
+                println!();
+            }
+        }
+        None => println!("content: <missing>"),
     }
 
     Ok(())
