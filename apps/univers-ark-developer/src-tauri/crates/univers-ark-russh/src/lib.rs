@@ -3,6 +3,7 @@ mod exec;
 mod files;
 mod forward;
 mod pty;
+mod sftp;
 mod ssh_config;
 mod types;
 
