@@ -49,3 +49,9 @@ temp/
 # Rust build outputs
 target/
 apps/*/target/
+
+# Local cross toolchains
+.toolchains/
+
+# Generated daemon assets bundled by Ark Developer
+apps/univers-ark-developer/src-tauri/resources/daemons/*.tar.gz

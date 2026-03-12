@@ -93,15 +93,49 @@ impl AgentState {
 
     pub async fn list_sessions(&self, include_ended: bool) -> Vec<SessionSnapshot> {
         let sessions = self.sessions.read().await;
-        let mut result: Vec<SessionSnapshot> = if include_ended {
-            sessions.values().cloned().collect()
-        } else {
-            sessions
-                .values()
+        let in_memory: HashMap<String, SessionSnapshot> = sessions
+            .iter()
+            .map(|(session_id, snapshot)| (session_id.clone(), snapshot.clone()))
+            .collect();
+        drop(sessions);
+
+        if !include_ended {
+            let mut result: Vec<SessionSnapshot> = in_memory
+                .into_values()
                 .filter(|s| s.status != "ended")
-                .cloned()
-                .collect()
+                .collect();
+            result.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+            return result;
+        }
+
+        let mut merged = match tokio::task::spawn_blocking(|| {
+            let db = Db::open().map_err(|e| anyhow::anyhow!("{e}"))?;
+            let rows = db.list_sessions(true).map_err(|e| anyhow::anyhow!("{e}"))?;
+            Ok::<_, anyhow::Error>(
+                rows.into_iter()
+                    .map(SessionSnapshot::from)
+                    .map(|snapshot| (snapshot.session_id.clone(), snapshot))
+                    .collect::<HashMap<_, _>>(),
+            )
+        })
+        .await
+        {
+            Ok(Ok(rows)) => rows,
+            Ok(Err(e)) => {
+                error!("Failed to load historical sessions from SQLite: {e}");
+                HashMap::new()
+            }
+            Err(e) => {
+                error!("Failed to join historical session load task: {e}");
+                HashMap::new()
+            }
         };
+
+        for (session_id, snapshot) in in_memory {
+            merged.insert(session_id, snapshot);
+        }
+
+        let mut result: Vec<SessionSnapshot> = merged.into_values().collect();
         result.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         result
     }

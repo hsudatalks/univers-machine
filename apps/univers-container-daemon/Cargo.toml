@@ -7,7 +7,7 @@ description = "Container daemon for monitoring active Claude Code sessions and m
 [dependencies]
 univers-daemon-core = { path = "../univers-daemon-core" }
 axum = "0.7"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
@@ -18,3 +18,4 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sysinfo = "0.30"
+url = "2.5"

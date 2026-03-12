@@ -4,6 +4,7 @@ use std::path::Path;
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub enum EnvironmentKind {
     DockerContainer,
+    LxcContainer,
     OrbstackContainer,
     Wsl,
     VirtualMachine,
@@ -21,6 +22,10 @@ impl EnvironmentKind {
         // Docker / container detection
         if is_docker() {
             return Self::DockerContainer;
+        }
+
+        if is_lxc() {
+            return Self::LxcContainer;
         }
 
         // WSL detection
@@ -85,6 +90,34 @@ fn is_wsl() -> bool {
         }
     }
     std::env::var("WSL_DISTRO_NAME").is_ok()
+}
+
+fn is_lxc() -> bool {
+    if let Ok(val) = std::env::var("container") {
+        if val.eq_ignore_ascii_case("lxc") || val.eq_ignore_ascii_case("lxd") {
+            return true;
+        }
+    }
+
+    if let Ok(kind) = std::fs::read_to_string("/run/systemd/container") {
+        let kind = kind.trim().to_ascii_lowercase();
+        if kind == "lxc" || kind == "lxd" {
+            return true;
+        }
+    }
+
+    if let Ok(cgroup) = std::fs::read_to_string("/proc/1/cgroup") {
+        let cgroup = cgroup.to_ascii_lowercase();
+        if cgroup.contains("/lxc.payload.")
+            || cgroup.contains("/lxc.monitor.")
+            || cgroup.contains("/machine.slice/machine-lxc")
+            || cgroup.contains("/machine.slice/machine-lxd")
+        {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn is_virtual_machine() -> bool {

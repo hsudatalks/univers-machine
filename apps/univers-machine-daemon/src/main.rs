@@ -7,6 +7,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use univers_daemon_core::agent::db::Db;
 use univers_daemon_core::agent::event::HookEvent;
 
+const DEFAULT_DAEMON_PORT: u16 = 3200;
+
 #[derive(Parser)]
 #[command(
     name = "univers-machine-daemon",
@@ -22,14 +24,21 @@ enum Commands {
     /// Start the background HTTP daemon
     Daemon {
         /// Port to listen on
-        #[arg(short, long, default_value = "3200")]
+        #[arg(short, long, default_value_t = DEFAULT_DAEMON_PORT)]
         port: u16,
         /// Bearer token for API authentication (optional, recommended)
         #[arg(long, env = "DAEMON_AUTH_TOKEN")]
         auth_token: Option<String>,
     },
     /// Process a hook event from stdin (forwards to daemon, falls back to SQLite)
-    Event,
+    Event {
+        /// Daemon port (for HTTP forward)
+        #[arg(long, env = "UNIVERS_MACHINE_DAEMON_PORT", default_value_t = DEFAULT_DAEMON_PORT)]
+        port: u16,
+        /// Bearer token for API authentication
+        #[arg(long, env = "DAEMON_AUTH_TOKEN")]
+        auth_token: Option<String>,
+    },
     /// Show active sessions
     Status {
         /// Include ended sessions
@@ -42,8 +51,11 @@ enum Commands {
         #[arg(short, long)]
         watch: bool,
         /// Daemon port (for HTTP fetch)
-        #[arg(long, default_value = "3200")]
+        #[arg(long, env = "UNIVERS_MACHINE_DAEMON_PORT", default_value_t = DEFAULT_DAEMON_PORT)]
         port: u16,
+        /// Bearer token for API authentication
+        #[arg(long, env = "DAEMON_AUTH_TOKEN")]
+        auth_token: Option<String>,
     },
     /// Clean old ended sessions
     Clean {
@@ -79,8 +91,8 @@ async fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::Event => {
-            if let Err(e) = handle_event_cmd().await {
+        Commands::Event { port, auth_token } => {
+            if let Err(e) = handle_event_cmd(port, auth_token.as_deref()).await {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
@@ -90,16 +102,20 @@ async fn main() {
             json,
             watch,
             port,
+            auth_token,
         } => {
             if watch {
                 loop {
                     print!("\x1b[2J\x1b[H");
-                    if let Err(e) = status::show_status(all, json, port).await {
+                    if let Err(e) =
+                        status::show_status(all, json, port, auth_token.as_deref()).await
+                    {
                         eprintln!("Error: {e}");
                     }
                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 }
-            } else if let Err(e) = status::show_status(all, json, port).await {
+            } else if let Err(e) = status::show_status(all, json, port, auth_token.as_deref()).await
+            {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
@@ -132,7 +148,7 @@ async fn main() {
     }
 }
 
-async fn handle_event_cmd() -> anyhow::Result<()> {
+async fn handle_event_cmd(port: u16, auth_token: Option<&str>) -> anyhow::Result<()> {
     let buf = tokio::task::spawn_blocking(|| {
         use std::io::Read;
         let mut buf = String::new();
@@ -145,12 +161,13 @@ async fn handle_event_cmd() -> anyhow::Result<()> {
 
     // Try to forward to daemon via HTTP
     let client = reqwest::Client::new();
-    match client
-        .post("http://127.0.0.1:3200/api/agents/event")
-        .json(&ev)
-        .send()
-        .await
-    {
+    let mut request = client
+        .post(format!("http://127.0.0.1:{port}/api/agents/event"))
+        .json(&ev);
+    if let Some(token) = auth_token {
+        request = request.bearer_auth(token);
+    }
+    match request.send().await {
         Ok(resp) if resp.status().is_success() => return Ok(()),
         _ => {}
     }
