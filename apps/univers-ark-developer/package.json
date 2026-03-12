@@ -12,7 +12,8 @@
     "tauri:build": "tauri build",
     "tauri:ios:init": "tauri ios init",
     "tauri:ios:dev": "tauri ios dev",
-    "tauri:ios:build": "tauri ios build",
+<<<<<<< HEAD
+    "tauri:ios:build": "node ./scripts/tauri-ios-build.mjs",
     "tauri:build:deb": "../../scripts/build-ark-deb.sh"
   },
   "dependencies": {
