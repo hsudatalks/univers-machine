@@ -12,7 +12,8 @@
     "tauri:build": "tauri build",
     "tauri:ios:init": "tauri ios init",
     "tauri:ios:dev": "tauri ios dev",
-    "tauri:ios:build": "tauri ios build"
+    "tauri:ios:build": "tauri ios build",
+    "tauri:build:deb": "../../scripts/build-ark-deb.sh"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
