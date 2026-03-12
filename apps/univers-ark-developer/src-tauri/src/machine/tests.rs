@@ -31,6 +31,7 @@ fn fixture_server() -> RemoteContainerServer {
         target_label_template: String::new(),
         target_host_template: String::from("{serverHost}"),
         target_description_template: String::new(),
+        host_terminal_startup_command: String::new(),
         terminal_command_template: String::new(),
         notes: vec![String::from(
             "SSH target: {sshUser}@{containerIp} via {serverHost}.",

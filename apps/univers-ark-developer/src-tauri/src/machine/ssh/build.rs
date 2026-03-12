@@ -153,6 +153,14 @@ pub(crate) fn default_terminal_startup_command() -> String {
     String::from("exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l")
 }
 
+pub(crate) fn host_terminal_startup_command(server: &RemoteContainerServer) -> String {
+    if server.host_terminal_startup_command.trim().is_empty() {
+        default_terminal_startup_command()
+    } else {
+        server.host_terminal_startup_command.trim().to_string()
+    }
+}
+
 pub(crate) fn profile_terminal_startup_command(profile: &str) -> String {
     if profile.trim() == "ark-workbench" {
         return String::from(

@@ -121,6 +121,8 @@ pub(super) struct RemoteContainerServer {
     #[serde(default)]
     pub(super) target_description_template: String,
     #[serde(default)]
+    pub(super) host_terminal_startup_command: String,
+    #[serde(default)]
     pub(super) terminal_command_template: String,
     #[serde(default)]
     pub(super) notes: Vec<String>,

@@ -4,7 +4,7 @@ use crate::{
 };
 
 use super::super::super::ssh::{
-    build_host_ssh_command, default_terminal_startup_command, profile_terminal_startup_command,
+    build_host_ssh_command, host_terminal_startup_command, profile_terminal_startup_command,
     shell_single_quote, terminal_command_for_server,
 };
 use super::super::super::{DiscoveredContainer, RemoteContainerContext, RemoteContainerServer};
@@ -43,13 +43,14 @@ pub(super) fn build_machine_host_target(server: &RemoteContainerServer) -> Devel
     let description = render_template(&server.target_description_template, &context, || {
         format!("Host workspace on {}.", server.label)
     });
+    let terminal_startup_command = host_terminal_startup_command(server);
     let terminal_command = if matches!(server.transport, MachineTransport::Local) {
-        String::from("exec /bin/zsh -l")
+        terminal_startup_command.clone()
     } else {
         build_host_ssh_command(
             server,
             &["-tt"],
-            Some(&shell_single_quote(&default_terminal_startup_command())),
+            Some(&shell_single_quote(&terminal_startup_command)),
         )
     };
     let notes = server
@@ -86,7 +87,7 @@ pub(super) fn build_machine_host_target(server: &RemoteContainerServer) -> Devel
         host,
         description,
         terminal_command,
-        terminal_startup_command: default_terminal_startup_command(),
+        terminal_startup_command,
         notes,
         workspace,
         services,
@@ -138,15 +139,15 @@ pub(crate) fn build_target_from_container(
     let terminal_startup_command = if matches!(container.kind, ManagedContainerKind::Managed) {
         profile_terminal_startup_command(&workspace.profile)
     } else {
-        default_terminal_startup_command()
+        host_terminal_startup_command(server)
     };
     let terminal_command = if matches!(server.transport, MachineTransport::Local) {
-        String::from("exec /bin/zsh -l")
+        terminal_startup_command.clone()
     } else if matches!(container.kind, ManagedContainerKind::Host) {
         build_host_ssh_command(
             server,
             &["-tt"],
-            Some(&shell_single_quote(&default_terminal_startup_command())),
+            Some(&shell_single_quote(&terminal_startup_command)),
         )
     } else {
         terminal_command_for_server(server, &context, &terminal_startup_command)

@@ -223,6 +223,7 @@ mod tests {
             target_label_template: String::new(),
             target_host_template: String::new(),
             target_description_template: String::new(),
+            host_terminal_startup_command: String::new(),
             terminal_command_template: String::new(),
             notes: vec![],
             workspace: ContainerWorkspace {

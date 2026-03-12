@@ -61,6 +61,7 @@ fn local_machine_server(ssh_user: &str, profile: &str) -> RemoteContainerServer 
         target_label_template: String::new(),
         target_host_template: String::from("{machineHost}"),
         target_description_template: String::new(),
+        host_terminal_startup_command: String::new(),
         terminal_command_template: String::new(),
         notes: vec![],
         workspace: ContainerWorkspace {
@@ -96,6 +97,7 @@ fn local_machine_template(raw_targets_file: &RawTargetsFile, ssh_user: &str) -> 
         "targetLabelTemplate": "",
         "targetHostTemplate": "{machineHost}",
         "targetDescriptionTemplate": "",
+        "hostTerminalStartupCommand": "",
         "terminalCommandTemplate": "",
         "notes": [],
         "workspace": {
