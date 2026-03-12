@@ -23,6 +23,7 @@ fn fixture_server() -> RemoteContainerServer {
         ssh_user: String::from("david"),
         container_ssh_user: String::from("ubuntu"),
         identity_files: vec![],
+        ssh_credential_id: String::new(),
         jump_chain: vec![],
         known_hosts_path: String::new(),
         strict_host_key_checking: false,

@@ -7,12 +7,19 @@ use std::{
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
+pub struct InlineIdentity {
+    pub label: String,
+    pub secret: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct ResolvedEndpoint {
     pub alias: String,
     pub host: String,
     pub user: String,
     pub port: u16,
     pub identity_files: Vec<PathBuf>,
+    pub inline_identities: Vec<InlineIdentity>,
     pub known_hosts_path: Option<PathBuf>,
     pub known_hosts_host: Option<String>,
     pub accept_new_host_keys: bool,
@@ -32,6 +39,7 @@ impl ResolvedEndpoint {
             user: user.into(),
             port,
             identity_files,
+            inline_identities: Vec::new(),
             known_hosts_path: None,
             known_hosts_host: None,
             accept_new_host_keys: false,
@@ -40,6 +48,22 @@ impl ResolvedEndpoint {
 
     pub fn identity_files(&self) -> &[PathBuf] {
         &self.identity_files
+    }
+
+    pub fn inline_identities(&self) -> &[InlineIdentity] {
+        &self.inline_identities
+    }
+
+    pub fn with_inline_identity(
+        mut self,
+        label: impl Into<String>,
+        secret: impl Into<String>,
+    ) -> Self {
+        self.inline_identities.push(InlineIdentity {
+            label: label.into(),
+            secret: secret.into(),
+        });
+        self
     }
 
     pub fn with_known_hosts(
@@ -221,6 +245,7 @@ impl ResolvedConfigEntry {
                 .unwrap_or_else(|| env::var("USER").unwrap_or_else(|_| String::from("root"))),
             port: self.port.unwrap_or(22),
             identity_files: self.identity_files,
+            inline_identities: Vec::new(),
             known_hosts_path: None,
             known_hosts_host: None,
             accept_new_host_keys: false,

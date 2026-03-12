@@ -60,7 +60,10 @@ function importedCandidateToMachine(
     description: candidate.description,
     sshUser: candidate.sshUser || machine.sshUser,
     identityFiles: candidate.identityFiles,
-    jumpChain: candidate.jumpChain,
+    jumpChain: candidate.jumpChain.map((jump) => ({
+      ...jump,
+      sshCredentialId: "",
+    })),
   };
 }
 

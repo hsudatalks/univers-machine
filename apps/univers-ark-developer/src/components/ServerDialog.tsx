@@ -424,6 +424,13 @@ export function ServerDialog({
                       value={form.identityFiles.join("\n")}
                     />
                     <EditField
+                      hint="Optional secret credential ID for a private key stored in the app credential store."
+                      label="SSH Credential ID"
+                      mono
+                      onChange={(value) => updateField("sshCredentialId", value)}
+                      value={form.sshCredentialId}
+                    />
+                    <EditField
                       label="Host Terminal Startup Command"
                       multiline
                       mono
@@ -858,12 +865,14 @@ function SelectField({
 }
 
 function EditField({
+  hint,
   label,
   mono,
   multiline,
   onChange,
   value,
 }: {
+  hint?: string;
   label: string;
   mono?: boolean;
   multiline?: boolean;
@@ -892,6 +901,7 @@ function EditField({
           value={value}
         />
       )}
+      {hint ? <p className="dialog-field-hint">{hint}</p> : null}
     </div>
   );
 }

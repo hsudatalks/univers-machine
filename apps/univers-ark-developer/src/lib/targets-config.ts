@@ -48,6 +48,7 @@ export interface SshJumpConfig {
   port: number;
   user: string;
   identityFiles: string[];
+  sshCredentialId: string;
 }
 
 export interface MachineContainerConfig {
@@ -80,6 +81,7 @@ export interface MachineConfig {
   sshUser: string;
   containerSshUser: string;
   identityFiles: string[];
+  sshCredentialId: string;
   jumpChain: SshJumpConfig[];
   knownHostsPath: string;
   strictHostKeyChecking: boolean;
@@ -179,6 +181,7 @@ function normalizeMachine(
       port: jump.port ?? 22,
       user: jump.user ?? "",
       identityFiles: jump.identityFiles ?? [],
+      sshCredentialId: jump.sshCredentialId ?? "",
     })),
     containers: (machine?.containers ?? [])
       .filter((container) => container?.kind !== "host")
@@ -333,6 +336,7 @@ export function createEmptyMachine(profileId = ""): MachineConfig {
     sshUser: "ubuntu",
     containerSshUser: "ubuntu",
     identityFiles: [],
+    sshCredentialId: "",
     jumpChain: [],
     knownHostsPath: "~/.univers/known_hosts",
     strictHostKeyChecking: true,

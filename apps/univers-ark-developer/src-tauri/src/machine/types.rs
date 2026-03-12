@@ -79,6 +79,8 @@ pub(super) struct SshJumpConfig {
     pub(super) user: String,
     #[serde(default)]
     pub(super) identity_files: Vec<String>,
+    #[serde(default)]
+    pub(super) ssh_credential_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -104,6 +106,8 @@ pub(super) struct RemoteContainerServer {
     pub(super) container_ssh_user: String,
     #[serde(default)]
     pub(super) identity_files: Vec<String>,
+    #[serde(default)]
+    pub(super) ssh_credential_id: String,
     #[serde(default)]
     pub(super) jump_chain: Vec<SshJumpConfig>,
     #[serde(default = "default_known_hosts_path")]

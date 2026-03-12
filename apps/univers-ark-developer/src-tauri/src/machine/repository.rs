@@ -53,6 +53,7 @@ fn local_machine_template(raw_targets_file: &RawTargetsFile, ssh_user: &str) -> 
         "sshUser": ssh_user,
         "containerSshUser": ssh_user,
         "identityFiles": [],
+        "sshCredentialId": "",
         "jumpChain": [],
         "knownHostsPath": default_known_hosts_path(),
         "strictHostKeyChecking": true,

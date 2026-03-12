@@ -215,6 +215,7 @@ mod tests {
             ssh_user: String::new(),
             container_ssh_user: String::new(),
             identity_files: vec![],
+            ssh_credential_id: String::new(),
             jump_chain: vec![],
             known_hosts_path: String::new(),
             strict_host_key_checking: false,

@@ -6,11 +6,32 @@ use super::{
     RawTargetsFile, RemoteContainerServer,
 };
 use crate::models::{MachineTransport, ManagedContainerKind};
+use crate::secrets::load_secret_credential_value;
 use std::path::PathBuf;
 use univers_ark_russh::{ResolvedEndpoint, ResolvedEndpointChain};
 
 fn identity_paths(paths: &[String]) -> Vec<PathBuf> {
     paths.iter().map(PathBuf::from).collect()
+}
+
+fn apply_identity_sources(
+    mut endpoint: ResolvedEndpoint,
+    alias: &str,
+    identity_files: &[String],
+    ssh_credential_id: &str,
+) -> Result<ResolvedEndpoint, String> {
+    endpoint
+        .identity_files
+        .extend(identity_paths(identity_files));
+
+    if !ssh_credential_id.trim().is_empty() {
+        endpoint = endpoint.with_inline_identity(
+            format!("{alias}::credential"),
+            load_secret_credential_value(ssh_credential_id)?,
+        );
+    }
+
+    Ok(endpoint)
 }
 
 fn resolved_machine_chain(server: &RemoteContainerServer) -> Result<ResolvedEndpointChain, String> {
@@ -24,28 +45,41 @@ fn resolved_machine_chain(server: &RemoteContainerServer) -> Result<ResolvedEndp
         .iter()
         .enumerate()
         .map(|(index, jump)| {
-            ResolvedEndpoint::new(
-                format!("{}::jump-{}", server.id, index + 1),
-                jump.host.clone(),
-                jump.user.clone(),
-                jump.port,
-                identity_paths(&jump.identity_files),
+            let alias = format!("{}::jump-{}", server.id, index + 1);
+            apply_identity_sources(
+                ResolvedEndpoint::new(
+                    alias.clone(),
+                    jump.host.clone(),
+                    jump.user.clone(),
+                    jump.port,
+                    Vec::new(),
+                ),
+                &alias,
+                &jump.identity_files,
+                &jump.ssh_credential_id,
             )
-            .with_known_hosts(
-                known_hosts_path.clone(),
-                jump.host.clone(),
-                server.strict_host_key_checking,
-            )
+            .map(|endpoint| {
+                endpoint.with_known_hosts(
+                    known_hosts_path.clone(),
+                    jump.host.clone(),
+                    server.strict_host_key_checking,
+                )
+            })
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, String>>()?;
     hops.push(
-        ResolvedEndpoint::new(
-            server.id.clone(),
-            server.host.clone(),
-            server.ssh_user.clone(),
-            server.port,
-            identity_paths(&server.identity_files),
-        )
+        apply_identity_sources(
+            ResolvedEndpoint::new(
+                server.id.clone(),
+                server.host.clone(),
+                server.ssh_user.clone(),
+                server.port,
+                Vec::new(),
+            ),
+            &server.id,
+            &server.identity_files,
+            &server.ssh_credential_id,
+        )?
         .with_known_hosts(
             known_hosts_path,
             machine_host_key_alias(server),

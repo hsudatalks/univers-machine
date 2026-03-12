@@ -77,8 +77,28 @@ async fn authenticate_endpoint(
     handle: &mut Handle<ClientHandler>,
     endpoint: &ResolvedEndpoint,
 ) -> Result<(), RusshError> {
+    let mut attempted_candidate = false;
+
+    for inline_identity in endpoint.inline_identities() {
+        attempted_candidate = true;
+        let key = russh::keys::decode_secret_key(&inline_identity.secret, None)?;
+        let auth = handle
+            .authenticate_publickey(
+                endpoint.user.clone(),
+                PrivateKeyWithHashAlg::new(
+                    Arc::new(key),
+                    handle.best_supported_rsa_hash().await?.flatten(),
+                ),
+            )
+            .await?;
+
+        if auth.success() {
+            return Ok(());
+        }
+    }
+
     let mut candidates = endpoint.identity_files().to_vec();
-    if candidates.is_empty() {
+    if candidates.is_empty() && endpoint.inline_identities().is_empty() {
         candidates.extend(default_identity_files());
     }
 
@@ -87,6 +107,7 @@ async fn authenticate_endpoint(
             continue;
         }
 
+        attempted_candidate = true;
         let key = russh::keys::load_secret_key(&path, None)?;
         let auth = handle
             .authenticate_publickey(
@@ -103,7 +124,7 @@ async fn authenticate_endpoint(
         }
     }
 
-    if endpoint.identity_files().is_empty() && default_identity_files().is_empty() {
+    if !attempted_candidate {
         return Err(RusshError::MissingIdentity(endpoint.alias.clone()));
     }
 
