@@ -169,9 +169,42 @@ impl client::Handler for ClientHandler {
                 Ok(true)
             }
             Ok(false) => Ok(false),
+            Err(russh::keys::Error::KeyChanged { .. })
+                if self.endpoint.accept_new_host_keys =>
+            {
+                remove_known_host_line(known_hosts_path, known_hosts_host, self.endpoint.port);
+                russh::keys::known_hosts::learn_known_hosts_path(
+                    known_hosts_host,
+                    self.endpoint.port,
+                    server_public_key,
+                    known_hosts_path,
+                )
+                .map_err(russh::Error::from)?;
+                Ok(true)
+            }
             Err(error) => Err(russh::Error::from(error)),
         }
     }
+}
+
+fn remove_known_host_line(path: &PathBuf, host: &str, port: u16) {
+    let host_port = if port == 22 {
+        host.to_string()
+    } else {
+        format!("[{host}]:{port}")
+    };
+    let Ok(contents) = fs::read_to_string(path) else {
+        return;
+    };
+    let filtered: String = contents
+        .lines()
+        .filter(|line| {
+            let first = line.split_whitespace().next().unwrap_or("");
+            first != host_port
+        })
+        .map(|line| format!("{line}\n"))
+        .collect();
+    let _ = fs::write(path, filtered);
 }
 
 fn default_identity_files() -> Vec<PathBuf> {

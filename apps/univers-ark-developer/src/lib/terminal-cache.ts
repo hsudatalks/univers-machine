@@ -38,7 +38,7 @@ const DEFAULT_TERMINAL_STATUS = "Connecting";
 const DEFAULT_TERMINAL_FONT_SIZE = 12;
 const DEFAULT_TERMINAL_SCROLLBACK = 1500;
 const TERMINAL_FONT_FAMILY =
-  '"SFMono-Regular", Menlo, Monaco, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", Consolas, monospace';
+  '"Cascadia Mono", "Cascadia Code", "SFMono-Regular", Menlo, Monaco, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", Consolas, monospace';
 const IME_PUNCTUATION_FALLBACK_CHARACTERS = new Set(["？", "："]);
 const PUNCTUATION_FALLBACK_DELAY_MS = 72;
 const PUNCTUATION_FALLBACK_DEDUPE_WINDOW_MS = 180;
