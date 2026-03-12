@@ -2,6 +2,7 @@ import { LayoutDashboard, Settings2, SquareTerminal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useHorizontalPanelTrack } from "../hooks/useHorizontalPanelTrack";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { visibleContainers } from "../lib/container-visibility";
 import type { DeveloperTarget, ManagedMachine } from "../types";
 import { TerminalPane } from "./TerminalPane";
 import { Button } from "./ui/button";
@@ -18,6 +19,31 @@ interface ServerPageProps {
 
 type ServerToolPanel = "dashboard" | "terminals";
 type MobileServerPanel = "terminal" | ServerToolPanel;
+const IS_MAC = navigator.platform.toUpperCase().includes("MAC");
+
+function isPlatformModifier(event: KeyboardEvent): boolean {
+  return IS_MAC ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+}
+
+function isEditableEventTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable
+  );
+}
+
+function isXtermHelperTextarea(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLTextAreaElement &&
+    target.classList.contains("xterm-helper-textarea")
+  );
+}
 
 export function ServerPage({
   onOpenSettings,
@@ -28,6 +54,24 @@ export function ServerPage({
 }: ServerPageProps) {
   const [activeTool, setActiveTool] = useState<ServerToolPanel>("dashboard");
   const terminalTarget = resolveTarget(server.hostTargetId);
+  const terminalCardElementsRef = useRef(new Map<string, HTMLElement>());
+  const focusableContainerTargetIds = useMemo(
+    () =>
+      visibleContainers(server.containers)
+        .map((container) => container.targetId)
+        .filter((targetId) => Boolean(resolveTarget(targetId))),
+    [resolveTarget, server.containers],
+  );
+  const focusableTerminalTargetIds = useMemo(
+    () =>
+      terminalTarget
+        ? [terminalTarget.id, ...focusableContainerTargetIds]
+        : focusableContainerTargetIds,
+    [focusableContainerTargetIds, terminalTarget],
+  );
+  const [focusedTerminalTargetId, setFocusedTerminalTargetId] = useState<string>(
+    () => terminalTarget?.id ?? focusableContainerTargetIds[0] ?? "",
+  );
   const isMobileLayout = useMediaQuery("(max-width: 960px)");
   const mobilePanelIds = useMemo<MobileServerPanel[]>(
     () => ["terminal", "dashboard", "terminals"],
@@ -59,6 +103,124 @@ export function ServerPage({
     setActivePanel(activeTool);
     scrollToPanel(activeTool, behavior);
   }, [activeTool, isMobileLayout, scrollToPanel, setActivePanel]);
+
+  useEffect(() => {
+    if (!focusableTerminalTargetIds.length) {
+      setFocusedTerminalTargetId("");
+      return;
+    }
+
+    setFocusedTerminalTargetId((current) =>
+      focusableTerminalTargetIds.includes(current)
+        ? current
+        : terminalTarget?.id ?? focusableContainerTargetIds[0] ?? focusableTerminalTargetIds[0],
+    );
+  }, [focusableContainerTargetIds, focusableTerminalTargetIds, terminalTarget]);
+
+  useEffect(() => {
+    if (!pageVisible || !focusedTerminalTargetId) {
+      return;
+    }
+
+    if (focusedTerminalTargetId === terminalTarget?.id) {
+      if (isMobileLayout) {
+        setActivePanel("terminal");
+        scrollToPanel("terminal");
+      }
+      return;
+    }
+
+    setActiveTool("terminals");
+
+    if (isMobileLayout) {
+      setActivePanel("terminals");
+      scrollToPanel("terminals");
+    }
+
+    const element = terminalCardElementsRef.current.get(focusedTerminalTargetId);
+    element?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [
+    focusedTerminalTargetId,
+    isMobileLayout,
+    pageVisible,
+    scrollToPanel,
+    setActivePanel,
+    terminalTarget,
+  ]);
+
+  useEffect(() => {
+    if (!pageVisible) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        !isPlatformModifier(event) ||
+        event.altKey ||
+        event.shiftKey ||
+        (event.code !== "Digit1" && event.code !== "Digit2") ||
+        (isEditableEventTarget(event.target) && !isXtermHelperTextarea(event.target))
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setActiveTool(event.code === "Digit1" ? "dashboard" : "terminals");
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [pageVisible]);
+
+  useEffect(() => {
+    if (!pageVisible || focusableTerminalTargetIds.length <= 1) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        !isPlatformModifier(event) ||
+        event.altKey ||
+        event.shiftKey ||
+        (event.key !== "ArrowLeft" && event.key !== "ArrowRight") ||
+        (isEditableEventTarget(event.target) && !isXtermHelperTextarea(event.target))
+      ) {
+        return;
+      }
+
+      const currentIndex = focusableTerminalTargetIds.findIndex(
+        (targetId) => targetId === focusedTerminalTargetId,
+      );
+
+      if (currentIndex === -1) {
+        return;
+      }
+
+      const nextIndex =
+        event.key === "ArrowLeft"
+          ? (currentIndex + focusableTerminalTargetIds.length - 1) %
+            focusableTerminalTargetIds.length
+          : (currentIndex + 1) % focusableTerminalTargetIds.length;
+
+      event.preventDefault();
+      event.stopPropagation();
+      setFocusedTerminalTargetId(focusableTerminalTargetIds[nextIndex]);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [focusableTerminalTargetIds, focusedTerminalTargetId, pageVisible]);
 
   return (
     <>
@@ -187,10 +349,25 @@ export function ServerPage({
                 data-mobile-panel="terminal"
                 ref={registerPanel("terminal")}
               >
-                <article className="panel terminal-panel mobile-panel-card">
+                <article
+                  className={`panel terminal-panel mobile-panel-card ${
+                    focusedTerminalTargetId === terminalTarget?.id ? "is-grid-focused" : ""
+                  }`}
+                  onFocusCapture={() => {
+                    if (terminalTarget) {
+                      setFocusedTerminalTargetId(terminalTarget.id);
+                    }
+                  }}
+                  onMouseDown={() => {
+                    if (terminalTarget) {
+                      setFocusedTerminalTargetId(terminalTarget.id);
+                    }
+                  }}
+                >
                   {terminalTarget ? (
                     <TerminalPane
                       active={pageVisible && activeMobilePanel === "terminal"}
+                      isFocused={focusedTerminalTargetId === terminalTarget.id}
                       target={terminalTarget}
                       title={`${server.label} host`}
                     />
@@ -223,8 +400,17 @@ export function ServerPage({
                 ref={registerPanel("terminals")}
               >
                 <ServerTerminalsPane
+                  activeFocusedTargetId={focusedTerminalTargetId}
+                  onFocusTarget={setFocusedTerminalTargetId}
                   onOpenWorkspace={onOpenWorkspace}
                   pageVisible={pageVisible && activeMobilePanel === "terminals"}
+                  registerTerminalElement={(targetId, element) => {
+                    if (element) {
+                      terminalCardElementsRef.current.set(targetId, element);
+                    } else {
+                      terminalCardElementsRef.current.delete(targetId);
+                    }
+                  }}
                   resolveTarget={resolveTarget}
                   server={server}
                 />
@@ -233,10 +419,32 @@ export function ServerPage({
           </div>
         ) : (
           <div className="server-workspace">
-            <article className="panel terminal-panel">
+            <article
+              className={`panel terminal-panel ${
+                focusedTerminalTargetId === terminalTarget?.id ? "is-grid-focused" : ""
+              }`}
+              onFocusCapture={() => {
+                if (terminalTarget) {
+                  setFocusedTerminalTargetId(terminalTarget.id);
+                }
+              }}
+              onMouseDown={() => {
+                if (terminalTarget) {
+                  setFocusedTerminalTargetId(terminalTarget.id);
+                }
+              }}
+              ref={(element) => {
+                if (element && terminalTarget) {
+                  terminalCardElementsRef.current.set(terminalTarget.id, element);
+                } else if (terminalTarget) {
+                  terminalCardElementsRef.current.delete(terminalTarget.id);
+                }
+              }}
+            >
               {terminalTarget ? (
                 <TerminalPane
                   active={pageVisible}
+                  isFocused={focusedTerminalTargetId === terminalTarget.id}
                   target={terminalTarget}
                   title={`${server.label} host`}
                 />
@@ -260,8 +468,17 @@ export function ServerPage({
 
             <div className={`server-pane-slot ${activeTool === "terminals" ? "" : "is-hidden"}`}>
               <ServerTerminalsPane
+                activeFocusedTargetId={focusedTerminalTargetId}
+                onFocusTarget={setFocusedTerminalTargetId}
                 onOpenWorkspace={onOpenWorkspace}
                 pageVisible={pageVisible && activeTool === "terminals"}
+                registerTerminalElement={(targetId, element) => {
+                  if (element) {
+                    terminalCardElementsRef.current.set(targetId, element);
+                  } else {
+                    terminalCardElementsRef.current.delete(targetId);
+                  }
+                }}
                 resolveTarget={resolveTarget}
                 server={server}
               />

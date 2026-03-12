@@ -643,12 +643,10 @@ function App() {
       }
 
       const nextIndex =
-        event.key === "ArrowLeft" ? currentIndex - 1 : currentIndex + 1;
+        event.key === "ArrowLeft"
+          ? (currentIndex + machines.length - 1) % machines.length
+          : (currentIndex + 1) % machines.length;
       const nextMachine = machines[nextIndex];
-
-      if (!nextMachine) {
-        return;
-      }
 
       event.preventDefault();
       event.stopPropagation();

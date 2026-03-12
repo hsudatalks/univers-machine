@@ -24,7 +24,8 @@
     transform 160ms ease;
 }
 
-.terminal-card.is-grid-focused {
+.terminal-card.is-grid-focused,
+.terminal-panel.is-grid-focused {
   border-color: color-mix(in srgb, var(--ring) 76%, var(--border-strong));
   box-shadow:
     0 0 0 1px color-mix(in srgb, white 74%, var(--ring)),
@@ -32,7 +33,8 @@
     0 12px 24px rgba(15, 23, 42, 0.12);
 }
 
-.terminal-card.is-grid-focused .terminal-header {
+.terminal-card.is-grid-focused .terminal-header,
+.terminal-panel.is-grid-focused .terminal-header {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 

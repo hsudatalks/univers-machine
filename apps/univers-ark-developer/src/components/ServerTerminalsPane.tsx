@@ -4,8 +4,11 @@ import { TerminalCard } from "./TerminalCard";
 import type { DeveloperTarget, ManagedContainer, ManagedMachine } from "../types";
 
 interface ServerTerminalsPaneProps {
+  activeFocusedTargetId?: string;
+  onFocusTarget: (targetId: string) => void;
   onOpenWorkspace: (targetId: string) => void;
   pageVisible: boolean;
+  registerTerminalElement?: (targetId: string, element: HTMLElement | null) => void;
   resolveTarget: (targetId: string) => DeveloperTarget | undefined;
   server: ManagedMachine;
 }
@@ -33,8 +36,11 @@ function UnavailableTerminalCard({ container }: { container: ManagedContainer })
 }
 
 export function ServerTerminalsPane({
+  activeFocusedTargetId,
+  onFocusTarget,
   onOpenWorkspace,
   pageVisible,
+  registerTerminalElement,
   resolveTarget,
   server,
 }: ServerTerminalsPaneProps) {
@@ -49,11 +55,18 @@ export function ServerTerminalsPane({
 
             return target && container.sshReachable ? (
               <TerminalCard
+                isGridFocused={container.targetId === activeFocusedTargetId}
                 key={container.targetId}
+                onFocusRequest={() => {
+                  onFocusTarget(container.targetId);
+                }}
                 onOpenWorkspace={() => {
                   onOpenWorkspace(target.id);
                 }}
                 pageVisible={pageVisible}
+                registerElement={(element) => {
+                  registerTerminalElement?.(container.targetId, element);
+                }}
                 target={target}
                 title={container.label}
               />
