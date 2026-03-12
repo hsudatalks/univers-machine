@@ -1,0 +1,68 @@
+mod lifecycle;
+mod menu;
+
+use self::{
+    lifecycle::{handle_run_event, manage_app_state, setup_app},
+    menu::{build_app_menu, handle_menu_event},
+};
+use crate::commands;
+
+pub(crate) fn run() {
+    manage_app_state(tauri::Builder::default())
+        // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right/Up
+        // on Windows, Cmd+Alt+Left/Right/Up on macOS) are handled by the menu
+        // accelerators in build_app_menu, not by global shortcuts.
+        .menu(build_app_menu)
+        .on_menu_event(|app_handle, event| {
+            handle_menu_event(app_handle, event.id().as_ref());
+        })
+        .setup(setup_app)
+        .invoke_handler(tauri::generate_handler![
+            commands::machine::load_bootstrap,
+            commands::machine::refresh_bootstrap,
+            commands::machine::load_machine_inventory,
+            commands::machine::refresh_machine_inventory,
+            commands::machine::scan_machine_inventory,
+            commands::machine::scan_ssh_config_machine_candidates,
+            commands::machine::scan_tailscale_machine_candidates,
+            commands::runtime::terminal::attach_terminal,
+            commands::runtime::terminal::restart_terminal,
+            commands::runtime::tunnel::ensure_tunnel,
+            commands::runtime::tunnel::sync_tunnel_registrations,
+            commands::runtime::tunnel::restart_tunnel,
+            commands::runtime::tunnel::restart_all_tunnels,
+            commands::runtime::terminal::list_remote_directory,
+            commands::runtime::terminal::read_remote_file_preview,
+            commands::runtime::dashboard::load_container_dashboard,
+            commands::runtime::dashboard::start_dashboard_monitor,
+            commands::runtime::dashboard::stop_dashboard_monitor,
+            commands::runtime::dashboard::refresh_container_dashboard,
+            commands::github::load_github_project_state,
+            commands::github::load_github_pull_request_detail,
+            commands::github::merge_github_pull_request,
+            commands::github::open_external_link,
+            commands::runtime::terminal::write_terminal,
+            commands::runtime::terminal::resize_terminal,
+            commands::machine::restart_container,
+            commands::runtime::misc::restart_tmux,
+            commands::runtime::misc::execute_command_service,
+            commands::runtime::misc::clipboard_write,
+            commands::runtime::misc::clipboard_read,
+            commands::machine::load_targets_config,
+            commands::machine::update_targets_config,
+            commands::settings::load_app_settings,
+            commands::diagnostics::load_app_diagnostics,
+            commands::secrets::load_secret_inventory,
+            commands::secrets::upsert_secret_provider,
+            commands::secrets::delete_secret_provider,
+            commands::secrets::upsert_secret_credential,
+            commands::secrets::delete_secret_credential,
+            commands::secrets::upsert_secret_assignment,
+            commands::secrets::delete_secret_assignment,
+            commands::settings::save_app_settings,
+            commands::runtime::misc::update_runtime_activity
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building univers-ark-developer")
+        .run(handle_run_event);
+}
