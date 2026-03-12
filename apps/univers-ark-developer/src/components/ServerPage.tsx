@@ -62,91 +62,121 @@ export function ServerPage({
 
   return (
     <>
-      <header className="content-header">
-        <div className="content-header-copy">
-          <span className="panel-title">Machine</span>
-          <div className="content-title-row">
-            <h1 className="content-title content-title-container">{server.label}</h1>
-            <span className="content-chip">{server.host}</span>
+      {isMobileLayout ? (
+        <header className="content-header content-header-mobile">
+          <div className="content-header-mobile-topline">
+            <div className="content-header-copy">
+              <span className="panel-title">Machine</span>
+              <div className="content-title-row">
+                <h1 className="content-title content-title-container">{server.label}</h1>
+                <span className="content-chip">{server.host}</span>
+              </div>
+            </div>
+
+            <div className="content-header-mobile-actions">
+              <Button
+                aria-label={`Open ${server.label} settings`}
+                onClick={onOpenSettings}
+                size="icon"
+                title="Machine settings"
+                variant="ghost"
+              >
+                <Settings2 size={16} />
+              </Button>
+            </div>
           </div>
-        </div>
 
-        <div className="content-header-tools">
-          <Button
-            aria-label={`Open ${server.label} settings`}
-            onClick={onOpenSettings}
-            size="icon"
-            title="Machine settings"
-            variant="ghost"
-          >
-            <Settings2 size={16} />
-          </Button>
-          <Button
-            aria-label="Host terminal"
-            className="content-header-tool-mobile-only"
-            isActive={isMobileLayout ? activeMobilePanel === "terminal" : false}
-            onClick={() => {
-              setActivePanel("terminal");
-              scrollToPanel("terminal");
-            }}
-            size="icon"
-            title="Host terminal"
-            variant={isMobileLayout && activeMobilePanel === "terminal" ? "default" : "ghost"}
-          >
-            <SquareTerminal size={16} />
-          </Button>
-          <Button
-            aria-label="Machine dashboard"
-            isActive={isMobileLayout ? activeMobilePanel === "dashboard" : activeTool === "dashboard"}
-            onClick={() => {
-              setActiveTool("dashboard");
-
-              if (isMobileLayout) {
+          <div aria-label="Machine panels" className="content-panel-rail">
+            <Button
+              className="content-panel-rail-button"
+              isActive={activeMobilePanel === "terminal"}
+              onClick={() => {
+                setActivePanel("terminal");
+                scrollToPanel("terminal");
+              }}
+              size="sm"
+              variant={activeMobilePanel === "terminal" ? "default" : "outline"}
+            >
+              <SquareTerminal size={14} />
+              Host
+            </Button>
+            <Button
+              className="content-panel-rail-button"
+              isActive={activeMobilePanel === "dashboard"}
+              onClick={() => {
+                setActiveTool("dashboard");
                 setActivePanel("dashboard");
                 scrollToPanel("dashboard");
-              }
-            }}
-            size="icon"
-            title="Machine dashboard"
-            variant={
-              isMobileLayout
-                ? activeMobilePanel === "dashboard"
-                  ? "default"
-                  : "ghost"
-                : activeTool === "dashboard"
-                  ? "default"
-                  : "ghost"
-            }
-          >
-            <LayoutDashboard size={16} />
-          </Button>
-          <Button
-            aria-label="Container terminals"
-            isActive={isMobileLayout ? activeMobilePanel === "terminals" : activeTool === "terminals"}
-            onClick={() => {
-              setActiveTool("terminals");
-
-              if (isMobileLayout) {
+              }}
+              size="sm"
+              variant={activeMobilePanel === "dashboard" ? "default" : "outline"}
+            >
+              <LayoutDashboard size={14} />
+              Dashboard
+            </Button>
+            <Button
+              className="content-panel-rail-button"
+              isActive={activeMobilePanel === "terminals"}
+              onClick={() => {
+                setActiveTool("terminals");
                 setActivePanel("terminals");
                 scrollToPanel("terminals");
-              }
-            }}
-            size="icon"
-            title="Container terminals"
-            variant={
-              isMobileLayout
-                ? activeMobilePanel === "terminals"
-                  ? "default"
-                  : "ghost"
-                : activeTool === "terminals"
-                  ? "default"
-                  : "ghost"
-            }
-          >
-            <SquareTerminal size={16} />
-          </Button>
-        </div>
-      </header>
+              }}
+              size="sm"
+              variant={activeMobilePanel === "terminals" ? "default" : "outline"}
+            >
+              <SquareTerminal size={14} />
+              Containers
+            </Button>
+          </div>
+        </header>
+      ) : (
+        <header className="content-header">
+          <div className="content-header-copy">
+            <span className="panel-title">Machine</span>
+            <div className="content-title-row">
+              <h1 className="content-title content-title-container">{server.label}</h1>
+              <span className="content-chip">{server.host}</span>
+            </div>
+          </div>
+
+          <div className="content-header-tools">
+            <Button
+              aria-label={`Open ${server.label} settings`}
+              onClick={onOpenSettings}
+              size="icon"
+              title="Machine settings"
+              variant="ghost"
+            >
+              <Settings2 size={16} />
+            </Button>
+            <Button
+              aria-label="Machine dashboard"
+              isActive={activeTool === "dashboard"}
+              onClick={() => {
+                setActiveTool("dashboard");
+              }}
+              size="icon"
+              title="Machine dashboard"
+              variant={activeTool === "dashboard" ? "default" : "ghost"}
+            >
+              <LayoutDashboard size={16} />
+            </Button>
+            <Button
+              aria-label="Container terminals"
+              isActive={activeTool === "terminals"}
+              onClick={() => {
+                setActiveTool("terminals");
+              }}
+              size="icon"
+              title="Container terminals"
+              variant={activeTool === "terminals" ? "default" : "ghost"}
+            >
+              <SquareTerminal size={16} />
+            </Button>
+          </div>
+        </header>
+      )}
 
       <section className="page-section">
         {isMobileLayout ? (

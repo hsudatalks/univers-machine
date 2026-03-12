@@ -293,6 +293,56 @@
   height: 100%;
 }
 
+.mobile-sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  pointer-events: none;
+}
+
+.mobile-sidebar-overlay.is-open {
+  pointer-events: auto;
+}
+
+.mobile-sidebar-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(15, 23, 42, 0.42);
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.mobile-sidebar-drawer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(21rem, 86vw);
+  max-width: 100%;
+  padding:
+    max(1rem, env(safe-area-inset-top))
+    0.9rem
+    max(1rem, env(safe-area-inset-bottom));
+  border-right: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow-md);
+  transform: translateX(-100%);
+  transition: transform 180ms ease;
+}
+
+.mobile-sidebar-drawer .sidebar {
+  height: 100%;
+}
+
+.mobile-sidebar-overlay.is-open .mobile-sidebar-backdrop {
+  opacity: 1;
+}
+
+.mobile-sidebar-overlay.is-open .mobile-sidebar-drawer {
+  transform: translateX(0);
+}
+
 .content-page {
   min-height: 0;
   display: grid;
@@ -419,8 +469,45 @@
   flex-wrap: wrap;
 }
 
-.content-header-tool-mobile-only {
+.content-header-mobile {
+  gap: 0.75rem;
+}
+
+.content-header-mobile-topline {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.content-header-mobile-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+
+.content-panel-rail {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.content-panel-rail::-webkit-scrollbar {
   display: none;
+}
+
+.content-panel-rail-button {
+  flex: 0 0 auto;
 }
 
 .content-header-overview .content-header-copy {
@@ -681,12 +768,29 @@
     flex-wrap: wrap;
   }
 
-  .content-header-tool-mobile-only {
-    display: inline-flex;
-  }
-
   .content-title-toggle-desktop {
     display: none;
+  }
+
+  .content-header-mobile-topline {
+    align-items: center;
+  }
+
+  .content-header-mobile-actions {
+    align-self: flex-start;
+  }
+
+  .content-panel-rail {
+    padding-bottom: 0.1rem;
+  }
+
+  .content-page-container {
+    padding-inline: max(0.75rem, env(safe-area-inset-left))
+      max(0.75rem, env(safe-area-inset-right));
+  }
+
+  .shell-sidebar-hidden .content-shell-overview {
+    margin-inline: 0;
   }
 }
 

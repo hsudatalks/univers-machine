@@ -120,221 +120,286 @@ export function ContainerPage({
 
   return (
     <>
-      <header className="content-header content-header-container">
-        <div className="content-header-leading">
-          <Button
-            aria-label={
-              isTerminalCollapsed ? "Show terminal pane" : "Hide terminal pane"
-            }
-            className="content-title-toggle content-title-toggle-desktop"
-            onClick={onToggleTerminalCollapsed}
-            size="icon"
-            title={
-              isTerminalCollapsed ? "Show terminal pane" : "Hide terminal pane"
-            }
-            variant="ghost"
-          >
-            <svg
-              aria-hidden="true"
-              className="panel-button-icon-svg"
-              fill="none"
-              viewBox="0 0 16 16"
-            >
-              <path
-                d="M2.75 3.25h10.5v9.5H2.75z"
-                stroke="currentColor"
-                strokeWidth="1.25"
-              />
-              <path
-                d="M4.5 6.1 6.55 8 4.5 9.9"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.25"
-              />
-              <path
-                d="M7.85 10.1h3.2"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeWidth="1.25"
-              />
-              {isTerminalCollapsed ? (
-                <path
-                  d="M3.35 3.35 12.65 12.65"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeWidth="1.1"
-                />
-              ) : null}
-            </svg>
-          </Button>
-        </div>
+      {isMobileLayout ? (
+        <header className="content-header content-header-mobile">
+          <div className="content-header-mobile-topline">
+            <div className="content-header-copy">
+              <span className="panel-title">Container</span>
+              <div className="content-title-row">
+                <h1 className="content-title content-title-container">{target.label}</h1>
+              </div>
+            </div>
 
-        <div className="content-header-copy">
-          <div className="content-title-row">
-            <h1 className="content-title content-title-container">{target.label}</h1>
+            {onRestartContainer ? (
+              <div className="content-header-mobile-actions">
+                <Button
+                  aria-label={isRestarting ? "Restarting container" : "Restart container"}
+                  disabled={isRestarting}
+                  onClick={() => {
+                    setIsRestarting(true);
+                    onRestartContainer()
+                      .catch(() => {})
+                      .finally(() => {
+                        setIsRestarting(false);
+                      });
+                  }}
+                  size="icon"
+                  title={isRestarting ? "Restarting container…" : "Restart container"}
+                  variant="ghost"
+                >
+                  <svg
+                    aria-hidden="true"
+                    className={`panel-button-icon-svg ${isRestarting ? "is-spinning" : ""}`}
+                    fill="none"
+                    viewBox="0 0 16 16"
+                  >
+                    <path
+                      d="M13.25 8A5.25 5.25 0 1 1 11.7 4.29"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.25"
+                    />
+                    <path
+                      d="M10.75 2.75h2.5v2.5"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.25"
+                    />
+                  </svg>
+                </Button>
+              </div>
+            ) : null}
           </div>
-        </div>
 
-        <div className="content-header-tools content-header-tools-container">
-          <Button
-            aria-label="Terminal"
-            className="content-header-tool-mobile-only"
-            isActive={isMobileLayout ? activeMobilePanel === "terminal" : false}
-            onClick={() => {
-              setActivePanel("terminal");
-              scrollToPanel("terminal");
-            }}
-            size="icon"
-            title="Terminal"
-            variant={isMobileLayout && activeMobilePanel === "terminal" ? "default" : "ghost"}
-          >
-            <SquareTerminal size={16} />
-          </Button>
-          <Button
-            aria-label="Dashboard"
-            isActive={isMobileLayout ? activeMobilePanel === "dashboard" : activeTool === "dashboard"}
-            onClick={() => {
-              onSelectTool("dashboard");
-
-              if (isMobileLayout) {
+          <div aria-label="Container panels" className="content-panel-rail">
+            <Button
+              className="content-panel-rail-button"
+              isActive={activeMobilePanel === "terminal"}
+              onClick={() => {
+                setActivePanel("terminal");
+                scrollToPanel("terminal");
+              }}
+              size="sm"
+              variant={activeMobilePanel === "terminal" ? "default" : "outline"}
+            >
+              <SquareTerminal size={14} />
+              Terminal
+            </Button>
+            <Button
+              className="content-panel-rail-button"
+              isActive={activeMobilePanel === "dashboard"}
+              onClick={() => {
+                onSelectTool("dashboard");
                 setActivePanel("dashboard");
                 scrollToPanel("dashboard");
-              }
-            }}
-            size="icon"
-            title="Dashboard"
-            variant={
-              isMobileLayout
-                ? activeMobilePanel === "dashboard"
-                  ? "default"
-                  : "ghost"
-                : activeTool === "dashboard"
-                  ? "default"
-                  : "ghost"
-            }
-          >
-            <LayoutDashboard size={16} />
-          </Button>
-          <Button
-            aria-label="Services"
-            isActive={isMobileLayout ? activeMobilePanel === "services" : activeTool === "services"}
-            onClick={() => {
-              onSelectTool("services");
-
-              if (isMobileLayout) {
+              }}
+              size="sm"
+              variant={activeMobilePanel === "dashboard" ? "default" : "outline"}
+            >
+              <LayoutDashboard size={14} />
+              Dashboard
+            </Button>
+            <Button
+              className="content-panel-rail-button"
+              isActive={activeMobilePanel === "services"}
+              onClick={() => {
+                onSelectTool("services");
                 setActivePanel("services");
                 scrollToPanel("services");
-              }
-            }}
-            size="icon"
-            title="Services"
-            variant={
-              isMobileLayout
-                ? activeMobilePanel === "services"
-                  ? "default"
-                  : "ghost"
-                : activeTool === "services"
-                  ? "default"
-                  : "ghost"
-            }
-          >
-            <Rows4 size={16} />
-          </Button>
-          <Button
-            aria-label="Files"
-            isActive={isMobileLayout ? activeMobilePanel === "files" : activeTool === "files"}
-            onClick={() => {
-              onSelectTool("files");
-
-              if (isMobileLayout) {
+              }}
+              size="sm"
+              variant={activeMobilePanel === "services" ? "default" : "outline"}
+            >
+              <Rows4 size={14} />
+              Services
+            </Button>
+            <Button
+              className="content-panel-rail-button"
+              isActive={activeMobilePanel === "files"}
+              onClick={() => {
+                onSelectTool("files");
                 setActivePanel("files");
                 scrollToPanel("files");
-              }
-            }}
-            size="icon"
-            title="Files"
-            variant={
-              isMobileLayout
-                ? activeMobilePanel === "files"
-                  ? "default"
-                  : "ghost"
-                : activeTool === "files"
-                  ? "default"
-                  : "ghost"
-            }
-          >
-            <FolderOpen size={16} />
-          </Button>
-          <Button
-            aria-label={primaryBrowserSurface?.label ?? "Primary browser"}
-            disabled={!primaryBrowserSurface}
-            isActive={isMobileLayout ? activeMobilePanel === "browser" : activeTool === browserPanel}
-            onClick={() => {
-              if (browserPanel) {
-                onSelectTool(browserPanel);
-
-                if (isMobileLayout) {
-                  setActivePanel("browser");
-                  scrollToPanel("browser");
-                }
-              }
-            }}
-            size="icon"
-            title={primaryBrowserSurface?.label ?? "Primary browser"}
-            variant={
-              isMobileLayout
-                ? activeMobilePanel === "browser"
-                  ? "default"
-                  : "ghost"
-                : activeTool === browserPanel
-                  ? "default"
-                  : "ghost"
-            }
-          >
-            <Globe size={16} />
-          </Button>
-
-          {onRestartContainer ? (
-            <Button
-              disabled={isRestarting}
-              onClick={() => {
-                setIsRestarting(true);
-                onRestartContainer()
-                  .catch(() => {})
-                  .finally(() => {
-                    setIsRestarting(false);
-                  });
               }}
+              size="sm"
+              variant={activeMobilePanel === "files" ? "default" : "outline"}
+            >
+              <FolderOpen size={14} />
+              Files
+            </Button>
+            {browserSurface ? (
+              <Button
+                className="content-panel-rail-button"
+                isActive={activeMobilePanel === "browser"}
+                onClick={() => {
+                  if (browserPanel) {
+                    onSelectTool(browserPanel);
+                    setActivePanel("browser");
+                    scrollToPanel("browser");
+                  }
+                }}
+                size="sm"
+                variant={activeMobilePanel === "browser" ? "default" : "outline"}
+              >
+                <Globe size={14} />
+                {primaryBrowserSurface?.label ?? "Browser"}
+              </Button>
+            ) : null}
+          </div>
+        </header>
+      ) : (
+        <header className="content-header content-header-container">
+          <div className="content-header-leading">
+            <Button
+              aria-label={
+                isTerminalCollapsed ? "Show terminal pane" : "Hide terminal pane"
+              }
+              className="content-title-toggle content-title-toggle-desktop"
+              onClick={onToggleTerminalCollapsed}
               size="icon"
-              title={isRestarting ? "Restarting container…" : "Restart container"}
+              title={
+                isTerminalCollapsed ? "Show terminal pane" : "Hide terminal pane"
+              }
               variant="ghost"
             >
               <svg
                 aria-hidden="true"
-                className={`panel-button-icon-svg ${isRestarting ? "is-spinning" : ""}`}
+                className="panel-button-icon-svg"
                 fill="none"
                 viewBox="0 0 16 16"
               >
                 <path
-                  d="M13.25 8A5.25 5.25 0 1 1 11.7 4.29"
+                  d="M2.75 3.25h10.5v9.5H2.75z"
+                  stroke="currentColor"
+                  strokeWidth="1.25"
+                />
+                <path
+                  d="M4.5 6.1 6.55 8 4.5 9.9"
                   stroke="currentColor"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="1.25"
                 />
                 <path
-                  d="M10.75 2.75h2.5v2.5"
+                  d="M7.85 10.1h3.2"
                   stroke="currentColor"
                   strokeLinecap="round"
-                  strokeLinejoin="round"
                   strokeWidth="1.25"
                 />
+                {isTerminalCollapsed ? (
+                  <path
+                    d="M3.35 3.35 12.65 12.65"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeWidth="1.1"
+                  />
+                ) : null}
               </svg>
             </Button>
-          ) : null}
-        </div>
-      </header>
+          </div>
+
+          <div className="content-header-copy">
+            <div className="content-title-row">
+              <h1 className="content-title content-title-container">{target.label}</h1>
+            </div>
+          </div>
+
+          <div className="content-header-tools content-header-tools-container">
+            <Button
+              aria-label="Dashboard"
+              isActive={activeTool === "dashboard"}
+              onClick={() => {
+                onSelectTool("dashboard");
+              }}
+              size="icon"
+              title="Dashboard"
+              variant={activeTool === "dashboard" ? "default" : "ghost"}
+            >
+              <LayoutDashboard size={16} />
+            </Button>
+            <Button
+              aria-label="Services"
+              isActive={activeTool === "services"}
+              onClick={() => {
+                onSelectTool("services");
+              }}
+              size="icon"
+              title="Services"
+              variant={activeTool === "services" ? "default" : "ghost"}
+            >
+              <Rows4 size={16} />
+            </Button>
+            <Button
+              aria-label="Files"
+              isActive={activeTool === "files"}
+              onClick={() => {
+                onSelectTool("files");
+              }}
+              size="icon"
+              title="Files"
+              variant={activeTool === "files" ? "default" : "ghost"}
+            >
+              <FolderOpen size={16} />
+            </Button>
+            <Button
+              aria-label={primaryBrowserSurface?.label ?? "Primary browser"}
+              disabled={!primaryBrowserSurface}
+              isActive={activeTool === browserPanel}
+              onClick={() => {
+                if (browserPanel) {
+                  onSelectTool(browserPanel);
+                }
+              }}
+              size="icon"
+              title={primaryBrowserSurface?.label ?? "Primary browser"}
+              variant={activeTool === browserPanel ? "default" : "ghost"}
+            >
+              <Globe size={16} />
+            </Button>
+
+            {onRestartContainer ? (
+              <Button
+                disabled={isRestarting}
+                onClick={() => {
+                  setIsRestarting(true);
+                  onRestartContainer()
+                    .catch(() => {})
+                    .finally(() => {
+                      setIsRestarting(false);
+                    });
+                }}
+                size="icon"
+                title={isRestarting ? "Restarting container…" : "Restart container"}
+                variant="ghost"
+              >
+                <svg
+                  aria-hidden="true"
+                  className={`panel-button-icon-svg ${isRestarting ? "is-spinning" : ""}`}
+                  fill="none"
+                  viewBox="0 0 16 16"
+                >
+                  <path
+                    d="M13.25 8A5.25 5.25 0 1 1 11.7 4.29"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1.25"
+                  />
+                  <path
+                    d="M10.75 2.75h2.5v2.5"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1.25"
+                  />
+                </svg>
+              </Button>
+            ) : null}
+          </div>
+        </header>
+      )}
 
       <section className="page-section">
         {isMobileLayout ? (
