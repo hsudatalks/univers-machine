@@ -1,19 +1,34 @@
 use super::{
-    current_username, default_known_hosts_path, targets_file_name, RawTargetsFile,
-    RemoteContainerServer,
     LOCAL_MACHINE_DESCRIPTION, LOCAL_MACHINE_HOST, LOCAL_MACHINE_ID, LOCAL_MACHINE_LABEL,
+    RawTargetsFile, RemoteContainerServer, current_username, default_known_hosts_path,
 };
-use crate::machine::inventory::clear_targets_cache;
-use crate::machine::ssh::{machine_host_key_alias, resolved_known_hosts_path};
+use crate::machine::{
+    fs_store::{
+        initialize_targets_file_storage, read_targets_file_content, sanitize_targets_json_content,
+        write_targets_file_content,
+    },
+    inventory::clear_targets_cache,
+    ssh::{machine_host_key_alias, resolved_known_hosts_path},
+};
 use crate::models::{ContainerWorkspace, MachineTransport};
 use serde_json::{Value, json};
-use std::{fs, path::PathBuf, sync::OnceLock, time::Duration};
-use tauri::{AppHandle, Manager, Runtime, path::BaseDirectory};
+use std::time::Duration;
+use tauri::{AppHandle, Runtime};
 use univers_ark_russh::{
     ClientOptions as RusshClientOptions, ResolvedEndpoint, ResolvedEndpointChain, execute_chain,
 };
 
-const BUNDLED_TARGETS_TEMPLATE_NAME: &str = "developer-targets.json";
+pub(super) trait MachineRepository {
+    fn read_raw_targets_file(&self) -> Result<RawTargetsFile, String>;
+    fn read_targets_config(&self) -> Result<String, String>;
+    fn save_targets_config(&self, content: &str) -> Result<(), String>;
+}
+
+pub(super) struct FsMachineRepository;
+
+fn default_repository() -> FsMachineRepository {
+    FsMachineRepository
+}
 
 fn preferred_local_profile(raw_targets_file: &RawTargetsFile) -> String {
     if raw_targets_file.profiles.contains_key("ark-workbench") {
@@ -143,14 +158,24 @@ fn local_machine_available() -> bool {
         .unwrap_or(false)
 }
 
-fn sync_local_machine_config(config_path: &PathBuf) -> Result<(), String> {
-    let raw_content = fs::read_to_string(config_path)
-        .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))?;
+fn sync_local_machine_config() -> Result<(), String> {
+    let raw_content = read_targets_file_content()?;
     let sanitized_content = sanitize_targets_json_content(&raw_content)?;
-    let raw_targets_file: RawTargetsFile = serde_json::from_str(&sanitized_content)
-        .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))?;
-    let mut raw_json: Value = serde_json::from_str(&sanitized_content)
-        .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))?;
+    let raw_targets_file: RawTargetsFile =
+        serde_json::from_str(&sanitized_content).map_err(|error| {
+            format!(
+                "Failed to parse {}: {}",
+                super::fs_store::targets_file_path().display(),
+                error
+            )
+        })?;
+    let mut raw_json: Value = serde_json::from_str(&sanitized_content).map_err(|error| {
+        format!(
+            "Failed to parse {}: {}",
+            super::fs_store::targets_file_path().display(),
+            error
+        )
+    })?;
     let Some(machines) = raw_json.get_mut("machines").and_then(Value::as_array_mut) else {
         return Err(String::from("Config is missing machines."));
     };
@@ -203,138 +228,65 @@ fn sync_local_machine_config(config_path: &PathBuf) -> Result<(), String> {
 
     let next_content = serde_json::to_string_pretty(&raw_json)
         .map_err(|error| format!("Failed to serialize updated config: {}", error))?;
-    fs::write(config_path, next_content)
-        .map_err(|error| format!("Failed to write {}: {}", config_path.display(), error))?;
+    write_targets_file_content(&next_content)?;
     clear_targets_cache();
     Ok(())
 }
 
-fn configured_targets_path() -> &'static OnceLock<PathBuf> {
-    static CONFIGURED_TARGETS_PATH: OnceLock<PathBuf> = OnceLock::new();
-    &CONFIGURED_TARGETS_PATH
+impl FsMachineRepository {
+    fn initialize_targets_file_path<R: Runtime>(
+        &self,
+        app_handle: &AppHandle<R>,
+    ) -> Result<std::path::PathBuf, String> {
+        let writable_targets_path = initialize_targets_file_storage(app_handle)?;
+        sync_local_machine_config()?;
+        Ok(writable_targets_path)
+    }
 }
 
-pub(crate) fn univers_config_dir() -> Result<PathBuf, String> {
-    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-        .map(PathBuf::from)
-        .ok_or_else(|| String::from("Failed to resolve user home directory"))?;
+impl MachineRepository for FsMachineRepository {
+    fn read_raw_targets_file(&self) -> Result<RawTargetsFile, String> {
+        let content = read_targets_file_content()?;
+        let sanitized = sanitize_targets_json_content(&content)?;
+        serde_json::from_str::<RawTargetsFile>(&sanitized).map_err(|error| {
+            format!(
+                "Failed to parse {}: {}",
+                super::fs_store::targets_file_path().display(),
+                error
+            )
+        })
+    }
 
-    Ok(home.join(".univers"))
-}
+    fn read_targets_config(&self) -> Result<String, String> {
+        let content = read_targets_file_content()?;
+        sanitize_targets_json_content(&content)
+    }
 
-pub(crate) fn app_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
-}
+    fn save_targets_config(&self, content: &str) -> Result<(), String> {
+        let sanitized_content = sanitize_targets_json_content(content)?;
+        serde_json::from_str::<RawTargetsFile>(&sanitized_content)
+            .map_err(|error| format!("Invalid config JSON: {}", error))?;
 
-pub(crate) fn targets_file_path() -> PathBuf {
-    configured_targets_path().get().cloned().unwrap_or_else(|| {
-        univers_config_dir()
-            .map(|dir| dir.join(targets_file_name()))
-            .unwrap_or_else(|_| app_root().join(targets_file_name()))
-    })
-}
-
-fn bundled_targets_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> PathBuf {
-    app_handle
-        .path()
-        .resolve(BUNDLED_TARGETS_TEMPLATE_NAME, BaseDirectory::Resource)
-        .unwrap_or_else(|_| app_root().join(BUNDLED_TARGETS_TEMPLATE_NAME))
-}
-
-fn legacy_targets_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> Option<PathBuf> {
-    app_handle
-        .path()
-        .app_config_dir()
-        .ok()
-        .map(|dir| dir.join(BUNDLED_TARGETS_TEMPLATE_NAME))
-        .filter(|path| path.exists())
+        write_targets_file_content(&sanitized_content)?;
+        clear_targets_cache();
+        Ok(())
+    }
 }
 
 pub(crate) fn initialize_targets_file_path<R: Runtime>(
     app_handle: &AppHandle<R>,
-) -> Result<PathBuf, String> {
-    let app_config_dir = univers_config_dir()?;
-
-    fs::create_dir_all(&app_config_dir).map_err(|error| {
-        format!(
-            "Failed to create config directory {}: {}",
-            app_config_dir.display(),
-            error
-        )
-    })?;
-
-    let writable_targets_path = app_config_dir.join(targets_file_name());
-
-    if !writable_targets_path.exists() {
-        let source_path = legacy_targets_file_path(app_handle)
-            .unwrap_or_else(|| bundled_targets_file_path(app_handle));
-
-        fs::copy(&source_path, &writable_targets_path).map_err(|error| {
-            format!(
-                "Failed to initialize targets file from {} to {}: {}",
-                source_path.display(),
-                writable_targets_path.display(),
-                error
-            )
-        })?;
-    }
-
-    let _ = configured_targets_path().set(writable_targets_path.clone());
-    sync_local_machine_config(&writable_targets_path)?;
-
-    Ok(writable_targets_path)
-}
-
-fn sanitize_workspace_aliases(value: &mut Value) {
-    match value {
-        Value::Object(map) => {
-            if let Some(legacy_value) = map.remove("primaryBrowserServiceId") {
-                map.entry(String::from("primaryWebServiceId"))
-                    .or_insert(legacy_value);
-            }
-
-            map.values_mut().for_each(sanitize_workspace_aliases);
-        }
-        Value::Array(items) => items.iter_mut().for_each(sanitize_workspace_aliases),
-        _ => {}
-    }
-}
-
-pub(super) fn sanitize_targets_json_content(content: &str) -> Result<String, String> {
-    let mut value: Value =
-        serde_json::from_str(content).map_err(|error| format!("Invalid config JSON: {}", error))?;
-    sanitize_workspace_aliases(&mut value);
-    serde_json::to_string_pretty(&value)
-        .map_err(|error| format!("Failed to serialize sanitized config JSON: {}", error))
+) -> Result<std::path::PathBuf, String> {
+    default_repository().initialize_targets_file_path(app_handle)
 }
 
 pub(super) fn read_raw_targets_file() -> Result<RawTargetsFile, String> {
-    let config_path = targets_file_path();
-    let content = fs::read_to_string(&config_path)
-        .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))?;
-
-    let sanitized = sanitize_targets_json_content(&content)?;
-    serde_json::from_str::<RawTargetsFile>(&sanitized)
-        .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))
+    default_repository().read_raw_targets_file()
 }
 
 pub(crate) fn read_targets_config() -> Result<String, String> {
-    let config_path = targets_file_path();
-    let content = fs::read_to_string(&config_path)
-        .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))?;
-
-    sanitize_targets_json_content(&content)
+    default_repository().read_targets_config()
 }
 
 pub(crate) fn save_targets_config(content: &str) -> Result<(), String> {
-    let sanitized_content = sanitize_targets_json_content(content)?;
-    serde_json::from_str::<RawTargetsFile>(&sanitized_content)
-        .map_err(|error| format!("Invalid config JSON: {}", error))?;
-
-    let config_path = targets_file_path();
-    fs::write(&config_path, sanitized_content)
-        .map_err(|error| format!("Failed to write {}: {}", config_path.display(), error))?;
-
-    clear_targets_cache();
-    Ok(())
+    default_repository().save_targets_config(content)
 }

@@ -5,12 +5,13 @@ use super::{
         cached_remote_server_inventory, discover_remote_server_inventory,
         inventory_from_scanned_containers, scan_server_containers,
     },
+    fs_store::{read_targets_file_content, sanitize_targets_json_content, targets_file_path},
     profiles::{ContainerProfiles, apply_profile_defaults_to_remote_server},
-    store::{read_raw_targets_file, sanitize_targets_json_content, save_targets_config, targets_file_path},
+    repository::{read_raw_targets_file, save_targets_config},
 };
 use crate::models::{DeveloperTarget, ManagedContainerKind, ManagedServer, TargetsFile};
 use serde_json::{Value, json};
-use std::{fs, sync::{Mutex, OnceLock}};
+use std::sync::{Mutex, OnceLock};
 
 fn targets_cache() -> &'static Mutex<Option<CachedResolvedInventory>> {
     static TARGETS_CACHE: OnceLock<Mutex<Option<CachedResolvedInventory>>> = OnceLock::new();
@@ -191,8 +192,7 @@ pub(super) fn discovered_container_to_manual_value(
 
 pub(crate) fn scan_and_store_server_inventory(server_id: &str) -> Result<ManagedServer, String> {
     let config_path = targets_file_path();
-    let raw_content = fs::read_to_string(&config_path)
-        .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))?;
+    let raw_content = read_targets_file_content()?;
     let sanitized_content = sanitize_targets_json_content(&raw_content)?;
     let mut raw_json: Value = serde_json::from_str(&sanitized_content)
         .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))?;
