@@ -2,7 +2,6 @@ mod activity;
 mod app;
 mod cleanup;
 mod commands;
-mod config;
 mod connectivity;
 mod constants;
 mod dashboard;

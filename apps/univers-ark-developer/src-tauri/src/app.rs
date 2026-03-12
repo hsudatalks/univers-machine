@@ -1,26 +1,24 @@
 use crate::{
+    cleanup::cleanup_stale_ssh_tunnels,
     commands,
     machine::initialize_targets_file_path,
-    dashboard::stop_all_dashboard_monitors,
     models::{
         ConnectivityState, DashboardState, RuntimeActivityState, SchedulerState, ServiceState,
         TerminalState, TunnelState,
     },
-    scheduler::{start_background_scheduler, stop_background_scheduler},
+    runtime::{
+        dashboard::stop_all_dashboard_monitors,
+        scheduler::{start_background_scheduler, stop_background_scheduler},
+        tunnel::stop_all_tunnels,
+    },
     secrets::SecretManagementState,
-    tunnel::stop_all_tunnels,
 };
-use tauri::{AppHandle, Manager, Runtime};
-
-#[cfg(desktop)]
-use crate::cleanup::cleanup_stale_ssh_tunnels;
-
-#[cfg(desktop)]
-use tauri::Emitter;
-
-#[cfg(desktop)]
-use tauri::menu::{
-    AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
+use tauri::{
+    AppHandle, Emitter, Manager, Runtime,
+    menu::{
+        AboutMetadata, HELP_SUBMENU_ID, Menu, MenuItem, PredefinedMenuItem, Submenu,
+        WINDOW_SUBMENU_ID,
+    },
 };
 
 const TOGGLE_SIDEBAR_MENU_ID: &str = "toggle_sidebar";
@@ -280,39 +278,39 @@ pub(crate) fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::load_bootstrap,
-            commands::refresh_bootstrap,
-            commands::load_machine_inventory,
-            commands::refresh_machine_inventory,
-            commands::scan_machine_inventory,
-            commands::scan_ssh_config_machine_candidates,
-            commands::scan_tailscale_machine_candidates,
-            commands::attach_terminal,
-            commands::restart_terminal,
-            commands::ensure_tunnel,
-            commands::sync_tunnel_registrations,
-            commands::restart_tunnel,
-            commands::restart_all_tunnels,
-            commands::list_remote_directory,
-            commands::read_remote_file_preview,
-            commands::load_container_dashboard,
-            commands::start_dashboard_monitor,
-            commands::stop_dashboard_monitor,
-            commands::refresh_container_dashboard,
-            commands::load_github_project_state,
-            commands::load_github_pull_request_detail,
-            commands::merge_github_pull_request,
-            commands::open_external_link,
-            commands::write_terminal,
-            commands::resize_terminal,
-            commands::restart_container,
-            commands::restart_tmux,
-            commands::execute_command_service,
-            commands::clipboard_write,
-            commands::clipboard_read,
-            commands::load_targets_config,
-            commands::update_targets_config,
-            commands::load_app_settings,
+            commands::machine::load_bootstrap,
+            commands::machine::refresh_bootstrap,
+            commands::machine::load_machine_inventory,
+            commands::machine::refresh_machine_inventory,
+            commands::machine::scan_machine_inventory,
+            commands::machine::scan_ssh_config_machine_candidates,
+            commands::machine::scan_tailscale_machine_candidates,
+            commands::runtime::attach_terminal,
+            commands::runtime::restart_terminal,
+            commands::runtime::ensure_tunnel,
+            commands::runtime::sync_tunnel_registrations,
+            commands::runtime::restart_tunnel,
+            commands::runtime::restart_all_tunnels,
+            commands::runtime::list_remote_directory,
+            commands::runtime::read_remote_file_preview,
+            commands::runtime::load_container_dashboard,
+            commands::runtime::start_dashboard_monitor,
+            commands::runtime::stop_dashboard_monitor,
+            commands::runtime::refresh_container_dashboard,
+            commands::github::load_github_project_state,
+            commands::github::load_github_pull_request_detail,
+            commands::github::merge_github_pull_request,
+            commands::github::open_external_link,
+            commands::runtime::write_terminal,
+            commands::runtime::resize_terminal,
+            commands::machine::restart_container,
+            commands::runtime::restart_tmux,
+            commands::runtime::execute_command_service,
+            commands::runtime::clipboard_write,
+            commands::runtime::clipboard_read,
+            commands::machine::load_targets_config,
+            commands::machine::update_targets_config,
+            commands::settings::load_app_settings,
             commands::diagnostics::load_app_diagnostics,
             commands::secrets::load_secret_inventory,
             commands::secrets::upsert_secret_provider,
@@ -321,8 +319,8 @@ pub(crate) fn run() {
             commands::secrets::delete_secret_credential,
             commands::secrets::upsert_secret_assignment,
             commands::secrets::delete_secret_assignment,
-            commands::save_app_settings,
-            commands::update_runtime_activity
+            commands::settings::save_app_settings,
+            commands::runtime::update_runtime_activity
         ])
         .build(tauri::generate_context!())
         .expect("error while building univers-ark-developer")
