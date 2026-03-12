@@ -88,6 +88,7 @@ export interface MachineConfig {
   targetLabelTemplate: string;
   targetHostTemplate: string;
   targetDescriptionTemplate: string;
+  hostTerminalStartupCommand: string;
   terminalCommandTemplate: string;
   notes: string[];
   workspace: ContainerWorkspace;
@@ -340,6 +341,7 @@ export function createEmptyMachine(profileId = ""): MachineConfig {
     targetLabelTemplate: "",
     targetHostTemplate: "{machineHost}",
     targetDescriptionTemplate: "",
+    hostTerminalStartupCommand: "",
     terminalCommandTemplate: "",
     notes: [],
     workspace: createEmptyWorkspace(profileId),

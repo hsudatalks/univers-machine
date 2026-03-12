@@ -420,6 +420,13 @@ export function ServerDialog({
                       value={form.identityFiles.join("\n")}
                     />
                     <EditField
+                      label="Host Terminal Startup Command"
+                      multiline
+                      mono
+                      onChange={(value) => updateField("hostTerminalStartupCommand", value)}
+                      value={form.hostTerminalStartupCommand}
+                    />
+                    <EditField
                       label="Terminal Command Template"
                       multiline
                       mono
