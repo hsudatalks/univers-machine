@@ -33,6 +33,19 @@ fn candidate_container_ssh_users(
         .find(|existing| existing.name == container.name);
     let mut users = Vec::new();
 
+    if !container.ssh_user.trim().is_empty() {
+        users.push(container.ssh_user.clone());
+    }
+    users.extend(
+        container
+            .ssh_user_candidates
+            .iter()
+            .map(String::as_str)
+            .map(str::trim)
+            .filter(|candidate| !candidate.is_empty())
+            .map(ToOwned::to_owned),
+    );
+
     if let Some(existing) = existing {
         if !existing.ssh_user.trim().is_empty() {
             users.push(existing.ssh_user.clone());

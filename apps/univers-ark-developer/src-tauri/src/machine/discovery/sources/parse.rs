@@ -15,6 +15,13 @@ struct OrbListItem {
 struct OrbInfoRecord {
     name: String,
     state: String,
+    config: OrbInfoConfig,
+}
+
+#[derive(serde::Deserialize)]
+struct OrbInfoConfig {
+    #[serde(default)]
+    default_username: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -82,8 +89,13 @@ fn parse_orbstack_containers(
                         kind: ManagedContainerKind::Managed,
                         name: info.record.name,
                         source: String::from("orbstack"),
-                        ssh_user: String::new(),
-                        ssh_user_candidates: vec![],
+                        ssh_user: info.record.config.default_username.clone(),
+                        ssh_user_candidates: if info.record.config.default_username.trim().is_empty()
+                        {
+                            vec![]
+                        } else {
+                            vec![info.record.config.default_username]
+                        },
                         status: info.record.state.to_uppercase(),
                         ipv4: info.ip4,
                         label: None,
