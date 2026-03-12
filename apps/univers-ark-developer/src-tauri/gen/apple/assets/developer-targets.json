@@ -1,0 +1,70 @@
+{
+  "selectedTargetId": null,
+  "defaultProfile": "ark-default",
+  "profiles": {
+    "ark-default": {
+      "workspace": {
+        "profile": "ark-default",
+        "defaultTool": "dashboard",
+        "projectPath": "",
+        "filesRoot": "~/repos",
+        "primaryWebServiceId": "",
+        "tmuxCommandServiceId": ""
+      },
+      "services": []
+    },
+    "ark-workbench": {
+      "extends": "ark-default",
+      "workspace": {
+        "profile": "ark-workbench",
+        "defaultTool": "dashboard",
+        "projectPath": "~/repos/hvac-workbench",
+        "filesRoot": "~/repos/hvac-workbench",
+        "primaryWebServiceId": "development",
+        "tmuxCommandServiceId": "tmux-developer"
+      },
+      "services": [
+        {
+          "id": "development",
+          "label": "Development",
+          "kind": "web",
+          "description": "Primary Vite development surface.",
+          "web": {
+            "id": "development",
+            "label": "Development",
+            "serviceType": "vite",
+            "backgroundPrerender": true,
+            "tunnelCommand": "",
+            "localUrl": "http://127.0.0.1:3432/",
+            "remoteUrl": "http://127.0.0.1:3432/"
+          }
+        },
+        {
+          "id": "preview",
+          "label": "Preview",
+          "kind": "web",
+          "description": "Preview surface.",
+          "web": {
+            "id": "preview",
+            "label": "Preview",
+            "serviceType": "http",
+            "backgroundPrerender": false,
+            "tunnelCommand": "",
+            "localUrl": "http://127.0.0.1:4173/",
+            "remoteUrl": "http://127.0.0.1:4173/"
+          }
+        },
+        {
+          "id": "tmux-developer",
+          "label": "Developer Tmux",
+          "kind": "command",
+          "description": "Restart the developer tmux server.",
+          "command": {
+            "restart": "cd ~/repos/univers-container && ./.claude/skills/container-manage/bin/cm dev restart developer"
+          }
+        }
+      ]
+    }
+  },
+  "machines": []
+}

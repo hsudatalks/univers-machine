@@ -376,6 +376,7 @@ fn local_machine_available() -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(desktop)]
 fn sync_local_machine_config(config_path: &PathBuf) -> Result<(), String> {
     let raw_content = fs::read_to_string(config_path)
         .map_err(|error| format!("Failed to read {}: {}", config_path.display(), error))?;
@@ -444,6 +445,11 @@ fn sync_local_machine_config(config_path: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(mobile)]
+fn sync_local_machine_config(_config_path: &PathBuf) -> Result<(), String> {
+    Ok(())
+}
+
 fn manager_priority(server: &RemoteContainerServer) -> Vec<ContainerManagerType> {
     match server.manager_type {
         ContainerManagerType::None => vec![
@@ -469,7 +475,8 @@ fn targets_file_name() -> &'static str {
     }
 }
 
-pub(crate) fn univers_config_dir() -> Result<PathBuf, String> {
+#[cfg(desktop)]
+fn fallback_univers_config_dir() -> Result<PathBuf, String> {
     let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
         .map(PathBuf::from)
         .ok_or_else(|| String::from("Failed to resolve user home directory"))?;
@@ -477,9 +484,43 @@ pub(crate) fn univers_config_dir() -> Result<PathBuf, String> {
     Ok(home.join(".univers"))
 }
 
+#[cfg(mobile)]
+fn fallback_univers_config_dir() -> Result<PathBuf, String> {
+    configured_config_dir()
+        .get()
+        .cloned()
+        .ok_or_else(|| String::from("App config directory is not initialized"))
+}
+
 fn configured_targets_path() -> &'static OnceLock<PathBuf> {
     static CONFIGURED_TARGETS_PATH: OnceLock<PathBuf> = OnceLock::new();
     &CONFIGURED_TARGETS_PATH
+}
+
+fn configured_config_dir() -> &'static OnceLock<PathBuf> {
+    static CONFIGURED_CONFIG_DIR: OnceLock<PathBuf> = OnceLock::new();
+    &CONFIGURED_CONFIG_DIR
+}
+
+#[cfg(desktop)]
+fn resolve_univers_config_dir<R: Runtime>(_app_handle: &AppHandle<R>) -> Result<PathBuf, String> {
+    fallback_univers_config_dir()
+}
+
+#[cfg(mobile)]
+fn resolve_univers_config_dir<R: Runtime>(app_handle: &AppHandle<R>) -> Result<PathBuf, String> {
+    app_handle
+        .path()
+        .app_config_dir()
+        .map_err(|error| format!("Failed to resolve mobile app config directory: {}", error))
+}
+
+pub(crate) fn univers_config_dir() -> Result<PathBuf, String> {
+    if let Some(path) = configured_config_dir().get() {
+        return Ok(path.clone());
+    }
+
+    fallback_univers_config_dir()
 }
 
 pub(crate) fn app_root() -> PathBuf {
@@ -501,19 +542,39 @@ fn bundled_targets_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> PathBuf {
         .unwrap_or_else(|_| app_root().join(BUNDLED_TARGETS_TEMPLATE_NAME))
 }
 
-fn legacy_targets_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> Option<PathBuf> {
+fn targets_file_uses_machine_schema(path: &PathBuf) -> bool {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<Value>(&content).ok())
+        .map(|value| value.get("machines").and_then(Value::as_array).is_some())
+        .unwrap_or(false)
+}
+
+fn legacy_targets_file_path<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    bundled_path: &PathBuf,
+) -> Option<PathBuf> {
     app_handle
         .path()
         .app_config_dir()
         .ok()
         .map(|dir| dir.join(BUNDLED_TARGETS_TEMPLATE_NAME))
         .filter(|path| path.exists())
+        .and_then(|path| {
+            if targets_file_uses_machine_schema(&path) {
+                return Some(path);
+            }
+
+            fs::copy(bundled_path, &path).ok()?;
+
+            targets_file_uses_machine_schema(&path).then_some(path)
+        })
 }
 
 pub(crate) fn initialize_targets_file_path<R: Runtime>(
     app_handle: &AppHandle<R>,
 ) -> Result<PathBuf, String> {
-    let app_config_dir = univers_config_dir()?;
+    let app_config_dir = resolve_univers_config_dir(app_handle)?;
 
     fs::create_dir_all(&app_config_dir).map_err(|error| {
         format!(
@@ -526,8 +587,9 @@ pub(crate) fn initialize_targets_file_path<R: Runtime>(
     let writable_targets_path = app_config_dir.join(targets_file_name());
 
     if !writable_targets_path.exists() {
-        let source_path = legacy_targets_file_path(app_handle)
-            .unwrap_or_else(|| bundled_targets_file_path(app_handle));
+        let bundled_path = bundled_targets_file_path(app_handle);
+        let source_path = legacy_targets_file_path(app_handle, &bundled_path)
+            .unwrap_or(bundled_path);
 
         fs::copy(&source_path, &writable_targets_path).map_err(|error| {
             format!(
@@ -539,6 +601,7 @@ pub(crate) fn initialize_targets_file_path<R: Runtime>(
         })?;
     }
 
+    let _ = configured_config_dir().set(app_config_dir.clone());
     let _ = configured_targets_path().set(writable_targets_path.clone());
     sync_local_machine_config(&writable_targets_path)?;
 

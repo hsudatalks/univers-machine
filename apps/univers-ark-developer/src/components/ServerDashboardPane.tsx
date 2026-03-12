@@ -26,7 +26,7 @@ export function ServerDashboardPane({
     <article className="panel tool-panel dashboard-panel server-dashboard-panel">
       <div className="dashboard-grid">
         <Card className="dashboard-card-hero border-border/80 bg-card/95">
-          <CardContent className="dashboard-summary-bar">
+          <CardContent className="dashboard-summary-bar dashboard-card-content">
             <div className="dashboard-summary-copy">
               <div className="dashboard-summary-item">
                 <span className="dashboard-meta-label">Machine host</span>

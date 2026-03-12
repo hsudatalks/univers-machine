@@ -5,11 +5,13 @@ description = "Local desktop shell for Univers Ark developer targets"
 authors = ["OpenAI Codex"]
 edition = "2021"
 
+[lib]
+crate-type = ["staticlib", "cdylib", "lib"]
+
 [build-dependencies]
 tauri-build = { version = "2.0.6", features = [] }
 
 [dependencies]
-arboard = "3"
 csv = "1"
 keyring = "3"
 portable-pty = "0.8"
@@ -21,3 +23,6 @@ tauri-plugin-global-shortcut = "2"
 tokio = { version = "1", features = ["rt"] }
 url = "2.5"
 univers-ark-russh = { path = "crates/univers-ark-russh" }
+
+[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
+arboard = "3"

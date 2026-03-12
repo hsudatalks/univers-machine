@@ -1,5 +1,7 @@
 import { LayoutDashboard, Settings2, SquareTerminal } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useHorizontalPanelTrack } from "../hooks/useHorizontalPanelTrack";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import type { DeveloperTarget, ManagedMachine } from "../types";
 import { TerminalPane } from "./TerminalPane";
 import { Button } from "./ui/button";
@@ -15,6 +17,7 @@ interface ServerPageProps {
 }
 
 type ServerToolPanel = "dashboard" | "terminals";
+type MobileServerPanel = "terminal" | ServerToolPanel;
 
 export function ServerPage({
   onOpenSettings,
@@ -25,91 +28,246 @@ export function ServerPage({
 }: ServerPageProps) {
   const [activeTool, setActiveTool] = useState<ServerToolPanel>("dashboard");
   const terminalTarget = resolveTarget(server.hostTargetId);
+  const isMobileLayout = useMediaQuery("(max-width: 960px)");
+  const mobilePanelIds = useMemo<MobileServerPanel[]>(
+    () => ["terminal", "dashboard", "terminals"],
+    [],
+  );
+  const {
+    activePanel: activeMobilePanel,
+    handleTrackScroll,
+    registerPanel,
+    scrollToPanel,
+    setActivePanel,
+    trackRef,
+  } = useHorizontalPanelTrack({
+    enabled: isMobileLayout,
+    initialPanel: "terminal",
+    panelIds: mobilePanelIds,
+  });
+  const hasSyncedMobilePanelRef = useRef(false);
+
+  useEffect(() => {
+    if (!isMobileLayout) {
+      hasSyncedMobilePanelRef.current = false;
+      return;
+    }
+
+    const behavior = hasSyncedMobilePanelRef.current ? "smooth" : "auto";
+
+    hasSyncedMobilePanelRef.current = true;
+    setActivePanel(activeTool);
+    scrollToPanel(activeTool, behavior);
+  }, [activeTool, isMobileLayout, scrollToPanel, setActivePanel]);
 
   return (
     <>
-      <header className="content-header">
-        <div className="content-header-copy">
-          <span className="panel-title">Machine</span>
-          <div className="content-title-row">
-            <h1 className="content-title content-title-container">{server.label}</h1>
-            <span className="content-chip">{server.host}</span>
-          </div>
-        </div>
+      {isMobileLayout ? (
+        <header className="content-header content-header-mobile">
+          <div className="content-header-mobile-topline">
+            <div className="content-header-copy">
+              <span className="panel-title">Machine</span>
+              <div className="content-title-row">
+                <h1 className="content-title content-title-container">{server.label}</h1>
+                <span className="content-chip">{server.host}</span>
+              </div>
+            </div>
 
-        <div className="content-header-tools">
-          <Button
-            aria-label={`Open ${server.label} settings`}
-            onClick={onOpenSettings}
-            size="icon"
-            title="Machine settings"
-            variant="ghost"
-          >
-            <Settings2 size={16} />
-          </Button>
-          <Button
-            aria-label="Machine dashboard"
-            isActive={activeTool === "dashboard"}
-            onClick={() => {
-              setActiveTool("dashboard");
-            }}
-            size="icon"
-            title="Machine dashboard"
-            variant={activeTool === "dashboard" ? "default" : "ghost"}
-          >
-            <LayoutDashboard size={16} />
-          </Button>
-          <Button
-            aria-label="Container terminals"
-            isActive={activeTool === "terminals"}
-            onClick={() => {
-              setActiveTool("terminals");
-            }}
-            size="icon"
-            title="Container terminals"
-            variant={activeTool === "terminals" ? "default" : "ghost"}
-          >
-            <SquareTerminal size={16} />
-          </Button>
-        </div>
-      </header>
+            <div className="content-header-mobile-actions">
+              <Button
+                aria-label={`Open ${server.label} settings`}
+                onClick={onOpenSettings}
+                size="icon"
+                title="Machine settings"
+                variant="ghost"
+              >
+                <Settings2 size={16} />
+              </Button>
+            </div>
+          </div>
+
+          <div aria-label="Machine panels" className="content-panel-rail">
+            <Button
+              className="content-panel-rail-button"
+              isActive={activeMobilePanel === "terminal"}
+              onClick={() => {
+                setActivePanel("terminal");
+                scrollToPanel("terminal");
+              }}
+              size="sm"
+              variant={activeMobilePanel === "terminal" ? "default" : "outline"}
+            >
+              <SquareTerminal size={14} />
+              Host
+            </Button>
+            <Button
+              className="content-panel-rail-button"
+              isActive={activeMobilePanel === "dashboard"}
+              onClick={() => {
+                setActiveTool("dashboard");
+                setActivePanel("dashboard");
+                scrollToPanel("dashboard");
+              }}
+              size="sm"
+              variant={activeMobilePanel === "dashboard" ? "default" : "outline"}
+            >
+              <LayoutDashboard size={14} />
+              Dashboard
+            </Button>
+            <Button
+              className="content-panel-rail-button"
+              isActive={activeMobilePanel === "terminals"}
+              onClick={() => {
+                setActiveTool("terminals");
+                setActivePanel("terminals");
+                scrollToPanel("terminals");
+              }}
+              size="sm"
+              variant={activeMobilePanel === "terminals" ? "default" : "outline"}
+            >
+              <SquareTerminal size={14} />
+              Containers
+            </Button>
+          </div>
+        </header>
+      ) : (
+        <header className="content-header">
+          <div className="content-header-copy">
+            <span className="panel-title">Machine</span>
+            <div className="content-title-row">
+              <h1 className="content-title content-title-container">{server.label}</h1>
+              <span className="content-chip">{server.host}</span>
+            </div>
+          </div>
+
+          <div className="content-header-tools">
+            <Button
+              aria-label={`Open ${server.label} settings`}
+              onClick={onOpenSettings}
+              size="icon"
+              title="Machine settings"
+              variant="ghost"
+            >
+              <Settings2 size={16} />
+            </Button>
+            <Button
+              aria-label="Machine dashboard"
+              isActive={activeTool === "dashboard"}
+              onClick={() => {
+                setActiveTool("dashboard");
+              }}
+              size="icon"
+              title="Machine dashboard"
+              variant={activeTool === "dashboard" ? "default" : "ghost"}
+            >
+              <LayoutDashboard size={16} />
+            </Button>
+            <Button
+              aria-label="Container terminals"
+              isActive={activeTool === "terminals"}
+              onClick={() => {
+                setActiveTool("terminals");
+              }}
+              size="icon"
+              title="Container terminals"
+              variant={activeTool === "terminals" ? "default" : "ghost"}
+            >
+              <SquareTerminal size={16} />
+            </Button>
+          </div>
+        </header>
+      )}
 
       <section className="page-section">
-        <div className="server-workspace">
-          <article className="panel terminal-panel">
-            {terminalTarget ? (
-              <TerminalPane
-                active={pageVisible}
-                target={terminalTarget}
-                title={`${server.label} host`}
+        {isMobileLayout ? (
+          <div className="mobile-workspace server-mobile-workspace">
+            <div className="mobile-panel-track" onScroll={handleTrackScroll} ref={trackRef}>
+              <div
+                className="mobile-panel-slide"
+                data-mobile-panel="terminal"
+                ref={registerPanel("terminal")}
+              >
+                <article className="panel terminal-panel mobile-panel-card">
+                  {terminalTarget ? (
+                    <TerminalPane
+                      active={pageVisible && activeMobilePanel === "terminal"}
+                      target={terminalTarget}
+                      title={`${server.label} host`}
+                    />
+                  ) : (
+                    <section className="state-panel">
+                      <span className="state-label">Host unavailable</span>
+                      <p className="state-copy">
+                        The Host workspace for this machine is not available in the current inventory.
+                      </p>
+                    </section>
+                  )}
+                </article>
+              </div>
+
+              <div
+                className="mobile-panel-slide"
+                data-mobile-panel="dashboard"
+                ref={registerPanel("dashboard")}
+              >
+                <ServerDashboardPane
+                  onOpenWorkspace={onOpenWorkspace}
+                  resolveTarget={resolveTarget}
+                  server={server}
+                />
+              </div>
+
+              <div
+                className="mobile-panel-slide"
+                data-mobile-panel="terminals"
+                ref={registerPanel("terminals")}
+              >
+                <ServerTerminalsPane
+                  onOpenWorkspace={onOpenWorkspace}
+                  pageVisible={pageVisible && activeMobilePanel === "terminals"}
+                  resolveTarget={resolveTarget}
+                  server={server}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="server-workspace">
+            <article className="panel terminal-panel">
+              {terminalTarget ? (
+                <TerminalPane
+                  active={pageVisible}
+                  target={terminalTarget}
+                  title={`${server.label} host`}
+                />
+              ) : (
+                <section className="state-panel">
+                  <span className="state-label">Host unavailable</span>
+                  <p className="state-copy">
+                    The Host workspace for this machine is not available in the current inventory.
+                  </p>
+                </section>
+              )}
+            </article>
+
+            <div className={`server-pane-slot ${activeTool === "dashboard" ? "" : "is-hidden"}`}>
+              <ServerDashboardPane
+                onOpenWorkspace={onOpenWorkspace}
+                resolveTarget={resolveTarget}
+                server={server}
               />
-            ) : (
-              <section className="state-panel">
-                <span className="state-label">Host unavailable</span>
-                <p className="state-copy">
-                  The Host workspace for this machine is not available in the current inventory.
-                </p>
-              </section>
-            )}
-          </article>
+            </div>
 
-          <div className={`server-pane-slot ${activeTool === "dashboard" ? "" : "is-hidden"}`}>
-            <ServerDashboardPane
-              onOpenWorkspace={onOpenWorkspace}
-              resolveTarget={resolveTarget}
-              server={server}
-            />
+            <div className={`server-pane-slot ${activeTool === "terminals" ? "" : "is-hidden"}`}>
+              <ServerTerminalsPane
+                onOpenWorkspace={onOpenWorkspace}
+                pageVisible={pageVisible && activeTool === "terminals"}
+                resolveTarget={resolveTarget}
+                server={server}
+              />
+            </div>
           </div>
-
-          <div className={`server-pane-slot ${activeTool === "terminals" ? "" : "is-hidden"}`}>
-            <ServerTerminalsPane
-              onOpenWorkspace={onOpenWorkspace}
-              pageVisible={pageVisible && activeTool === "terminals"}
-              resolveTarget={resolveTarget}
-              server={server}
-            />
-          </div>
-        </div>
+        )}
       </section>
     </>
   );

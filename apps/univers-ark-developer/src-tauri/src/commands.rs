@@ -44,9 +44,8 @@ use crate::{
     },
     tunnel::{
         active_tunnel_status, direct_tunnel_status, emit_tunnel_status_updates,
-        reconcile_registered_tunnel, register_desired_tunnel,
-        remove_tunnel_session_if_current, start_tunnel,
-        stop_tunnel_session, sync_desired_tunnels, tunnel_session_is_alive,
+        reconcile_registered_tunnel, register_desired_tunnel, remove_tunnel_session_if_current,
+        start_tunnel, stop_tunnel_session, sync_desired_tunnels, tunnel_session_is_alive,
     },
 };
 use serde::Deserialize;
@@ -893,6 +892,7 @@ pub(crate) async fn execute_command_service(
 }
 
 #[tauri::command]
+#[cfg(desktop)]
 pub(crate) fn clipboard_write(text: String) -> Result<(), String> {
     let mut clipboard =
         arboard::Clipboard::new().map_err(|error| format!("Clipboard unavailable: {}", error))?;
@@ -902,12 +902,29 @@ pub(crate) fn clipboard_write(text: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[cfg(mobile)]
+pub(crate) fn clipboard_write(_text: String) -> Result<(), String> {
+    Err(String::from(
+        "Clipboard integration is not implemented for mobile yet.",
+    ))
+}
+
+#[tauri::command]
+#[cfg(desktop)]
 pub(crate) fn clipboard_read() -> Result<String, String> {
     let mut clipboard =
         arboard::Clipboard::new().map_err(|error| format!("Clipboard unavailable: {}", error))?;
     clipboard
         .get_text()
         .map_err(|error| format!("Failed to read clipboard: {}", error))
+}
+
+#[tauri::command]
+#[cfg(mobile)]
+pub(crate) fn clipboard_read() -> Result<String, String> {
+    Err(String::from(
+        "Clipboard integration is not implemented for mobile yet.",
+    ))
 }
 
 #[tauri::command]
@@ -925,9 +942,7 @@ pub(crate) fn load_app_settings(app_handle: AppHandle) -> Result<AppSettings, St
     read_app_settings(&app_handle)
 }
 
-fn count_states<'a>(
-    states: impl Iterator<Item = &'a str>,
-) -> BTreeMap<String, usize> {
+fn count_states<'a>(states: impl Iterator<Item = &'a str>) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::<String, usize>::new();
     for state in states {
         *counts.entry(state.to_string()).or_insert(0) += 1;
@@ -1041,7 +1056,9 @@ pub(crate) fn load_app_diagnostics(
                 .filter(|session| session.ready.load(Ordering::Acquire))
                 .count(),
             local_port_count: tunnel_ports.len(),
-            status_counts: count_states(tunnel_statuses.values().map(|status| status.state.as_str())),
+            status_counts: count_states(
+                tunnel_statuses.values().map(|status| status.state.as_str()),
+            ),
             status_events_per_minute: tunnel_telemetry.status_events.per_minute(now),
             status_items_per_minute: tunnel_telemetry.status_items.per_minute(now),
             reconciles_per_minute: tunnel_telemetry.reconciles.per_minute(now),
@@ -1053,7 +1070,9 @@ pub(crate) fn load_app_diagnostics(
             machine_snapshot_count: machine_snapshots.len(),
             container_snapshot_count: container_snapshots.len(),
             machine_state_counts: count_states(
-                machine_snapshots.values().map(|snapshot| snapshot.state.as_str()),
+                machine_snapshots
+                    .values()
+                    .map(|snapshot| snapshot.state.as_str()),
             ),
             container_state_counts: count_states(
                 container_snapshots
