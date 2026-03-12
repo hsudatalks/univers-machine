@@ -5,6 +5,7 @@ import { loadTargetsConfig, scanMachineInventory, updateTargetsConfig } from "..
 import {
   createEmptyMachine,
   createEmptyMachineContainer,
+  createEmptySshJump,
   parseTargetsConfig,
   stringifyTargetsConfig,
   type ContainerDiscoveryMode,
@@ -204,6 +205,22 @@ export function ServerDialog({
               },
             }
           : container,
+      ),
+    }));
+    setIsDeleteConfirming(false);
+    setError(null);
+    setSaveMessage(null);
+  };
+
+  const updateJumpField = <K extends keyof MachineConfig["jumpChain"][number]>(
+    index: number,
+    field: K,
+    value: MachineConfig["jumpChain"][number][K],
+  ) => {
+    setForm((prev) => ({
+      ...prev,
+      jumpChain: prev.jumpChain.map((jump, jumpIndex) =>
+        jumpIndex === index ? { ...jump, [field]: value } : jump,
       ),
     }));
     setIsDeleteConfirming(false);
@@ -444,6 +461,85 @@ export function ServerDialog({
                       onChange={(value) => updateField("terminalCommandTemplate", value)}
                       value={form.terminalCommandTemplate}
                     />
+                    <div className="dialog-section-actions">
+                      <Button
+                        onClick={() => updateField("jumpChain", [...form.jumpChain, createEmptySshJump()])}
+                        size="sm"
+                        variant="outline"
+                      >
+                        Add jump hop
+                      </Button>
+                    </div>
+                    {form.jumpChain.length === 0 ? (
+                      <p className="dialog-empty">No SSH jump hops configured.</p>
+                    ) : (
+                      <div className="dialog-list">
+                        {form.jumpChain.map((jump, index) => (
+                          <div className="dialog-card" key={`${jump.host || "jump"}-${index}`}>
+                            <div className="dialog-card-header">
+                              <span className="dialog-card-title">
+                                {jump.host || `Jump hop ${index + 1}`}
+                              </span>
+                              <Button
+                                onClick={() =>
+                                  updateField(
+                                    "jumpChain",
+                                    form.jumpChain.filter((_, itemIndex) => itemIndex !== index),
+                                  )
+                                }
+                                size="sm"
+                                variant="ghost"
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                            <div className="dialog-field-grid">
+                              <EditField
+                                label="Host"
+                                mono
+                                onChange={(value) => updateJumpField(index, "host", value)}
+                                value={jump.host}
+                              />
+                              <EditField
+                                label="Port"
+                                mono
+                                onChange={(value) => updateJumpField(index, "port", Number(value) || 22)}
+                                value={String(jump.port)}
+                              />
+                              <EditField
+                                label="User"
+                                mono
+                                onChange={(value) => updateJumpField(index, "user", value)}
+                                value={jump.user}
+                              />
+                              <EditField
+                                label="SSH Credential ID"
+                                mono
+                                onChange={(value) => updateJumpField(index, "sshCredentialId", value)}
+                                value={jump.sshCredentialId}
+                              />
+                              <EditField
+                                hint="Optional file-based identities for desktop flows."
+                                label="Identity Files"
+                                mono
+                                multiline
+                                onChange={(value) =>
+                                  updateJumpField(
+                                    index,
+                                    "identityFiles",
+                                    value
+                                      .split("\n")
+                                      .map((line) => line.trim())
+                                      .filter(Boolean),
+                                  )
+                                }
+                                value={jump.identityFiles.join("\n")}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
 

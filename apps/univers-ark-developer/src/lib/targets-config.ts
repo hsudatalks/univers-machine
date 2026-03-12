@@ -239,6 +239,16 @@ export function createEmptyProfile(profileId = ""): ContainerProfileConfig {
   };
 }
 
+export function createEmptySshJump(): SshJumpConfig {
+  return {
+    host: "",
+    port: 22,
+    user: "",
+    identityFiles: [],
+    sshCredentialId: "",
+  };
+}
+
 export function createDefaultWebService(
   id: string,
   label: string,
