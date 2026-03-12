@@ -1,3 +1,4 @@
+import { Cloud, Network, Server } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { MachineImportCandidate } from "../types";
 import {
@@ -14,9 +15,9 @@ import {
 } from "../lib/targets-config";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 type MachineImportSource = "ssh-config" | "tailscale" | "custom";
+type ProviderKind = "machine" | "cloud-vm" | "kubernetes";
 
 interface AddMachineDialogProps {
   onClose: () => void;
@@ -70,7 +71,7 @@ function sourceLabel(source: MachineImportSource): string {
     case "tailscale":
       return "Tailscale";
     case "custom":
-      return "Custom";
+      return "Manual";
   }
 }
 
@@ -79,6 +80,7 @@ export function AddMachineDialog({
   onImported,
   onOpenCustom,
 }: AddMachineDialogProps) {
+  const activeProviderKind: ProviderKind = "machine";
   const [activeSource, setActiveSource] = useState<MachineImportSource>("ssh-config");
   const [scanError, setScanError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -199,15 +201,15 @@ export function AddMachineDialog({
   return (
     <div className="dialog-backdrop" onClick={onClose}>
       <div
-        aria-label="Add machine"
-        className="dialog-panel"
+        aria-label="Add provider"
+        className="dialog-panel dialog-panel-wide"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
         <header className="dialog-header">
           <div className="dialog-header-copy">
-            <span className="dialog-title">Add machine</span>
-            <span className="dialog-subtitle">Import from SSH config, Tailscale, or add one manually</span>
+            <span className="dialog-title">Add provider</span>
+            <span className="dialog-subtitle">Choose a provider type, then select the setup path that fits it</span>
           </div>
           <Button aria-label="Close" className="dialog-close" onClick={onClose} size="icon" variant="ghost">
             <svg aria-hidden="true" className="panel-button-icon-svg" fill="none" viewBox="0 0 16 16">
@@ -216,89 +218,198 @@ export function AddMachineDialog({
           </Button>
         </header>
 
-        <Tabs
-          className="dialog-tabs-root"
-          onValueChange={(value) => setActiveSource(value as MachineImportSource)}
-          value={activeSource}
-        >
-          <TabsList className="dialog-tabs" aria-label="Machine import sources">
-            <TabsTrigger className="dialog-tab" value="ssh-config">SSH Config</TabsTrigger>
-            <TabsTrigger className="dialog-tab" value="tailscale">Tailscale</TabsTrigger>
-            <TabsTrigger className="dialog-tab" value="custom">Custom</TabsTrigger>
-          </TabsList>
+        <div className="dialog-body add-provider-body">
+          <div className="dialog-card add-provider-hero">
+            <div className="dialog-card-header">
+              <div>
+                <div className="dialog-card-title">Provider types</div>
+                <p className="dialog-empty">
+                  Providers define where workbenches come from. Machine providers are available today.
+                </p>
+              </div>
+              <Badge variant="neutral">Expandable</Badge>
+            </div>
 
-          <div className="dialog-body">
-            <TabsContent className="dialog-tab-panel" value="ssh-config">
-              <MachineImportTab
-                candidates={candidates}
-                error={scanError}
-                importLabel="Import selected machines"
-                isImporting={isImporting}
-                isScanning={isScanning}
-                onImport={handleImport}
-                onClearSelection={() => setSelectedForActiveSource([])}
-                onRescan={() => void handleScan("ssh-config")}
-                onSelectAll={() => setSelectedForActiveSource(candidates.map((candidate) => candidate.importId))}
-                onToggleCandidate={toggleCandidate}
-                selectedImportIds={selectedImportIds}
-                sourceLabel={sourceLabel("ssh-config")}
-              />
-            </TabsContent>
+            <div className="provider-type-grid">
+              <button
+                aria-pressed={activeProviderKind === "machine"}
+                className="provider-type-card is-active"
+                type="button"
+              >
+                <div className="provider-type-card-head">
+                  <span className="provider-type-icon">
+                    <Server size={16} />
+                  </span>
+                  <Badge variant="neutral">Available now</Badge>
+                </div>
+                <div className="provider-type-card-title">Machine</div>
+                <p className="dialog-empty">
+                  SSH-managed hosts with host terminals, discovered containers, services, and workbenches.
+                </p>
+              </button>
 
-            <TabsContent className="dialog-tab-panel" value="tailscale">
-              <MachineImportTab
-                candidates={candidates}
-                error={scanError}
-                importLabel="Import selected machines"
-                isImporting={isImporting}
-                isScanning={isScanning}
-                onImport={handleImport}
-                onClearSelection={() => setSelectedForActiveSource([])}
-                onRescan={() => void handleScan("tailscale")}
-                onSelectAll={() => setSelectedForActiveSource(candidates.map((candidate) => candidate.importId))}
-                onToggleCandidate={toggleCandidate}
-                selectedImportIds={selectedImportIds}
-                sourceLabel={sourceLabel("tailscale")}
-              />
-            </TabsContent>
+              <button
+                aria-disabled="true"
+                className="provider-type-card is-disabled"
+                type="button"
+              >
+                <div className="provider-type-card-head">
+                  <span className="provider-type-icon">
+                    <Cloud size={16} />
+                  </span>
+                  <Badge variant="neutral">Soon</Badge>
+                </div>
+                <div className="provider-type-card-title">Cloud VM</div>
+                <p className="dialog-empty">
+                  Inventory and connect virtual machines from cloud accounts like AWS, Azure, and GCP.
+                </p>
+              </button>
 
-            <TabsContent className="dialog-tab-panel" value="custom">
-              <div className="dialog-tab-content">
-                <div className="dialog-card">
-                  <div className="dialog-card-header">
-                    <div>
-                      <div className="dialog-card-title">Custom machine</div>
-                      <p className="dialog-empty">
-                        Define the SSH connection, discovery mode, and workspace defaults yourself.
-                      </p>
-                    </div>
-                    <Badge variant="neutral">Manual</Badge>
+              <button
+                aria-disabled="true"
+                className="provider-type-card is-disabled"
+                type="button"
+              >
+                <div className="provider-type-card-head">
+                  <span className="provider-type-icon">
+                    <Network size={16} />
+                  </span>
+                  <Badge variant="neutral">Soon</Badge>
+                </div>
+                <div className="provider-type-card-title">Kubernetes</div>
+                <p className="dialog-empty">
+                  Surface pods and namespace workspaces as first-class workbenches from cluster providers.
+                </p>
+              </button>
+            </div>
+          </div>
+
+          <div className="dialog-card">
+            <div className="dialog-card-header">
+              <div>
+                <div className="dialog-card-title">Machine setup</div>
+                <p className="dialog-empty">
+                  Pick how this machine provider should be discovered or defined.
+                </p>
+              </div>
+              <Badge variant="neutral">3 paths</Badge>
+            </div>
+
+            <div className="provider-source-grid">
+              <button
+                className={`provider-source-card${activeSource === "ssh-config" ? " is-active" : ""}`}
+                onClick={() => setActiveSource("ssh-config")}
+                type="button"
+              >
+                <div className="provider-source-card-head">
+                  <div className="provider-source-card-title">SSH Config</div>
+                  <Badge variant="neutral">Bulk import</Badge>
+                </div>
+                <p className="dialog-empty">
+                  Scan named hosts and jump chains from your local SSH config, then import the ones you want.
+                </p>
+              </button>
+
+              <button
+                className={`provider-source-card${activeSource === "tailscale" ? " is-active" : ""}`}
+                onClick={() => setActiveSource("tailscale")}
+                type="button"
+              >
+                <div className="provider-source-card-head">
+                  <div className="provider-source-card-title">Tailscale</div>
+                  <Badge variant="neutral">Tailnet discovery</Badge>
+                </div>
+                <p className="dialog-empty">
+                  Discover reachable devices from the active tailnet and turn them into managed providers.
+                </p>
+              </button>
+
+              <button
+                className={`provider-source-card${activeSource === "custom" ? " is-active" : ""}`}
+                onClick={() => setActiveSource("custom")}
+                type="button"
+              >
+                <div className="provider-source-card-head">
+                  <div className="provider-source-card-title">Manual</div>
+                  <Badge variant="neutral">Full control</Badge>
+                </div>
+                <p className="dialog-empty">
+                  Start from a blank provider and define the host, SSH identity, discovery behavior, and defaults.
+                </p>
+              </button>
+            </div>
+          </div>
+
+          {activeSource === "ssh-config" ? (
+            <MachineImportTab
+              candidates={candidates}
+              error={scanError}
+              importLabel="Import selected providers"
+              isImporting={isImporting}
+              isScanning={isScanning}
+              onImport={handleImport}
+              onClearSelection={() => setSelectedForActiveSource([])}
+              onRescan={() => void handleScan("ssh-config")}
+              onSelectAll={() => setSelectedForActiveSource(candidates.map((candidate) => candidate.importId))}
+              onToggleCandidate={toggleCandidate}
+              selectedImportIds={selectedImportIds}
+              sourceLabel={sourceLabel("ssh-config")}
+            />
+          ) : null}
+
+          {activeSource === "tailscale" ? (
+            <MachineImportTab
+              candidates={candidates}
+              error={scanError}
+              importLabel="Import selected providers"
+              isImporting={isImporting}
+              isScanning={isScanning}
+              onImport={handleImport}
+              onClearSelection={() => setSelectedForActiveSource([])}
+              onRescan={() => void handleScan("tailscale")}
+              onSelectAll={() => setSelectedForActiveSource(candidates.map((candidate) => candidate.importId))}
+              onToggleCandidate={toggleCandidate}
+              selectedImportIds={selectedImportIds}
+              sourceLabel={sourceLabel("tailscale")}
+            />
+          ) : null}
+
+          {activeSource === "custom" ? (
+            <div className="dialog-tab-content">
+              <div className="dialog-card">
+                <div className="dialog-card-header">
+                  <div>
+                    <div className="dialog-card-title">Manual machine provider</div>
+                    <p className="dialog-empty">
+                      Define the SSH connection, discovery mode, and workspace defaults yourself.
+                    </p>
                   </div>
-
-                  <div className="dialog-field-grid">
-                    <div className="dialog-field">
-                      <span className="dialog-field-label">Use when</span>
-                      <span className="dialog-field-value">
-                        You want full control over host, user, identity files, discovery mode, and services.
-                      </span>
-                    </div>
-                  </div>
+                  <Badge variant="neutral">Manual</Badge>
                 </div>
 
-                <div className="dialog-section-actions">
-                  <Button
-                    onClick={() => {
-                      onClose();
-                      onOpenCustom();
-                    }}
-                  >
-                    Open manual setup
-                  </Button>
+                <div className="dialog-field-grid">
+                  <div className="dialog-field">
+                    <span className="dialog-field-label">Use when</span>
+                    <span className="dialog-field-value">
+                      You want full control over host, user, identity files, discovery mode, and services.
+                    </span>
+                  </div>
                 </div>
               </div>
-            </TabsContent>
-          </div>
-        </Tabs>
+
+              <div className="dialog-section-actions">
+                <Button
+                  onClick={() => {
+                    onClose();
+                    onOpenCustom();
+                  }}
+                >
+                  Open manual setup
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -377,7 +488,7 @@ function MachineImportTab({
       </div>
 
       {candidates.length === 0 && !error ? (
-        <p className="dialog-empty">No machine candidates found yet.</p>
+        <p className="dialog-empty">No provider candidates found yet.</p>
       ) : null}
 
       <div className="dialog-choice-list">
@@ -399,7 +510,7 @@ function MachineImportTab({
                     <div className="dialog-card-title">{candidate.label}</div>
                     <div className="dialog-field-mono">{candidate.machineId}</div>
                   </div>
-                  <Badge variant="neutral">Host only</Badge>
+                  <Badge variant="neutral">Machine</Badge>
                 </div>
 
                 <div className="dialog-choice-meta">
