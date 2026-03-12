@@ -55,6 +55,23 @@ pub(crate) struct DaemonServiceMutationResult {
     pub service: DaemonServiceStatus,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DaemonServiceLogsQuery {
+    pub lines: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DaemonServiceLogs {
+    pub unit_name: String,
+    pub lines: usize,
+    pub manager_available: bool,
+    pub user_session_available: bool,
+    pub logs_available: bool,
+    pub entries: Vec<String>,
+}
+
 pub(crate) fn record_process_start(port: u16) {
     let _ = STARTED_AT.get_or_init(|| chrono::Utc::now().to_rfc3339());
     let _ = LISTEN_PORT.set(port);
@@ -145,6 +162,10 @@ pub(crate) async fn uninstall_service() -> Result<DaemonServiceMutationResult> {
     tokio::task::spawn_blocking(uninstall_service_blocking).await?
 }
 
+pub(crate) async fn collect_service_logs(lines: usize) -> Result<DaemonServiceLogs> {
+    tokio::task::spawn_blocking(move || collect_service_logs_blocking(lines)).await?
+}
+
 fn install_service_blocking(
     request: InstallDaemonServiceRequest,
 ) -> Result<DaemonServiceMutationResult> {
@@ -204,6 +225,65 @@ fn uninstall_service_blocking() -> Result<DaemonServiceMutationResult> {
         action: "uninstall",
         message: format!("Removed {}", unit_path.display()),
         service: collect_service_status(),
+    })
+}
+
+fn collect_service_logs_blocking(lines: usize) -> Result<DaemonServiceLogs> {
+    let lines = lines.clamp(1, 500);
+    let manager_available = journalctl_exists();
+    let user_session_available = if manager_available {
+        systemctl_user_available()
+    } else {
+        false
+    };
+
+    if !manager_available {
+        return Ok(DaemonServiceLogs {
+            unit_name: UNIT_NAME.into(),
+            lines,
+            manager_available,
+            user_session_available,
+            logs_available: false,
+            entries: vec![],
+        });
+    }
+
+    if !user_session_available {
+        return Err(anyhow!(
+            "journalctl is installed but no user service manager is available"
+        ));
+    }
+
+    let output = Command::new("journalctl")
+        .arg("--user")
+        .arg("-u")
+        .arg(UNIT_NAME)
+        .arg("-n")
+        .arg(lines.to_string())
+        .arg("--no-pager")
+        .arg("-o")
+        .arg("short-iso")
+        .output()
+        .context("Failed to execute journalctl")?;
+
+    if !output.status.success() {
+        return Err(anyhow!(stderr_string(&output)));
+    }
+
+    let entries = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.is_empty() && *line != "-- No entries --")
+        .map(ToOwned::to_owned)
+        .collect();
+
+    Ok(DaemonServiceLogs {
+        unit_name: UNIT_NAME.into(),
+        lines,
+        manager_available,
+        user_session_available,
+        logs_available: true,
+        entries,
     })
 }
 
@@ -293,6 +373,14 @@ fn ensure_user_systemd() -> Result<()> {
 
 fn systemctl_exists() -> bool {
     Command::new("systemctl")
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+fn journalctl_exists() -> bool {
+    Command::new("journalctl")
         .arg("--version")
         .output()
         .map(|output| output.status.success())

@@ -6,9 +6,9 @@ mod status;
 
 use clap::{Parser, Subcommand};
 use self_daemon::{
-    collect_daemon_info, collect_service_status, install_service, restart_service, start_service,
-    stop_service, uninstall_service, DaemonServiceMutationResult, DaemonServiceStatus,
-    InstallDaemonServiceRequest,
+    collect_daemon_info, collect_service_logs, collect_service_status, install_service,
+    restart_service, start_service, stop_service, uninstall_service, DaemonServiceLogs,
+    DaemonServiceMutationResult, DaemonServiceStatus, InstallDaemonServiceRequest,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use univers_daemon_core::agent::db::Db;
@@ -86,6 +86,15 @@ enum Commands {
 enum ServiceCommands {
     /// Show current service status
     Status {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show recent service logs
+    Logs {
+        /// Number of log lines to fetch
+        #[arg(long, default_value_t = 100)]
+        lines: usize,
         /// Output as JSON
         #[arg(long)]
         json: bool,
@@ -346,6 +355,10 @@ async fn handle_service_cmd(command: ServiceCommands) -> anyhow::Result<()> {
                 print_service_status(&status);
             }
         }
+        ServiceCommands::Logs { lines, json } => {
+            let logs = collect_service_logs(lines).await?;
+            print_service_logs(&logs, json)?;
+        }
         ServiceCommands::Install {
             binary_path,
             working_directory,
@@ -412,4 +425,27 @@ fn print_service_status(status: &DaemonServiceStatus) {
     if let Some(error) = &status.last_error {
         println!("last_error: {error}");
     }
+}
+
+fn print_service_logs(logs: &DaemonServiceLogs, json: bool) -> anyhow::Result<()> {
+    if json {
+        println!("{}", serde_json::to_string_pretty(logs)?);
+        return Ok(());
+    }
+
+    println!("unit_name: {}", logs.unit_name);
+    println!("logs_available: {}", logs.logs_available);
+    println!("lines: {}", logs.lines);
+
+    if logs.entries.is_empty() {
+        println!("entries: <empty>");
+        return Ok(());
+    }
+
+    println!("entries:");
+    for entry in &logs.entries {
+        println!("{entry}");
+    }
+
+    Ok(())
 }
