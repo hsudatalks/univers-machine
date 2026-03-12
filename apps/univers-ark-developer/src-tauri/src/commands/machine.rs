@@ -1,4 +1,5 @@
 use crate::{
+    infra::shell::shell_command,
     machine::{
         read_bootstrap_data, read_server_inventory, read_targets_config, save_targets_config,
         scan_and_store_server_inventory, targets_file_path,
@@ -6,7 +7,6 @@ use crate::{
     models::{AppBootstrap, ConnectivityState, MachineImportCandidate, ManagedServer},
     runtime::connectivity::apply_connectivity_snapshots,
     services::runtime::read_runtime_targets_file,
-    shell::shell_command,
 };
 use serde::Deserialize;
 use std::{collections::HashMap, path::PathBuf};

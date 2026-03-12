@@ -5,7 +5,6 @@ use super::{
 };
 use crate::{
     models::{BrowserSurface, RusshTunnelForward, TunnelProcess, TunnelSession},
-    proxy::proxy_error_message,
     services::runtime::service_key,
 };
 use std::{
@@ -17,6 +16,8 @@ use std::{
 };
 use tauri::{AppHandle, Runtime};
 use url::Url;
+
+use super::proxy::proxy_error_message;
 
 fn tunnel_output_excerpt(output: &Arc<Mutex<String>>) -> Option<String> {
     let current_output = output.lock().ok()?;

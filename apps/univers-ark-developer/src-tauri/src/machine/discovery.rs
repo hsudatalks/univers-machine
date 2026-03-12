@@ -17,7 +17,7 @@ use super::{
     ContainerDiscoveryMode, ContainerManagerType, DiscoveredContainer, DiscoveredServerInventory,
     MachineContainerConfig, RemoteContainerContext, RemoteContainerServer,
 };
-use crate::shell;
+use crate::infra::shell;
 
 const CONTAINER_LOGIN_USERS_QUERY: &str = r#"if command -v getent >/dev/null 2>&1; then getent passwd; elif [ -r /etc/passwd ]; then cat /etc/passwd; fi | awk -F: '($1 == "root" || $3 >= 1000) && $6 ~ /^\// && $7 !~ /(nologin|false)$/ { print $1 }'"#;
 const CONTAINER_USER_DISCOVERY_TIMEOUT_SECONDS: u64 = 5;

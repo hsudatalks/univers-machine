@@ -6,7 +6,6 @@ use crate::{
         BrowserServiceType, BrowserSurface, MachineTransport, RusshTunnelForward, TunnelSession,
         TunnelState, TunnelStatus,
     },
-    proxy::start_vite_proxy,
     services::runtime::{
         allocate_internal_tunnel_port, internal_probe_url, resolve_runtime_vite_hmr_tunnel_command,
         surface_key, surface_local_port,
@@ -19,6 +18,8 @@ use std::{
 use tauri::{AppHandle, Runtime};
 use univers_ark_russh::{ClientOptions as RusshClientOptions, ResolvedEndpointChain};
 use url::Url;
+
+use super::proxy::start_vite_proxy;
 
 fn resolve_container_chain(target_id: &str) -> Result<ResolvedEndpointChain, String> {
     resolve_target_ssh_chain(target_id)

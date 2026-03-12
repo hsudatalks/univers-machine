@@ -1,4 +1,4 @@
-use crate::shell;
+use crate::infra::shell;
 use std::{fs, path::PathBuf};
 
 use super::{ContainerManagerType, RemoteContainerContext, RemoteContainerServer};

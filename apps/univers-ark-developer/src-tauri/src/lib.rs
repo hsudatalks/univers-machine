@@ -6,12 +6,10 @@ mod github;
 mod infra;
 mod machine;
 mod models;
-mod proxy;
 mod runtime;
 mod secrets;
 mod services;
 mod settings;
-mod shell;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

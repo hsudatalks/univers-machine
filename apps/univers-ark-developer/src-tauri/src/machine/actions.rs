@@ -49,7 +49,7 @@ pub(crate) fn restart_container(server_id: &str, container_name: &str) -> Result
             ContainerManagerType::None => continue,
         };
 
-        let output = crate::shell::shell_command(&restart_command)
+        let output = crate::infra::shell::shell_command(&restart_command)
             .output()
             .map_err(|error| {
                 format!(

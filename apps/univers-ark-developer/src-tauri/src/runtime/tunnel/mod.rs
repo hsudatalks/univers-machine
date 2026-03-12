@@ -2,6 +2,7 @@ use super::activity::{
     current_runtime_activity, detect_runtime_suspend_gap, RUNTIME_BACKGROUND_SUPERVISOR_FLOOR,
 };
 mod forwarding;
+mod proxy;
 mod session;
 mod status;
 
