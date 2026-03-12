@@ -10,7 +10,7 @@ configs:
 settingGroups:
   app:
     base:
-      PRODUCT_NAME: Univers Ark Developer
+      PRODUCT_NAME: Ark Console
       PRODUCT_BUNDLE_IDENTIFIER: dev.univers.arkdeveloper
 targetTemplates:
   app:

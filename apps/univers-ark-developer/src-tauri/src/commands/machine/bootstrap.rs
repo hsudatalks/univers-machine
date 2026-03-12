@@ -24,7 +24,7 @@ pub(crate) async fn load_bootstrap(
         let config_path = targets_file_path();
 
         Ok(AppBootstrap {
-            app_name: "Univers Ark Developer".into(),
+            app_name: "Ark Console".into(),
             config_path: config_path.display().to_string(),
             selected_target_id: targets_file.selected_target_id,
             targets: hydrated_targets_file.targets,
@@ -50,7 +50,7 @@ pub(crate) async fn refresh_bootstrap(
         let config_path = targets_file_path();
 
         Ok(AppBootstrap {
-            app_name: "Univers Ark Developer".into(),
+            app_name: "Ark Console".into(),
             config_path: config_path.display().to_string(),
             selected_target_id: targets_file.selected_target_id,
             targets: hydrated_targets_file.targets,

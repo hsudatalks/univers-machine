@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default desktop capability for Univers Ark Developer.","local":true,"windows":["main"],"permissions":["core:default","core:webview:allow-set-webview-zoom"]}}
+{"default":{"identifier":"default","description":"Default desktop capability for Ark Console.","local":true,"windows":["main"],"permissions":["core:default","core:webview:allow-set-webview-zoom"]}}

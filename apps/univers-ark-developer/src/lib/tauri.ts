@@ -46,7 +46,7 @@ const NEXT_CONTAINER_REQUESTED_EVENT = "next-container-requested";
 const PARENT_VIEW_REQUESTED_EVENT = "parent-view-requested";
 
 const fallbackBootstrapSeed: AppBootstrap = {
-  appName: "Univers Ark Developer",
+  appName: "Ark Console",
   configPath: "developer-targets.json",
   selectedTargetId: "local::host",
   machines: [

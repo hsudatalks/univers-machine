@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Univers Ark Developer",
+  "productName": "Ark Console",
   "version": "0.1.1",
   "identifier": "dev.univers.arkdeveloper",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Univers Ark Developer",
+        "title": "Ark Console",
         "width": 1460,
         "height": 940,
         "minWidth": 1180,
