@@ -419,6 +419,10 @@
   flex-wrap: wrap;
 }
 
+.content-header-tool-mobile-only {
+  display: none;
+}
+
 .content-header-overview .content-header-copy {
   grid-column: 2;
 }
@@ -654,6 +658,35 @@
 
   .settings-secret-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .content-header-container {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .content-header-leading,
+  .content-header-copy,
+  .content-header-tools,
+  .content-header-tools-container {
+    grid-column: auto;
+    width: 100%;
+  }
+
+  .content-title-row {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .content-header-tool-mobile-only {
+    display: inline-flex;
+  }
+
+  .content-title-toggle-desktop {
+    display: none;
   }
 }
 
