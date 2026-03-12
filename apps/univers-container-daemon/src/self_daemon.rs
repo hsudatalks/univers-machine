@@ -47,6 +47,17 @@ pub(crate) struct InstallDaemonServiceRequest {
     pub start: Option<bool>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct UpdateDaemonServiceRequest {
+    pub binary_path: Option<String>,
+    pub working_directory: Option<String>,
+    pub port: Option<u16>,
+    pub log_level: Option<String>,
+    pub enable: Option<bool>,
+    pub restart: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DaemonServiceMutationResult {
@@ -79,6 +90,14 @@ pub(crate) struct DaemonServiceUnitFile {
     pub unit_path: String,
     pub installed: bool,
     pub content: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ServiceUnitConfig {
+    binary_path: PathBuf,
+    working_directory: PathBuf,
+    port: u16,
+    log_level: String,
 }
 
 pub(crate) fn record_process_start(port: u16) {
@@ -171,6 +190,12 @@ pub(crate) async fn uninstall_service() -> Result<DaemonServiceMutationResult> {
     tokio::task::spawn_blocking(uninstall_service_blocking).await?
 }
 
+pub(crate) async fn update_service(
+    request: UpdateDaemonServiceRequest,
+) -> Result<DaemonServiceMutationResult> {
+    tokio::task::spawn_blocking(move || update_service_blocking(request)).await?
+}
+
 pub(crate) async fn collect_service_logs(lines: usize) -> Result<DaemonServiceLogs> {
     tokio::task::spawn_blocking(move || collect_service_logs_blocking(lines)).await?
 }
@@ -183,27 +208,17 @@ fn install_service_blocking(
     request: InstallDaemonServiceRequest,
 ) -> Result<DaemonServiceMutationResult> {
     ensure_user_systemd()?;
-
     let unit_path = service_unit_path();
-    let unit_dir = unit_path
-        .parent()
-        .ok_or_else(|| anyhow!("Invalid unit file path"))?;
-    std::fs::create_dir_all(unit_dir)
-        .with_context(|| format!("Failed to create {}", unit_dir.display()))?;
-
-    let binary_path = resolve_binary_path(request.binary_path.as_deref())?;
-    let working_directory = resolve_working_directory(request.working_directory.as_deref())?;
-    let port = request
-        .port
-        .or_else(|| LISTEN_PORT.get().copied())
-        .unwrap_or(3100);
-    let log_level = request.log_level.as_deref().unwrap_or("info");
-
-    let unit = render_unit_file(&binary_path, &working_directory, port, log_level);
-    std::fs::write(&unit_path, unit)
-        .with_context(|| format!("Failed to write {}", unit_path.display()))?;
-
-    run_systemctl(["daemon-reload"])?;
+    let config = ServiceUnitConfig {
+        binary_path: resolve_binary_path(request.binary_path.as_deref())?,
+        working_directory: resolve_working_directory(request.working_directory.as_deref())?,
+        port: request
+            .port
+            .or_else(|| LISTEN_PORT.get().copied())
+            .unwrap_or(3100),
+        log_level: request.log_level.unwrap_or_else(|| "info".into()),
+    };
+    write_service_unit(&config)?;
 
     let enable = request.enable.unwrap_or(true);
     let start = request.start.unwrap_or(true);
@@ -219,6 +234,60 @@ fn install_service_blocking(
     Ok(DaemonServiceMutationResult {
         action: "install",
         message: format!("Installed {}", unit_path.display()),
+        service: collect_service_status(),
+    })
+}
+
+fn update_service_blocking(
+    request: UpdateDaemonServiceRequest,
+) -> Result<DaemonServiceMutationResult> {
+    ensure_user_systemd()?;
+
+    let unit = collect_service_unit_file_blocking()?;
+    if !unit.installed {
+        return Err(anyhow!("{} is not installed", UNIT_NAME));
+    }
+
+    let current_config = parse_unit_config(
+        unit.content
+            .as_deref()
+            .ok_or_else(|| anyhow!("{} is missing content", UNIT_NAME))?,
+    )?;
+    let current_status = collect_service_status();
+    let binary_path = request
+        .binary_path
+        .unwrap_or_else(|| current_config.binary_path.display().to_string());
+    let working_directory = request
+        .working_directory
+        .unwrap_or_else(|| current_config.working_directory.display().to_string());
+
+    let config = ServiceUnitConfig {
+        binary_path: resolve_binary_path(Some(&binary_path))?,
+        working_directory: resolve_working_directory(Some(&working_directory))?,
+        port: request.port.unwrap_or(current_config.port),
+        log_level: request.log_level.unwrap_or(current_config.log_level),
+    };
+
+    write_service_unit(&config)?;
+
+    match request.enable {
+        Some(true) => run_systemctl(["enable", UNIT_NAME])?,
+        Some(false) if current_status.enabled => run_systemctl(["disable", UNIT_NAME])?,
+        _ => {}
+    }
+
+    let should_restart = request.restart.unwrap_or(current_status.active);
+    if should_restart {
+        if current_status.active {
+            run_systemctl(["restart", UNIT_NAME])?;
+        } else {
+            run_systemctl(["start", UNIT_NAME])?;
+        }
+    }
+
+    Ok(DaemonServiceMutationResult {
+        action: "update",
+        message: format!("Updated {}", unit.unit_path),
         service: collect_service_status(),
     })
 }
@@ -320,6 +389,26 @@ fn collect_service_unit_file_blocking() -> Result<DaemonServiceUnitFile> {
     })
 }
 
+fn write_service_unit(config: &ServiceUnitConfig) -> Result<()> {
+    let unit_path = service_unit_path();
+    let unit_dir = unit_path
+        .parent()
+        .ok_or_else(|| anyhow!("Invalid unit file path"))?;
+    std::fs::create_dir_all(unit_dir)
+        .with_context(|| format!("Failed to create {}", unit_dir.display()))?;
+
+    let unit = render_unit_file(
+        &config.binary_path,
+        &config.working_directory,
+        config.port,
+        &config.log_level,
+    );
+    std::fs::write(&unit_path, unit)
+        .with_context(|| format!("Failed to write {}", unit_path.display()))?;
+    run_systemctl(["daemon-reload"])?;
+    Ok(())
+}
+
 fn run_service_action(action: &'static str) -> Result<DaemonServiceMutationResult> {
     ensure_user_systemd()?;
 
@@ -372,12 +461,62 @@ fn render_unit_file(
     )
 }
 
+fn parse_unit_config(content: &str) -> Result<ServiceUnitConfig> {
+    let exec_start = unit_value(content, "ExecStart")
+        .ok_or_else(|| anyhow!("Unit file is missing ExecStart"))?;
+    let working_directory = unit_value(content, "WorkingDirectory")
+        .ok_or_else(|| anyhow!("Unit file is missing WorkingDirectory"))?;
+    let log_level = unit_value(content, "Environment")
+        .and_then(|value| value.strip_prefix("RUST_LOG="))
+        .map(str::to_string)
+        .ok_or_else(|| anyhow!("Unit file is missing Environment=RUST_LOG"))?;
+
+    let (binary_path, port) = parse_exec_start(exec_start)?;
+
+    Ok(ServiceUnitConfig {
+        binary_path: PathBuf::from(binary_path),
+        working_directory: PathBuf::from(unquote_systemd_value(working_directory)),
+        port,
+        log_level,
+    })
+}
+
+fn unit_value<'a>(content: &'a str, key: &str) -> Option<&'a str> {
+    content
+        .lines()
+        .find_map(|line| line.strip_prefix(&format!("{key}=")))
+        .map(str::trim)
+}
+
+fn parse_exec_start(value: &str) -> Result<(String, u16)> {
+    let suffix = " daemon --port ";
+    let (binary, port) = value
+        .rsplit_once(suffix)
+        .ok_or_else(|| anyhow!("Unsupported ExecStart format: {value}"))?;
+    let port = port
+        .trim()
+        .parse::<u16>()
+        .with_context(|| format!("Invalid daemon port in ExecStart: {value}"))?;
+    Ok((unquote_systemd_value(binary), port))
+}
+
 fn quote_systemd_arg(path: &Path) -> String {
     let raw = path.display().to_string();
     if raw.contains([' ', '\t', '"']) {
         format!("\"{}\"", raw.replace('\\', "\\\\").replace('"', "\\\""))
     } else {
         raw
+    }
+}
+
+fn unquote_systemd_value(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.len() >= 2 && trimmed.starts_with('"') && trimmed.ends_with('"') {
+        trimmed[1..trimmed.len() - 1]
+            .replace("\\\"", "\"")
+            .replace("\\\\", "\\")
+    } else {
+        trimmed.to_string()
     }
 }
 
@@ -483,7 +622,7 @@ fn home_dir() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::render_unit_file;
+    use super::{parse_unit_config, render_unit_file, ServiceUnitConfig};
     use std::path::Path;
 
     #[test]
@@ -512,5 +651,26 @@ mod tests {
         assert!(unit
             .contains("ExecStart=\"/tmp/dev builds/univers-container-daemon\" daemon --port 3200"));
         assert!(unit.contains("WorkingDirectory=\"/tmp/dev builds\""));
+    }
+
+    #[test]
+    fn parses_rendered_unit_file() {
+        let unit = render_unit_file(
+            Path::new("/tmp/dev builds/univers-container-daemon"),
+            Path::new("/tmp/dev builds"),
+            3300,
+            "debug",
+        );
+
+        let parsed = parse_unit_config(&unit).expect("expected parsed config");
+        assert_eq!(
+            parsed,
+            ServiceUnitConfig {
+                binary_path: "/tmp/dev builds/univers-container-daemon".into(),
+                working_directory: "/tmp/dev builds".into(),
+                port: 3300,
+                log_level: "debug".into(),
+            }
+        );
     }
 }

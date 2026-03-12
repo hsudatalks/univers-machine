@@ -9,9 +9,9 @@ use crate::dashboard::{
 use crate::self_daemon::{
     collect_daemon_info, collect_service_logs, collect_service_status, collect_service_unit_file,
     install_service, record_process_start, restart_service, start_service, stop_service,
-    uninstall_service, DaemonInfo, DaemonServiceLogs, DaemonServiceLogsQuery,
+    uninstall_service, update_service, DaemonInfo, DaemonServiceLogs, DaemonServiceLogsQuery,
     DaemonServiceMutationResult, DaemonServiceStatus, DaemonServiceUnitFile,
-    InstallDaemonServiceRequest,
+    InstallDaemonServiceRequest, UpdateDaemonServiceRequest,
 };
 use axum::routing::{get, post};
 use axum::{
@@ -56,6 +56,7 @@ pub async fn run_daemon(port: u16) -> anyhow::Result<()> {
         .route("/api/daemon/service/logs", get(get_daemon_service_logs))
         .route("/api/daemon/service/unit", get(get_daemon_service_unit_file))
         .route("/api/daemon/service/install", post(install_daemon_service))
+        .route("/api/daemon/service/update", post(update_daemon_service))
         .route("/api/daemon/service/start", post(start_daemon_service))
         .route("/api/daemon/service/stop", post(stop_daemon_service))
         .route("/api/daemon/service/restart", post(restart_daemon_service))
@@ -187,6 +188,16 @@ async fn install_daemon_service(
     Json(request): Json<InstallDaemonServiceRequest>,
 ) -> Json<ApiResponse<DaemonServiceMutationResult>> {
     match install_service(request).await {
+        Ok(result) => Json(ApiResponse::ok(result)),
+        Err(error) => Json(ApiResponse::err(error.to_string())),
+    }
+}
+
+async fn update_daemon_service(
+    State(_state): State<Arc<DaemonState>>,
+    Json(request): Json<UpdateDaemonServiceRequest>,
+) -> Json<ApiResponse<DaemonServiceMutationResult>> {
+    match update_service(request).await {
         Ok(result) => Json(ApiResponse::ok(result)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }

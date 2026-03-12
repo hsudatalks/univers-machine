@@ -8,8 +8,8 @@ use clap::{Parser, Subcommand};
 use self_daemon::{
     collect_daemon_info, collect_service_logs, collect_service_status, collect_service_unit_file,
     install_service, restart_service, start_service, stop_service, uninstall_service,
-    DaemonServiceLogs, DaemonServiceMutationResult, DaemonServiceStatus, DaemonServiceUnitFile,
-    InstallDaemonServiceRequest,
+    update_service, DaemonServiceLogs, DaemonServiceMutationResult, DaemonServiceStatus,
+    DaemonServiceUnitFile, InstallDaemonServiceRequest, UpdateDaemonServiceRequest,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use univers_daemon_core::agent::db::Db;
@@ -126,6 +126,36 @@ enum ServiceCommands {
         /// Do not start the service after installing it
         #[arg(long)]
         no_start: bool,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Update the installed service configuration
+    Update {
+        /// Override the daemon binary path
+        #[arg(long)]
+        binary_path: Option<String>,
+        /// Override the working directory
+        #[arg(long)]
+        working_directory: Option<String>,
+        /// Override the daemon port
+        #[arg(long)]
+        port: Option<u16>,
+        /// Override RUST_LOG for the service
+        #[arg(long)]
+        log_level: Option<String>,
+        /// Enable the service after updating
+        #[arg(long, conflicts_with = "disable")]
+        enable: bool,
+        /// Disable the service after updating
+        #[arg(long, conflicts_with = "enable")]
+        disable: bool,
+        /// Restart or start the service after updating
+        #[arg(long, conflicts_with = "no_restart")]
+        restart: bool,
+        /// Update the unit file without restarting the service
+        #[arg(long, conflicts_with = "restart")]
+        no_restart: bool,
         /// Output as JSON
         #[arg(long)]
         json: bool,
@@ -390,6 +420,28 @@ async fn handle_service_cmd(command: ServiceCommands) -> anyhow::Result<()> {
             .await?;
             print_service_mutation_result(&result, json)?;
         }
+        ServiceCommands::Update {
+            binary_path,
+            working_directory,
+            port,
+            log_level,
+            enable,
+            disable,
+            restart,
+            no_restart,
+            json,
+        } => {
+            let result = update_service(UpdateDaemonServiceRequest {
+                binary_path,
+                working_directory,
+                port,
+                log_level,
+                enable: select_optional_bool(enable, disable),
+                restart: select_optional_bool(restart, no_restart),
+            })
+            .await?;
+            print_service_mutation_result(&result, json)?;
+        }
         ServiceCommands::Start { json } => {
             let result = start_service().await?;
             print_service_mutation_result(&result, json)?;
@@ -409,6 +461,16 @@ async fn handle_service_cmd(command: ServiceCommands) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn select_optional_bool(enable: bool, disable: bool) -> Option<bool> {
+    if enable {
+        Some(true)
+    } else if disable {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 fn print_service_mutation_result(
