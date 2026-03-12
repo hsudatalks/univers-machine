@@ -1,5 +1,8 @@
+pub(crate) mod diagnostics;
+pub(crate) mod secrets;
+
 use crate::{
-    activity::{current_runtime_activity, update_runtime_activity as apply_runtime_activity},
+    activity::update_runtime_activity as apply_runtime_activity,
     machine::{
         read_bootstrap_data, read_server_inventory, read_targets_config, resolve_raw_target,
         restart_container as restart_remote_container, save_targets_config,
@@ -21,17 +24,11 @@ use crate::{
         merge_github_pull_request as execute_github_pull_request_merge, open_external_url,
     },
     models::{
-        AppBootstrap, AppDiagnostics, AppSettings, ConnectivityDiagnostics, ConnectivityState,
-        ContainerDashboard, DashboardDiagnostics, DashboardState,
+        AppBootstrap, AppSettings, ConnectivityState, ContainerDashboard, DashboardState,
         GithubProjectState, GithubPullRequestDetail, MachineImportCandidate, ManagedServer,
-        PortRangeDiagnostics, RemoteDirectoryListing, RemoteFilePreview,
-        RuntimeActivityDiagnostics, RuntimeActivityState, SchedulerState, SecretAssignmentInput,
-        SecretAssignmentRecord, SecretCredentialInput, SecretCredentialRecord, SecretInventory,
-        SecretProviderInput, SecretProviderRecord, TerminalDiagnostics, TerminalSnapshot,
-        TerminalState, TunnelDiagnostics, TunnelState, TunnelStatus,
+        RemoteDirectoryListing, RemoteFilePreview, RuntimeActivityState, TerminalSnapshot,
+        TerminalState, TunnelState, TunnelStatus,
     },
-    scheduler::scheduler_budget_diagnostics,
-    secret_management::SecretManagementState,
     services::{
         actions::execute_command_service_action,
         catalog::tmux_command_service,
@@ -52,10 +49,8 @@ use crate::{
 };
 use serde::Deserialize;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     path::PathBuf,
-    sync::atomic::Ordering,
-    time::Instant,
 };
 use tauri::{async_runtime, AppHandle, State};
 use univers_ark_russh::SshConfigResolver;
@@ -1080,7 +1075,6 @@ pub(crate) fn delete_secret_assignment(
 ) -> Result<(), String> {
     secret_management_state.delete_assignment(&assignment_id)
 }
-
 #[tauri::command]
 pub(crate) fn save_app_settings(
     app_handle: AppHandle,

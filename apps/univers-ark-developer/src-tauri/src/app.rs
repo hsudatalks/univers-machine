@@ -7,7 +7,7 @@ use crate::{
         TerminalState, TunnelState,
     },
     scheduler::{start_background_scheduler, stop_background_scheduler},
-    secret_management::SecretManagementState,
+    secrets::SecretManagementState,
     tunnel::stop_all_tunnels,
 };
 use tauri::{AppHandle, Manager, Runtime};
@@ -313,14 +313,14 @@ pub(crate) fn run() {
             commands::load_targets_config,
             commands::update_targets_config,
             commands::load_app_settings,
-            commands::load_app_diagnostics,
-            commands::load_secret_inventory,
-            commands::upsert_secret_provider,
-            commands::delete_secret_provider,
-            commands::upsert_secret_credential,
-            commands::delete_secret_credential,
-            commands::upsert_secret_assignment,
-            commands::delete_secret_assignment,
+            commands::diagnostics::load_app_diagnostics,
+            commands::secrets::load_secret_inventory,
+            commands::secrets::upsert_secret_provider,
+            commands::secrets::delete_secret_provider,
+            commands::secrets::upsert_secret_credential,
+            commands::secrets::delete_secret_credential,
+            commands::secrets::upsert_secret_assignment,
+            commands::secrets::delete_secret_assignment,
             commands::save_app_settings,
             commands::update_runtime_activity
         ])

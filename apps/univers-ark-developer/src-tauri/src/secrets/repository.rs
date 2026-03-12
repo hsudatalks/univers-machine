@@ -1,4 +1,6 @@
+use super::store::SecretStore;
 use crate::{
+    infra::sqlite::SqliteStore,
     machine::univers_config_dir,
     models::{
         SecretAssignmentInput, SecretAssignmentRecord, SecretAssignmentTargetKind,
@@ -6,12 +8,9 @@ use crate::{
         SecretManagementDiagnostics, SecretProviderInput, SecretProviderRecord,
     },
 };
-use keyring::Entry;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::{
-    fs,
     path::PathBuf,
-    sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -62,48 +61,25 @@ fn generated_id(prefix: &str, label: &str, current_id: &str) -> String {
     format!("{}-{}", normalized_label, now_ms())
 }
 
-trait SecretStore: Send + Sync {
-    fn backend_name(&self) -> &'static str;
-    fn set_secret(&self, account: &str, value: &str) -> Result<(), String>;
-    fn delete_secret(&self, account: &str) -> Result<(), String>;
-}
-
-struct KeyringSecretStore {
-    service_name: String,
-}
-
-impl KeyringSecretStore {
-    fn new() -> Self {
-        Self {
-            service_name: if cfg!(debug_assertions) {
-                String::from("univers-ark-developer.dev")
-            } else {
-                String::from("univers-ark-developer")
-            },
-        }
-    }
-
-    fn entry(&self, account: &str) -> Result<Entry, String> {
-        Entry::new(&self.service_name, account)
-            .map_err(|error| format!("Failed to access OS credential store: {}", error))
+fn format_target_kind(value: SecretAssignmentTargetKind) -> &'static str {
+    match value {
+        SecretAssignmentTargetKind::Machine => "machine",
+        SecretAssignmentTargetKind::Container => "container",
     }
 }
 
-impl SecretStore for KeyringSecretStore {
-    fn backend_name(&self) -> &'static str {
-        "keyring"
-    }
-
-    fn set_secret(&self, account: &str, value: &str) -> Result<(), String> {
-        self.entry(account)?
-            .set_password(value)
-            .map_err(|error| format!("Failed to write secret to OS credential store: {}", error))
-    }
-
-    fn delete_secret(&self, account: &str) -> Result<(), String> {
-        self.entry(account)?
-            .delete_credential()
-            .map_err(|error| format!("Failed to delete secret from OS credential store: {}", error))
+fn parse_target_kind(value: &str) -> rusqlite::Result<SecretAssignmentTargetKind> {
+    match value {
+        "machine" => Ok(SecretAssignmentTargetKind::Machine),
+        "container" => Ok(SecretAssignmentTargetKind::Container),
+        other => Err(rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Unknown assignment target kind {}", other),
+            )),
+        )),
     }
 }
 
@@ -137,51 +113,55 @@ impl StoredCredentialRecord {
     }
 }
 
-struct SecretRepository {
-    path: PathBuf,
+pub(super) trait SecretRepository: Send + Sync {
+    fn load_inventory(&self, store_backend: &str) -> Result<SecretInventory, String>;
+    fn diagnostics(&self, store_backend: &str) -> Result<SecretManagementDiagnostics, String>;
+    fn upsert_provider(&self, input: SecretProviderInput) -> Result<SecretProviderRecord, String>;
+    fn delete_provider(&self, provider_id: &str) -> Result<(), String>;
+    fn upsert_credential(
+        &self,
+        store: &dyn SecretStore,
+        input: SecretCredentialInput,
+    ) -> Result<SecretCredentialRecord, String>;
+    fn delete_credential(
+        &self,
+        store: &dyn SecretStore,
+        credential_id: &str,
+    ) -> Result<(), String>;
+    fn upsert_assignment(
+        &self,
+        input: SecretAssignmentInput,
+    ) -> Result<SecretAssignmentRecord, String>;
+    fn delete_assignment(&self, assignment_id: &str) -> Result<(), String>;
 }
 
-impl SecretRepository {
-    fn new(path: PathBuf) -> Result<Self, String> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|error| {
-                format!(
-                    "Failed to create secret database directory {}: {}",
-                    parent.display(),
-                    error
-                )
-            })?;
-        }
+pub(super) struct SqliteSecretRepository {
+    sqlite: SqliteStore,
+}
 
-        let repository = Self { path };
+pub(super) fn default_repository() -> Result<Box<dyn SecretRepository>, String> {
+    let config_dir = univers_config_dir()?;
+    Ok(Box::new(SqliteSecretRepository::new(
+        config_dir.join(database_file_name()),
+    )?))
+}
+
+impl SqliteSecretRepository {
+    pub(super) fn new(path: PathBuf) -> Result<Self, String> {
+        let repository = Self {
+            sqlite: SqliteStore::new(path)?,
+        };
         repository.migrate()?;
         Ok(repository)
     }
 
     fn connect(&self) -> Result<Connection, String> {
-        let connection = Connection::open(&self.path).map_err(|error| {
-            format!(
-                "Failed to open secret database {}: {}",
-                self.path.display(),
-                error
-            )
-        })?;
-
-        connection
-            .execute_batch(
-                "PRAGMA journal_mode=WAL;
-                 PRAGMA busy_timeout=5000;
-                 PRAGMA foreign_keys=ON;",
-            )
-            .map_err(|error| format!("Failed to initialize SQLite pragmas: {}", error))?;
-
-        Ok(connection)
+        self.sqlite.connect()
     }
 
     fn migrate(&self) -> Result<(), String> {
-        let connection = self.connect()?;
-        connection
-            .execute_batch(
+        self.sqlite
+            .migrate(
                 "CREATE TABLE IF NOT EXISTS secret_providers (
                     id            TEXT PRIMARY KEY,
                     label         TEXT NOT NULL,
@@ -233,9 +213,10 @@ impl SecretRepository {
                 CREATE INDEX IF NOT EXISTS idx_secret_audit_events_created_at
                     ON secret_audit_events(created_at_ms DESC);",
             )
-            .map_err(|error| format!("Failed to migrate secret database schema: {}", error))
     }
+}
 
+impl SqliteSecretRepository {
     fn load_inventory(&self, store_backend: &str) -> Result<SecretInventory, String> {
         let connection = self.connect()?;
         let providers = self.list_providers(&connection)?;
@@ -248,7 +229,7 @@ impl SecretRepository {
         let audit_events = self.list_audit_events(&connection)?;
 
         Ok(SecretInventory {
-            db_path: self.path.display().to_string(),
+            db_path: self.sqlite.path().display().to_string(),
             store_backend: store_backend.to_string(),
             providers,
             credentials,
@@ -265,7 +246,7 @@ impl SecretRepository {
         let audit_event_count = self.scalar_count(&connection, "secret_audit_events")?;
 
         Ok(SecretManagementDiagnostics {
-            db_path: self.path.display().to_string(),
+            db_path: self.sqlite.path().display().to_string(),
             store_backend: store_backend.to_string(),
             provider_count,
             credential_count,
@@ -273,7 +254,9 @@ impl SecretRepository {
             audit_event_count,
         })
     }
+}
 
+impl SqliteSecretRepository {
     fn scalar_count(&self, connection: &Connection, table_name: &str) -> Result<usize, String> {
         let sql = format!("SELECT COUNT(*) FROM {}", table_name);
         connection
@@ -409,7 +392,11 @@ impl SecretRepository {
             .map_err(|error| format!("Failed to read secret audit events: {}", error))
     }
 
-    fn get_provider(&self, connection: &Connection, provider_id: &str) -> Result<Option<SecretProviderRecord>, String> {
+    fn get_provider(
+        &self,
+        connection: &Connection,
+        provider_id: &str,
+    ) -> Result<Option<SecretProviderRecord>, String> {
         connection
             .query_row(
                 "SELECT id, label, provider_kind, base_url, description, created_at_ms, updated_at_ms
@@ -461,7 +448,22 @@ impl SecretRepository {
                 },
             )
             .optional()
-            .map_err(|error| format!("Failed to inspect secret credential {}: {}", credential_id, error))
+            .map_err(|error| {
+                format!(
+                    "Failed to inspect secret credential {}: {}",
+                    credential_id, error
+                )
+            })
+    }
+}
+
+impl SecretRepository for SqliteSecretRepository {
+    fn load_inventory(&self, store_backend: &str) -> Result<SecretInventory, String> {
+        SqliteSecretRepository::load_inventory(self, store_backend)
+    }
+
+    fn diagnostics(&self, store_backend: &str) -> Result<SecretManagementDiagnostics, String> {
+        SqliteSecretRepository::diagnostics(self, store_backend)
     }
 
     fn upsert_provider(&self, input: SecretProviderInput) -> Result<SecretProviderRecord, String> {
@@ -482,7 +484,10 @@ impl SecretRepository {
         let description = input.description.trim().to_string();
         let existing = self.get_provider(&connection, &id)?;
         let now = now_ms();
-        let created_at_ms = existing.as_ref().map(|item| item.created_at_ms).unwrap_or(now);
+        let created_at_ms = existing
+            .as_ref()
+            .map(|item| item.created_at_ms)
+            .unwrap_or(now);
 
         connection
             .execute(
@@ -509,7 +514,11 @@ impl SecretRepository {
 
         self.insert_audit_event(
             &connection,
-            if existing.is_some() { "providerUpdated" } else { "providerCreated" },
+            if existing.is_some() {
+                "providerUpdated"
+            } else {
+                "providerCreated"
+            },
             "provider",
             &id,
             &label,
@@ -523,19 +532,18 @@ impl SecretRepository {
         let connection = self.connect()?;
         let deleted = connection
             .execute("DELETE FROM secret_providers WHERE id = ?1", [provider_id])
-            .map_err(|error| format!("Failed to delete secret provider {}: {}", provider_id, error))?;
+            .map_err(|error| {
+                format!(
+                    "Failed to delete secret provider {}: {}",
+                    provider_id, error
+                )
+            })?;
 
         if deleted == 0 {
             return Err(format!("Secret provider {} does not exist.", provider_id));
         }
 
-        self.insert_audit_event(
-            &connection,
-            "providerDeleted",
-            "provider",
-            provider_id,
-            "",
-        )?;
+        self.insert_audit_event(&connection, "providerDeleted", "provider", provider_id, "")?;
         Ok(())
     }
 
@@ -548,7 +556,9 @@ impl SecretRepository {
         let provider_id = input.provider_id.trim().to_string();
 
         if provider_id.is_empty() {
-            return Err(String::from("Secret credential providerId cannot be empty."));
+            return Err(String::from(
+                "Secret credential providerId cannot be empty.",
+            ));
         }
         if self.get_provider(&connection, &provider_id)?.is_none() {
             return Err(format!("Secret provider {} does not exist.", provider_id));
@@ -571,10 +581,11 @@ impl SecretRepository {
             .as_ref()
             .map(|item| item.secret_account.clone())
             .unwrap_or_default();
-        let mut has_secret = existing.as_ref().map(|item| item.has_secret).unwrap_or(false);
-        let mut last_rotated_at_ms = existing
+        let mut has_secret = existing
             .as_ref()
-            .and_then(|item| item.last_rotated_at_ms);
+            .map(|item| item.has_secret)
+            .unwrap_or(false);
+        let mut last_rotated_at_ms = existing.as_ref().and_then(|item| item.last_rotated_at_ms);
 
         if input.clear_secret {
             if !secret_account.is_empty() {
@@ -591,7 +602,11 @@ impl SecretRepository {
                 if secret_account.is_empty() {
                     secret_account = format!(
                         "{}:{}",
-                        if cfg!(debug_assertions) { "dev" } else { "prod" },
+                        if cfg!(debug_assertions) {
+                            "dev"
+                        } else {
+                            "prod"
+                        },
                         id
                     );
                 }
@@ -603,7 +618,10 @@ impl SecretRepository {
         }
 
         let now = now_ms();
-        let created_at_ms = existing.as_ref().map(|item| item.created_at_ms).unwrap_or(now);
+        let created_at_ms = existing
+            .as_ref()
+            .map(|item| item.created_at_ms)
+            .unwrap_or(now);
 
         connection
             .execute(
@@ -637,7 +655,11 @@ impl SecretRepository {
 
         self.insert_audit_event(
             &connection,
-            if existing.is_some() { "credentialUpdated" } else { "credentialCreated" },
+            if existing.is_some() {
+                "credentialUpdated"
+            } else {
+                "credentialCreated"
+            },
             "credential",
             &id,
             &label,
@@ -663,8 +685,16 @@ impl SecretRepository {
         }
 
         connection
-            .execute("DELETE FROM secret_credentials WHERE id = ?1", [credential_id])
-            .map_err(|error| format!("Failed to delete secret credential {}: {}", credential_id, error))?;
+            .execute(
+                "DELETE FROM secret_credentials WHERE id = ?1",
+                [credential_id],
+            )
+            .map_err(|error| {
+                format!(
+                    "Failed to delete secret credential {}: {}",
+                    credential_id, error
+                )
+            })?;
 
         self.insert_audit_event(
             &connection,
@@ -676,18 +706,20 @@ impl SecretRepository {
         Ok(())
     }
 
-    fn upsert_assignment(
-        &self,
-        input: SecretAssignmentInput,
-    ) -> Result<SecretAssignmentRecord, String> {
+    fn upsert_assignment(&self, input: SecretAssignmentInput) -> Result<SecretAssignmentRecord, String> {
         let connection = self.connect()?;
         let credential_id = input.credential_id.trim().to_string();
 
         if credential_id.is_empty() {
-            return Err(String::from("Secret assignment credentialId cannot be empty."));
+            return Err(String::from(
+                "Secret assignment credentialId cannot be empty.",
+            ));
         }
         if self.get_credential(&connection, &credential_id)?.is_none() {
-            return Err(format!("Secret credential {} does not exist.", credential_id));
+            return Err(format!(
+                "Secret credential {} does not exist.",
+                credential_id
+            ));
         }
 
         let target_id = input.target_id.trim().to_string();
@@ -747,7 +779,11 @@ impl SecretRepository {
 
         self.insert_audit_event(
             &connection,
-            if existing.is_some() { "assignmentUpdated" } else { "assignmentCreated" },
+            if existing.is_some() {
+                "assignmentUpdated"
+            } else {
+                "assignmentCreated"
+            },
             "assignment",
             &id,
             "",
@@ -762,11 +798,22 @@ impl SecretRepository {
     fn delete_assignment(&self, assignment_id: &str) -> Result<(), String> {
         let connection = self.connect()?;
         let deleted = connection
-            .execute("DELETE FROM secret_assignments WHERE id = ?1", [assignment_id])
-            .map_err(|error| format!("Failed to delete secret assignment {}: {}", assignment_id, error))?;
+            .execute(
+                "DELETE FROM secret_assignments WHERE id = ?1",
+                [assignment_id],
+            )
+            .map_err(|error| {
+                format!(
+                    "Failed to delete secret assignment {}: {}",
+                    assignment_id, error
+                )
+            })?;
 
         if deleted == 0 {
-            return Err(format!("Secret assignment {} does not exist.", assignment_id));
+            return Err(format!(
+                "Secret assignment {} does not exist.",
+                assignment_id
+            ));
         }
 
         self.insert_audit_event(
@@ -778,7 +825,9 @@ impl SecretRepository {
         )?;
         Ok(())
     }
+}
 
+impl SqliteSecretRepository {
     fn insert_audit_event(
         &self,
         connection: &Connection,
@@ -795,159 +844,5 @@ impl SecretRepository {
             )
             .map_err(|error| format!("Failed to write secret audit event: {}", error))?;
         Ok(())
-    }
-}
-
-fn format_target_kind(value: SecretAssignmentTargetKind) -> &'static str {
-    match value {
-        SecretAssignmentTargetKind::Machine => "machine",
-        SecretAssignmentTargetKind::Container => "container",
-    }
-}
-
-fn parse_target_kind(value: &str) -> rusqlite::Result<SecretAssignmentTargetKind> {
-    match value {
-        "machine" => Ok(SecretAssignmentTargetKind::Machine),
-        "container" => Ok(SecretAssignmentTargetKind::Container),
-        other => Err(rusqlite::Error::FromSqlConversionFailure(
-            0,
-            rusqlite::types::Type::Text,
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Unknown assignment target kind {}", other),
-            )),
-        )),
-    }
-}
-
-struct SecretManager {
-    repository: SecretRepository,
-    store: Arc<dyn SecretStore>,
-}
-
-impl SecretManager {
-    fn new() -> Result<Self, String> {
-        let config_dir = univers_config_dir()?;
-        let repository = SecretRepository::new(config_dir.join(database_file_name()))?;
-        let store = Arc::new(KeyringSecretStore::new()) as Arc<dyn SecretStore>;
-
-        Ok(Self { repository, store })
-    }
-
-    fn load_inventory(&self) -> Result<SecretInventory, String> {
-        self.repository.load_inventory(self.store.backend_name())
-    }
-
-    fn diagnostics(&self) -> Result<SecretManagementDiagnostics, String> {
-        self.repository.diagnostics(self.store.backend_name())
-    }
-
-    fn upsert_provider(&self, input: SecretProviderInput) -> Result<SecretProviderRecord, String> {
-        self.repository.upsert_provider(input)
-    }
-
-    fn delete_provider(&self, provider_id: &str) -> Result<(), String> {
-        self.repository.delete_provider(provider_id)
-    }
-
-    fn upsert_credential(
-        &self,
-        input: SecretCredentialInput,
-    ) -> Result<SecretCredentialRecord, String> {
-        self.repository.upsert_credential(self.store.as_ref(), input)
-    }
-
-    fn delete_credential(&self, credential_id: &str) -> Result<(), String> {
-        self.repository
-            .delete_credential(self.store.as_ref(), credential_id)
-    }
-
-    fn upsert_assignment(
-        &self,
-        input: SecretAssignmentInput,
-    ) -> Result<SecretAssignmentRecord, String> {
-        self.repository.upsert_assignment(input)
-    }
-
-    fn delete_assignment(&self, assignment_id: &str) -> Result<(), String> {
-        self.repository.delete_assignment(assignment_id)
-    }
-}
-
-#[derive(Clone)]
-pub(crate) struct SecretManagementState {
-    manager: Arc<Mutex<SecretManager>>,
-}
-
-impl SecretManagementState {
-    pub(crate) fn new() -> Result<Self, String> {
-        Ok(Self {
-            manager: Arc::new(Mutex::new(SecretManager::new()?)),
-        })
-    }
-
-    pub(crate) fn load_inventory(&self) -> Result<SecretInventory, String> {
-        self.manager
-            .lock()
-            .map_err(|_| String::from("Failed to lock secret manager state"))?
-            .load_inventory()
-    }
-
-    pub(crate) fn diagnostics(&self) -> Result<SecretManagementDiagnostics, String> {
-        self.manager
-            .lock()
-            .map_err(|_| String::from("Failed to lock secret manager state"))?
-            .diagnostics()
-    }
-
-    pub(crate) fn upsert_provider(
-        &self,
-        input: SecretProviderInput,
-    ) -> Result<SecretProviderRecord, String> {
-        self.manager
-            .lock()
-            .map_err(|_| String::from("Failed to lock secret manager state"))?
-            .upsert_provider(input)
-    }
-
-    pub(crate) fn delete_provider(&self, provider_id: &str) -> Result<(), String> {
-        self.manager
-            .lock()
-            .map_err(|_| String::from("Failed to lock secret manager state"))?
-            .delete_provider(provider_id)
-    }
-
-    pub(crate) fn upsert_credential(
-        &self,
-        input: SecretCredentialInput,
-    ) -> Result<SecretCredentialRecord, String> {
-        self.manager
-            .lock()
-            .map_err(|_| String::from("Failed to lock secret manager state"))?
-            .upsert_credential(input)
-    }
-
-    pub(crate) fn delete_credential(&self, credential_id: &str) -> Result<(), String> {
-        self.manager
-            .lock()
-            .map_err(|_| String::from("Failed to lock secret manager state"))?
-            .delete_credential(credential_id)
-    }
-
-    pub(crate) fn upsert_assignment(
-        &self,
-        input: SecretAssignmentInput,
-    ) -> Result<SecretAssignmentRecord, String> {
-        self.manager
-            .lock()
-            .map_err(|_| String::from("Failed to lock secret manager state"))?
-            .upsert_assignment(input)
-    }
-
-    pub(crate) fn delete_assignment(&self, assignment_id: &str) -> Result<(), String> {
-        self.manager
-            .lock()
-            .map_err(|_| String::from("Failed to lock secret manager state"))?
-            .delete_assignment(assignment_id)
     }
 }
