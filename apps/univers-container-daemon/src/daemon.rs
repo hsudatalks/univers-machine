@@ -1,7 +1,8 @@
 use crate::container::{
     collect_ports, ContainerInfo, ContainerProcessesInfo, ContainerRuntimeInfo,
 };
-use axum::routing::get;
+use crate::dashboard::{collect_dashboard, ContainerDashboard, DashboardRequest};
+use axum::routing::{get, post};
 use axum::{extract::State, response::Json, Router};
 use std::sync::Arc;
 use tracing::info;
@@ -28,6 +29,7 @@ pub async fn run_daemon(port: u16) -> anyhow::Result<()> {
         .route("/api/container/runtime", get(get_container_runtime))
         .route("/api/container/processes", get(get_container_processes))
         .route("/api/container/ports", get(get_container_ports))
+        .route("/api/container/dashboard", post(get_container_dashboard))
         // Shared routes from core
         .merge(shared_routes())
         // Legacy backward-compatible routes
@@ -65,4 +67,14 @@ async fn get_container_ports(
     State(_state): State<Arc<DaemonState>>,
 ) -> Json<ApiResponse<Vec<crate::container::ContainerPortInfo>>> {
     Json(ApiResponse::ok(collect_ports()))
+}
+
+async fn get_container_dashboard(
+    State(state): State<Arc<DaemonState>>,
+    Json(request): Json<DashboardRequest>,
+) -> Json<ApiResponse<ContainerDashboard>> {
+    match collect_dashboard(request, state.agent_state.clone()).await {
+        Ok(dashboard) => Json(ApiResponse::ok(dashboard)),
+        Err(error) => Json(ApiResponse::err(error.to_string())),
+    }
 }
