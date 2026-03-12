@@ -225,6 +225,7 @@ function App() {
   const [isNetworkOnline, setIsNetworkOnline] = useState(
     () => typeof navigator === "undefined" || navigator.onLine,
   );
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [activeView, setActiveView] = useState<ActiveView>(
     () => parseActiveViewFromHash(window.location.hash) ?? { kind: "home" },
   );
@@ -342,6 +343,23 @@ function App() {
     homeViewMode === "machines"
       ? activeMachineOverviewFocusedTargetId
       : activeTerminalOverviewFocusedTargetId;
+  const isCompactWorkspaceLayout = isCompactHomeLayout
+    && activeView.kind !== "home"
+    && activeView.kind !== "settings";
+
+  useEffect(() => {
+    if (!isCompactWorkspaceLayout && isMobileSidebarOpen) {
+      setIsMobileSidebarOpen(false);
+    }
+  }, [isCompactWorkspaceLayout, isMobileSidebarOpen]);
+
+  useEffect(() => {
+    if (!isCompactWorkspaceLayout) {
+      return;
+    }
+
+    setIsMobileSidebarOpen(false);
+  }, [activeView, isCompactWorkspaceLayout]);
   const activeRuntimeTargetId = useMemo(() => {
     if (activeView.kind === "container") {
       return activeView.targetId;
@@ -936,21 +954,50 @@ function App() {
 
   const isHomeLayout =
     activeView.kind === "home" || activeView.kind === "settings";
+  const isSidebarVisible = !isCompactWorkspaceLayout && !isSidebarHidden;
   const activeStatusLabel =
     activeView.kind === "home"
       ? "Home"
       : activeView.kind === "settings"
         ? "Settings"
         : activeView.kind === "machine"
-          ? `Machine ${visitedMachines.find((machine) => machine.id === activeView.machineId)?.label ?? activeView.machineId}`
-          : `Container ${activeContainerTarget?.label ?? activeView.targetId}`;
+        ? `Machine ${visitedMachines.find((machine) => machine.id === activeView.machineId)?.label ?? activeView.machineId}`
+        : `Container ${activeContainerTarget?.label ?? activeView.targetId}`;
+
+  const closeMobileSidebar = () => {
+    setIsMobileSidebarOpen(false);
+  };
+
+  const handleSidebarSelectHome = () => {
+    closeMobileSidebar();
+    setActiveView({ kind: "home" });
+  };
+
+  const handleSidebarSelectContainer = (targetId: string) => {
+    closeMobileSidebar();
+    setContainerView(targetId);
+  };
+
+  const handleSidebarSelectMachine = (machineId: string) => {
+    closeMobileSidebar();
+    openMachineView(machineId);
+  };
+
+  const handleStatusBarSidebarToggle = () => {
+    if (isCompactWorkspaceLayout) {
+      setIsMobileSidebarOpen((current) => !current);
+      return;
+    }
+
+    setIsSidebarHidden((current) => !current);
+  };
 
   return (
-    <main className={`shell ${isHomeLayout ? "shell-overview" : ""} ${isSidebarHidden ? "shell-sidebar-hidden" : ""}`}>
+    <main className={`shell ${isHomeLayout ? "shell-overview" : ""} ${isSidebarVisible ? "" : "shell-sidebar-hidden"}`}>
       <section
-        className={`shell-layout ${isHomeLayout ? "shell-layout-overview" : ""} ${isSidebarHidden ? "shell-layout-sidebar-hidden" : ""}`}
+        className={`shell-layout ${isHomeLayout ? "shell-layout-overview" : ""} ${isSidebarVisible ? "" : "shell-layout-sidebar-hidden"}`}
       >
-        {!isSidebarHidden ? (
+        {isSidebarVisible ? (
           <SidebarNav
             activeMachineId={
               activeView.kind === "machine"
@@ -965,11 +1012,9 @@ function App() {
             expandedMachineIds={expandedMachineIds}
             isHomeActive={activeView.kind === "home"}
             isHomeLayout={isHomeLayout}
-            onSelectContainer={setContainerView}
-            onSelectHome={() => {
-              setActiveView({ kind: "home" });
-            }}
-            onSelectMachine={openMachineView}
+            onSelectContainer={handleSidebarSelectContainer}
+            onSelectHome={handleSidebarSelectHome}
+            onSelectMachine={handleSidebarSelectMachine}
             onToggleMachine={toggleMachineExpansion}
           />
         ) : null}
@@ -1218,13 +1263,40 @@ function App() {
         </section>
       </section>
 
+      {isCompactWorkspaceLayout ? (
+        <div className={`mobile-sidebar-overlay ${isMobileSidebarOpen ? "is-open" : ""}`}>
+          <button
+            aria-label="Close workspace navigation"
+            className="mobile-sidebar-backdrop"
+            onClick={closeMobileSidebar}
+            type="button"
+          />
+
+          <div className="mobile-sidebar-drawer" role="dialog" aria-label="Workspace navigation">
+            <SidebarNav
+              activeMachineId={activeView.kind === "machine" ? activeView.machineId : activeContainerMachine?.id}
+              activeTargetId={activeView.kind === "container" ? activeView.targetId : undefined}
+              availableTargetIds={bootstrap.targets.map((target) => target.id)}
+              bootstrap={bootstrap}
+              expandedMachineIds={expandedMachineIds}
+              isHomeActive={false}
+              isHomeLayout={false}
+              onSelectContainer={handleSidebarSelectContainer}
+              onSelectHome={handleSidebarSelectHome}
+              onSelectMachine={handleSidebarSelectMachine}
+              onToggleMachine={toggleMachineExpansion}
+            />
+          </div>
+        </div>
+      ) : null}
+
       <StatusBar
         activeMachineId={activeView.kind === "machine" ? activeView.machineId : undefined}
         activeStatusLabel={activeStatusLabel}
         containerCount={overviewContainers.length}
         homeViewModes={isCompactHomeLayout ? ["dashboard"] : HOME_VIEW_MODES}
         isHomeActive={activeView.kind === "home"}
-        isSidebarHidden={isSidebarHidden}
+        isSidebarHidden={isCompactWorkspaceLayout ? !isMobileSidebarOpen : isSidebarHidden}
         machineEntries={bootstrap.machines.map((machine) => ({ id: machine.id, label: machine.label }))}
         onNavigateMachine={openMachineView}
         onSetHomeViewMode={setHomeViewMode}
@@ -1235,9 +1307,7 @@ function App() {
               : { kind: "settings" },
           );
         }}
-        onToggleSidebar={() => {
-          setIsSidebarHidden((current) => !current);
-        }}
+        onToggleSidebar={handleStatusBarSidebarToggle}
         homeViewMode={homeViewMode}
         reachableContainerCount={reachableContainerCount}
         serverCount={bootstrap.machines.length}
