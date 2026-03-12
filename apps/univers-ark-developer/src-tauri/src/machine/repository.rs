@@ -11,7 +11,6 @@ use crate::machine::{
     inventory::clear_targets_cache,
     ssh::{machine_host_key_alias, resolved_known_hosts_path},
 };
-use crate::models::{ContainerWorkspace, MachineTransport};
 use serde_json::{json, Value};
 use std::time::Duration;
 use tauri::{AppHandle, Runtime};
@@ -37,41 +36,6 @@ fn preferred_local_profile(raw_targets_file: &RawTargetsFile) -> String {
     }
 
     raw_targets_file.default_profile.clone().unwrap_or_default()
-}
-
-fn local_machine_server(ssh_user: &str, profile: &str) -> RemoteContainerServer {
-    RemoteContainerServer {
-        id: String::from(LOCAL_MACHINE_ID),
-        label: String::from(LOCAL_MACHINE_LABEL),
-        transport: MachineTransport::Ssh,
-        host: String::from(LOCAL_MACHINE_HOST),
-        port: 22,
-        description: String::from(LOCAL_MACHINE_DESCRIPTION),
-        manager_type: super::ContainerManagerType::None,
-        discovery_mode: super::ContainerDiscoveryMode::Auto,
-        discovery_command: String::new(),
-        ssh_user: ssh_user.to_string(),
-        container_ssh_user: ssh_user.to_string(),
-        identity_files: vec![],
-        jump_chain: vec![],
-        known_hosts_path: default_known_hosts_path(),
-        strict_host_key_checking: true,
-        container_name_suffix: String::new(),
-        include_stopped: false,
-        target_label_template: String::new(),
-        target_host_template: String::from("{machineHost}"),
-        target_description_template: String::new(),
-        host_terminal_startup_command: String::new(),
-        terminal_command_template: String::new(),
-        notes: vec![],
-        workspace: ContainerWorkspace {
-            profile: profile.to_string(),
-            ..ContainerWorkspace::default()
-        },
-        services: vec![],
-        surfaces: vec![],
-        containers: vec![],
-    }
 }
 
 fn local_machine_template(raw_targets_file: &RawTargetsFile, ssh_user: &str) -> Value {
@@ -114,28 +78,31 @@ fn local_machine_template(raw_targets_file: &RawTargetsFile, ssh_user: &str) -> 
     })
 }
 
-fn local_machine_probe_chain(ssh_user: &str) -> ResolvedEndpointChain {
-    let server = local_machine_server(ssh_user, "");
+fn local_machine_probe_chain(server: &RemoteContainerServer) -> ResolvedEndpointChain {
     let endpoint = ResolvedEndpoint::new(
         LOCAL_MACHINE_ID,
-        LOCAL_MACHINE_HOST,
-        ssh_user,
-        22,
-        Vec::new(),
+        server.host.clone(),
+        server.ssh_user.clone(),
+        server.port,
+        server
+            .identity_files
+            .iter()
+            .map(std::path::PathBuf::from)
+            .collect(),
     )
     .with_known_hosts(
-        resolved_known_hosts_path(&server),
-        machine_host_key_alias(&server),
-        true,
+        resolved_known_hosts_path(server),
+        machine_host_key_alias(server),
+        server.strict_host_key_checking,
     );
 
     ResolvedEndpointChain::from_hops(vec![endpoint])
 }
 
-fn local_machine_available() -> bool {
-    let Some(ssh_user) = current_username() else {
+fn local_machine_available(server: &RemoteContainerServer) -> bool {
+    if server.ssh_user.trim().is_empty() || server.host.trim().is_empty() || server.port == 0 {
         return false;
-    };
+    }
     let options = RusshClientOptions {
         connect_timeout: Duration::from_secs(2),
         inactivity_timeout: Some(Duration::from_secs(2)),
@@ -144,12 +111,98 @@ fn local_machine_available() -> bool {
     };
 
     execute_chain_blocking(
-        &local_machine_probe_chain(&ssh_user),
+        &local_machine_probe_chain(server),
         "printf univers-ark-local-ready",
         &options,
     )
     .map(|output| output.exit_status == 0)
     .unwrap_or(false)
+}
+
+fn copy_preserved_field(next_machine: &mut Value, existing_machine: &Value, key: &str) {
+    if let Some(value) = existing_machine.get(key) {
+        next_machine[key] = value.clone();
+    }
+}
+
+fn build_local_machine_value(
+    raw_targets_file: &RawTargetsFile,
+    existing_machine: Option<&Value>,
+) -> Value {
+    let default_ssh_user = current_username().unwrap_or_default();
+    let mut next_machine = local_machine_template(raw_targets_file, &default_ssh_user);
+
+    if let Some(existing_machine) = existing_machine {
+        for key in [
+            "label",
+            "port",
+            "description",
+            "managerType",
+            "discoveryMode",
+            "discoveryCommand",
+            "sshUser",
+            "containerSshUser",
+            "identityFiles",
+            "jumpChain",
+            "knownHostsPath",
+            "strictHostKeyChecking",
+            "containerNameSuffix",
+            "includeStopped",
+            "targetLabelTemplate",
+            "targetHostTemplate",
+            "targetDescriptionTemplate",
+            "hostTerminalStartupCommand",
+            "terminalCommandTemplate",
+            "notes",
+            "workspace",
+            "services",
+            "surfaces",
+            "containers",
+        ] {
+            copy_preserved_field(&mut next_machine, existing_machine, key);
+        }
+    }
+
+    if next_machine
+        .get("sshUser")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .is_empty()
+    {
+        next_machine["sshUser"] = Value::String(default_ssh_user.clone());
+    }
+
+    if next_machine
+        .get("containerSshUser")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .is_empty()
+    {
+        next_machine["containerSshUser"] = next_machine["sshUser"].clone();
+    }
+
+    if next_machine
+        .get("knownHostsPath")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .is_empty()
+    {
+        next_machine["knownHostsPath"] = Value::String(default_known_hosts_path());
+    }
+
+    if next_machine
+        .get("port")
+        .and_then(Value::as_u64)
+        .unwrap_or_default()
+        == 0
+    {
+        next_machine["port"] = Value::from(22);
+    }
+
+    next_machine
 }
 
 fn sync_local_machine_config() -> Result<(), String> {
@@ -177,14 +230,22 @@ fn sync_local_machine_config() -> Result<(), String> {
     let local_index = machines
         .iter()
         .position(|machine| machine.get("id").and_then(Value::as_str) == Some(LOCAL_MACHINE_ID));
-    let local_available = local_machine_available();
+    let local_machine = build_local_machine_value(
+        &raw_targets_file,
+        local_index.and_then(|index| machines.get(index)),
+    );
+    let local_machine_server: RemoteContainerServer = serde_json::from_value(local_machine.clone())
+        .map_err(|error| {
+            format!(
+                "Failed to parse synthesized local machine config in {}: {}",
+                super::fs_store::targets_file_path().display(),
+                error
+            )
+        })?;
+    let local_available = local_machine_available(&local_machine_server);
     let mut changed = false;
 
     if local_available {
-        let Some(ssh_user) = current_username() else {
-            return Ok(());
-        };
-        let local_machine = local_machine_template(&raw_targets_file, &ssh_user);
         if let Some(index) = local_index {
             if machines[index] != local_machine {
                 machines[index] = local_machine;
@@ -283,4 +344,83 @@ pub(crate) fn read_targets_config() -> Result<String, String> {
 
 pub(crate) fn save_targets_config(content: &str) -> Result<(), String> {
     default_repository().save_targets_config(content)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture_targets_file() -> RawTargetsFile {
+        RawTargetsFile {
+            selected_target_id: Some(String::from("local::host")),
+            default_profile: Some(String::from("ark-workbench")),
+            profiles: std::collections::HashMap::new(),
+            machines: vec![],
+        }
+    }
+
+    #[test]
+    fn local_sync_preserves_user_managed_fields() {
+        let raw_targets_file = fixture_targets_file();
+        let existing_machine = json!({
+            "id": "local",
+            "label": "My Local",
+            "transport": "ssh",
+            "host": "127.0.0.1",
+            "port": 2222,
+            "description": "Customized local provider",
+            "managerType": "orbstack",
+            "discoveryMode": "manual",
+            "discoveryCommand": "custom-scan",
+            "sshUser": "davidxu",
+            "containerSshUser": "ubuntu",
+            "identityFiles": ["~/.ssh/custom"],
+            "jumpChain": [],
+            "knownHostsPath": "~/.ssh/custom_known_hosts",
+            "strictHostKeyChecking": false,
+            "containerNameSuffix": "",
+            "includeStopped": true,
+            "targetLabelTemplate": "",
+            "targetHostTemplate": "{machineHost}",
+            "targetDescriptionTemplate": "",
+            "hostTerminalStartupCommand": "exec /opt/homebrew/bin/fish -l",
+            "terminalCommandTemplate": "ssh {sshOptions} {sshDestination}",
+            "notes": ["hello"],
+            "workspace": {
+              "profile": "custom-profile",
+              "defaultTool": "services",
+              "projectPath": "~/repos/demo",
+              "filesRoot": "~/repos/demo",
+              "primaryWebServiceId": "dev",
+              "tmuxCommandServiceId": "tmux"
+            },
+            "services": [],
+            "surfaces": [],
+            "containers": []
+        });
+
+        let merged = build_local_machine_value(&raw_targets_file, Some(&existing_machine));
+
+        assert_eq!(merged["id"], Value::String(String::from("local")));
+        assert_eq!(merged["host"], Value::String(String::from("127.0.0.1")));
+        assert_eq!(merged["transport"], Value::String(String::from("ssh")));
+        assert_eq!(merged["label"], Value::String(String::from("My Local")));
+        assert_eq!(merged["port"], Value::from(2222));
+        assert_eq!(
+            merged["managerType"],
+            Value::String(String::from("orbstack"))
+        );
+        assert_eq!(
+            merged["discoveryMode"],
+            Value::String(String::from("manual"))
+        );
+        assert_eq!(
+            merged["hostTerminalStartupCommand"],
+            Value::String(String::from("exec /opt/homebrew/bin/fish -l"))
+        );
+        assert_eq!(
+            merged["workspace"]["profile"],
+            Value::String(String::from("custom-profile"))
+        );
+    }
 }
