@@ -1,5 +1,4 @@
 use crate::{
-    cleanup::cleanup_stale_ssh_tunnels,
     machine::initialize_targets_file_path,
     models::{
         ConnectivityState, DashboardState, RuntimeActivityState, SchedulerState, ServiceState,
@@ -8,7 +7,7 @@ use crate::{
     runtime::{
         dashboard::stop_all_dashboard_monitors,
         scheduler::{start_background_scheduler, stop_background_scheduler},
-        tunnel::stop_all_tunnels,
+        tunnel::{cleanup_stale_ssh_tunnels, stop_all_tunnels},
     },
     secrets::SecretManagementState,
 };

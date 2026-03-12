@@ -1,5 +1,4 @@
 mod app;
-mod cleanup;
 mod commands;
 mod constants;
 mod github;

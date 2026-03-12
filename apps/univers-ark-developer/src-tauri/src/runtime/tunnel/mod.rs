@@ -1,6 +1,7 @@
 use super::activity::{
-    current_runtime_activity, detect_runtime_suspend_gap, RUNTIME_BACKGROUND_SUPERVISOR_FLOOR,
+    RUNTIME_BACKGROUND_SUPERVISOR_FLOOR, current_runtime_activity, detect_runtime_suspend_gap,
 };
+mod cleanup;
 mod forwarding;
 mod proxy;
 mod session;
@@ -19,6 +20,7 @@ use tauri::{AppHandle, Runtime};
 
 use self::forwarding::should_manage_runtime_surface_tunnel;
 pub(crate) use self::{
+    cleanup::cleanup_stale_ssh_tunnels,
     forwarding::start_tunnel,
     session::{remove_tunnel_session_if_current, stop_tunnel_session, tunnel_session_is_alive},
     status::{
