@@ -1,6 +1,6 @@
 use crate::{
-    machine::resolve_target_ssh_chain,
     constants::OUTPUT_BUFFER_LIMIT,
+    machine::resolve_target_ssh_chain,
     models::{
         DeveloperTarget, RusshTerminalSession, TerminalExitEvent, TerminalOutputEvent,
         TerminalSession, TerminalSnapshot,
@@ -13,8 +13,8 @@ use std::{
 };
 use tauri::{AppHandle, Emitter};
 use univers_ark_russh::{
-    start_pty_session_chain, ClientOptions as RusshClientOptions, PtySessionEvent,
-    ResolvedEndpointChain,
+    ClientOptions as RusshClientOptions, PtySessionEvent, ResolvedEndpointChain,
+    start_pty_session_chain,
 };
 
 pub(crate) fn append_output(output: &Arc<Mutex<String>>, chunk: &str) {

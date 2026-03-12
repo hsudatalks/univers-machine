@@ -1,11 +1,11 @@
 use crate::{
-    files::{
+    machine::resolve_raw_target,
+    models::{RemoteDirectoryListing, RemoteFilePreview, TerminalSnapshot, TerminalState},
+    runtime::files::{
         list_remote_directory as load_remote_directory,
         read_remote_file_preview as load_remote_file_preview,
     },
-    machine::resolve_raw_target,
-    models::{RemoteDirectoryListing, RemoteFilePreview, TerminalSnapshot, TerminalState},
-    terminal::{
+    runtime::terminal::{
         resize_terminal_session, snapshot_for, spawn_terminal_session, stop_terminal_session,
         write_to_terminal_session,
     },
