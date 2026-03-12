@@ -1330,8 +1330,10 @@ function App() {
           onClose={() => {
             setIsCreatingMachine(false);
           }}
-          onSaved={() => {
-            setIsCreatingMachine(false);
+          onSaved={(event) => {
+            if (event?.close !== false) {
+              setIsCreatingMachine(false);
+            }
             void refreshInventory();
           }}
         />
@@ -1342,8 +1344,10 @@ function App() {
           onClose={() => {
             setEditingMachine(null);
           }}
-          onSaved={() => {
-            setEditingMachine(null);
+          onSaved={(event) => {
+            if (event?.close !== false) {
+              setEditingMachine(null);
+            }
             void refreshInventory();
           }}
           initialTab={editingMachine.initialTab}

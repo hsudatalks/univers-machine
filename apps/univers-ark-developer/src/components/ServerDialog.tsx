@@ -16,11 +16,14 @@ import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 type ServerDialogTab = "general" | "connection" | "discovery" | "containers";
+type ServerDialogSaveEvent = {
+  close?: boolean;
+};
 
 interface ServerDialogProps {
   initialTab?: ServerDialogTab;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (event?: ServerDialogSaveEvent) => void;
   server?: ManagedMachine | null;
   defaultProfileId?: string;
 }
@@ -237,7 +240,7 @@ export function ServerDialog({
       } else {
         setSaveMessage("Saved successfully.");
       }
-      onSaved();
+      onSaved({ close: true });
     } catch (saveError) {
       setError(String(saveError));
     } finally {
@@ -261,7 +264,7 @@ export function ServerDialog({
       await scanMachineInventory(serverId);
       await loadMachineFromDisk(serverId);
       setSaveMessage("Scanned containers successfully.");
-      onSaved();
+      onSaved({ close: false });
     } catch (scanError) {
       setError(String(scanError));
     } finally {
@@ -291,7 +294,7 @@ export function ServerDialog({
       };
 
       await updateTargetsConfig(stringifyTargetsConfig(nextConfig));
-      onSaved();
+      onSaved({ close: true });
       onClose();
     } catch (deleteError) {
       setError(String(deleteError));
