@@ -14,11 +14,11 @@ use crate::{
     secrets::SecretManagementState,
 };
 use tauri::{
-    AppHandle, Emitter, Manager, Runtime,
     menu::{
-        AboutMetadata, HELP_SUBMENU_ID, Menu, MenuItem, PredefinedMenuItem, Submenu,
+        AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
         WINDOW_SUBMENU_ID,
     },
+    AppHandle, Emitter, Manager, Runtime,
 };
 
 const TOGGLE_SIDEBAR_MENU_ID: &str = "toggle_sidebar";

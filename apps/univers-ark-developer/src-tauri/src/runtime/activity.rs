@@ -94,7 +94,9 @@ pub(crate) fn update_runtime_activity(
         *value = active_target_id;
     }
 
-    if (!previous_visible && visible) || (!previous_focused && focused) || (!previous_online && online)
+    if (!previous_visible && visible)
+        || (!previous_focused && focused)
+        || (!previous_online && online)
     {
         mark_runtime_recovery(activity_state, RUNTIME_RECOVERY_GRACE_PERIOD);
     }

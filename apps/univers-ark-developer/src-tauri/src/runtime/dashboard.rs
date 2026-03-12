@@ -1,5 +1,5 @@
+use super::activity::{current_runtime_activity, RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS};
 use crate::{
-    activity::{current_runtime_activity, RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS},
     machine::{resolve_raw_target, resolve_target_ssh_chain, run_target_shell_command},
     models::{
         ContainerAgentInfo, ContainerDashboard, ContainerDashboardUpdate, ContainerProjectInfo,
@@ -7,9 +7,7 @@ use crate::{
         DashboardState, DeveloperTarget, RuntimeActivityState,
     },
     services::{
-        health::{
-            dashboard_probe_command, into_container_service_infos, DashboardServicePayload,
-        },
+        health::{dashboard_probe_command, into_container_service_infos, DashboardServicePayload},
         registry::emit_dashboard_service_statuses,
     },
 };
@@ -389,7 +387,10 @@ pub(crate) fn run_dashboard_scheduler_cycle<R: Runtime>(
         );
         next_due_at.insert(
             target_id,
-            now + Duration::from_secs(effective_dashboard_refresh_seconds(activity_state, refresh_seconds)),
+            now + Duration::from_secs(effective_dashboard_refresh_seconds(
+                activity_state,
+                refresh_seconds,
+            )),
         );
     }
     let next_due = next_due_at

@@ -1,16 +1,16 @@
 use crate::{
-    connectivity::apply_connectivity_snapshots,
     machine::{
         read_bootstrap_data, read_server_inventory, read_targets_config, save_targets_config,
         scan_and_store_server_inventory, targets_file_path,
     },
     models::{AppBootstrap, ConnectivityState, MachineImportCandidate, ManagedServer},
+    runtime::connectivity::apply_connectivity_snapshots,
     services::runtime::read_runtime_targets_file,
     shell::shell_command,
 };
 use serde::Deserialize;
 use std::{collections::HashMap, path::PathBuf};
-use tauri::{State, async_runtime};
+use tauri::{async_runtime, State};
 use univers_ark_russh::SshConfigResolver;
 
 #[derive(Debug, Deserialize, Default)]
@@ -331,16 +331,16 @@ pub(crate) async fn scan_machine_inventory(
 }
 
 #[tauri::command]
-pub(crate) async fn scan_ssh_config_machine_candidates()
--> Result<Vec<MachineImportCandidate>, String> {
+pub(crate) async fn scan_ssh_config_machine_candidates(
+) -> Result<Vec<MachineImportCandidate>, String> {
     async_runtime::spawn_blocking(scan_ssh_config_machine_candidates_inner)
         .await
         .map_err(|error| format!("Failed to join SSH config scan task: {}", error))?
 }
 
 #[tauri::command]
-pub(crate) async fn scan_tailscale_machine_candidates()
--> Result<Vec<MachineImportCandidate>, String> {
+pub(crate) async fn scan_tailscale_machine_candidates(
+) -> Result<Vec<MachineImportCandidate>, String> {
     async_runtime::spawn_blocking(scan_tailscale_machine_candidates_inner)
         .await
         .map_err(|error| format!("Failed to join Tailscale scan task: {}", error))?

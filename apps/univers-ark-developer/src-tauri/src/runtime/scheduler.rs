@@ -1,12 +1,12 @@
-use crate::{
+use super::tunnel::{run_tunnel_supervisor_cycle, TunnelSupervisorState};
+use super::{
     activity::{current_runtime_activity, RuntimeActivitySnapshot},
     connectivity::{run_connectivity_scheduler_cycle, ConnectivitySchedulerState},
     dashboard::run_dashboard_scheduler_cycle,
-    models::{
-        ConnectivityState, DashboardState, RuntimeActivityState, SchedulerBudgetDiagnostics,
-        SchedulerState, TunnelState,
-    },
-    tunnel::{run_tunnel_supervisor_cycle, TunnelSupervisorState},
+};
+use crate::models::{
+    ConnectivityState, DashboardState, RuntimeActivityState, SchedulerBudgetDiagnostics,
+    SchedulerState, TunnelState,
 };
 use std::{
     collections::HashMap,
@@ -158,5 +158,7 @@ pub(crate) fn start_background_scheduler<R: Runtime>(
 }
 
 pub(crate) fn stop_background_scheduler(scheduler_state: &SchedulerState) {
-    scheduler_state.stop_requested.store(true, Ordering::Relaxed);
+    scheduler_state
+        .stop_requested
+        .store(true, Ordering::Relaxed);
 }

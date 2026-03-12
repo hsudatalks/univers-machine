@@ -1,10 +1,4 @@
 use crate::{
-    activity::update_runtime_activity as apply_runtime_activity,
-    dashboard::{
-        load_container_dashboard as read_container_dashboard, refresh_dashboard_once,
-        start_dashboard_monitor as register_dashboard_monitor,
-        stop_dashboard_monitor as unregister_dashboard_monitor,
-    },
     files::{
         list_remote_directory as load_remote_directory,
         read_remote_file_preview as load_remote_file_preview,
@@ -13,6 +7,19 @@ use crate::{
     models::{
         ContainerDashboard, DashboardState, RemoteDirectoryListing, RemoteFilePreview,
         RuntimeActivityState, TerminalSnapshot, TerminalState, TunnelState, TunnelStatus,
+    },
+    runtime::{
+        activity::update_runtime_activity as apply_runtime_activity,
+        dashboard::{
+            load_container_dashboard as read_container_dashboard, refresh_dashboard_once,
+            start_dashboard_monitor as register_dashboard_monitor,
+            stop_dashboard_monitor as unregister_dashboard_monitor,
+        },
+        tunnel::{
+            active_tunnel_status, direct_tunnel_status, emit_tunnel_status_updates,
+            reconcile_registered_tunnel, register_desired_tunnel, remove_tunnel_session_if_current,
+            start_tunnel, stop_tunnel_session, sync_desired_tunnels, tunnel_session_is_alive,
+        },
     },
     services::{
         actions::execute_command_service_action,
@@ -24,14 +31,9 @@ use crate::{
         resize_terminal_session, snapshot_for, spawn_terminal_session, stop_terminal_session,
         write_to_terminal_session,
     },
-    tunnel::{
-        active_tunnel_status, direct_tunnel_status, emit_tunnel_status_updates,
-        reconcile_registered_tunnel, register_desired_tunnel, remove_tunnel_session_if_current,
-        start_tunnel, stop_tunnel_session, sync_desired_tunnels, tunnel_session_is_alive,
-    },
 };
 use serde::Deserialize;
-use tauri::{AppHandle, State, async_runtime};
+use tauri::{async_runtime, AppHandle, State};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
