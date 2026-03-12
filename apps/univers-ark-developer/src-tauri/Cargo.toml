@@ -1,6 +1,6 @@
 [package]
 name = "univers-ark-developer"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local desktop shell for Univers Ark developer targets"
 authors = ["OpenAI Codex"]
 edition = "2021"
