@@ -1,16 +1,16 @@
 use super::{
-    CachedResolvedInventory, DiscoveredContainer, MachineContainerConfig, RawTargetsFile,
-    RemoteContainerServer, ResolvedInventory,
     discovery::{
         cached_remote_server_inventory, discover_remote_server_inventory,
         inventory_from_scanned_containers, scan_server_containers,
     },
     fs_store::{read_targets_file_content, sanitize_targets_json_content, targets_file_path},
-    profiles::{ContainerProfiles, apply_profile_defaults_to_remote_server},
+    profiles::{apply_profile_defaults_to_remote_server, ContainerProfiles},
     repository::{read_raw_targets_file, save_targets_config},
+    CachedResolvedInventory, DiscoveredContainer, MachineContainerConfig, RawTargetsFile,
+    RemoteContainerServer, ResolvedInventory,
 };
 use crate::models::{DeveloperTarget, ManagedContainerKind, ManagedServer, TargetsFile};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::sync::{Mutex, OnceLock};
 
 fn targets_cache() -> &'static Mutex<Option<CachedResolvedInventory>> {
