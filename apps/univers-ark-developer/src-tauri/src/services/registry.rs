@@ -4,8 +4,14 @@ use crate::{
         ContainerDashboard, DeveloperServiceKind, ServiceRegistration, ServiceState, ServiceStatus,
         TunnelStatus,
     },
-    services::runtime::service_key,
+    services::{
+        projection::{
+            command_service_status, dashboard_service_statuses, tunnel_service_status,
+        },
+        runtime::service_key,
+    },
 };
+use std::collections::HashMap;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 pub(crate) const SERVICE_STATUS_EVENT: &str = "service-status";
@@ -26,16 +32,25 @@ fn upsert_service_status<R: Runtime>(app: &AppHandle<R>, status: ServiceStatus) 
     let _ = app.emit(SERVICE_STATUS_EVENT, status);
 }
 
-fn existing_service_status<R: Runtime>(
+fn existing_service_statuses_for_target<R: Runtime>(
     app: &AppHandle<R>,
     target_id: &str,
-) -> Option<ServiceStatus> {
+) -> HashMap<String, ServiceStatus> {
     let statuses = app
         .try_state::<ServiceState>()
-        .map(|service_state| service_state.statuses.clone())?;
-    let statuses = statuses.lock().ok()?;
+        .map(|service_state| service_state.statuses.clone());
+    let Some(statuses) = statuses else {
+        return HashMap::new();
+    };
+    let Ok(statuses) = statuses.lock() else {
+        return HashMap::new();
+    };
 
-    statuses.get(target_id).cloned()
+    statuses
+        .values()
+        .filter(|status| status.target_id == target_id)
+        .map(|status| (status.service_id.clone(), status.clone()))
+        .collect()
 }
 
 fn register_service<R: Runtime>(
@@ -102,17 +117,7 @@ pub(crate) fn emit_tunnel_service_status<R: Runtime>(app: &AppHandle<R>, status:
         &status.service_id,
         DeveloperServiceKind::Web,
     );
-    upsert_service_status(
-        app,
-        ServiceStatus {
-            target_id: status.target_id.clone(),
-            service_id: status.service_id.clone(),
-            kind: DeveloperServiceKind::Web,
-            state: status.state.clone(),
-            message: status.message.clone(),
-            local_url: status.local_url.clone(),
-        },
-    );
+    upsert_service_status(app, tunnel_service_status(status));
 }
 
 pub(crate) fn emit_command_service_status<R: Runtime>(
@@ -123,17 +128,7 @@ pub(crate) fn emit_command_service_status<R: Runtime>(
     message: impl Into<String>,
 ) {
     register_service(app, target_id, service_id, DeveloperServiceKind::Command);
-    upsert_service_status(
-        app,
-        ServiceStatus {
-            target_id: target_id.to_string(),
-            service_id: service_id.to_string(),
-            kind: DeveloperServiceKind::Command,
-            state: state.to_string(),
-            message: message.into(),
-            local_url: None,
-        },
-    );
+    upsert_service_status(app, command_service_status(target_id, service_id, state, message));
 }
 
 pub(crate) fn emit_dashboard_service_statuses<R: Runtime>(
@@ -142,35 +137,12 @@ pub(crate) fn emit_dashboard_service_statuses<R: Runtime>(
     dashboard: &ContainerDashboard,
 ) {
     let target = resolve_raw_target(target_id).ok();
-    for service in &dashboard.services {
-        let kind = target
-            .as_ref()
-            .and_then(|target| {
-                target
-                    .services
-                    .iter()
-                    .find(|candidate| candidate.id == service.id)
-            })
-            .map(|service| service.kind)
-            .unwrap_or(DeveloperServiceKind::Endpoint);
+    let existing_statuses = existing_service_statuses_for_target(app, target_id);
+    let statuses =
+        dashboard_service_statuses(target_id, dashboard, target.as_ref(), &existing_statuses);
 
-        register_service(app, target_id, &service.id, kind);
-        let existing_status =
-            existing_service_status(app, &service_key(target_id, &service.id));
-        upsert_service_status(
-            app,
-            ServiceStatus {
-                target_id: target_id.to_string(),
-                service_id: service.id.clone(),
-                kind,
-                state: service.status.clone(),
-                message: service.detail.clone(),
-                local_url: if kind == DeveloperServiceKind::Web {
-                    existing_status.and_then(|status| status.local_url)
-                } else {
-                    service.url.clone()
-                },
-            },
-        );
+    for status in statuses {
+        register_service(app, target_id, &status.service_id, status.kind);
+        upsert_service_status(app, status);
     }
 }
