@@ -3,6 +3,7 @@ use keyring::Entry;
 pub(super) trait SecretStore: Send + Sync {
     fn backend_name(&self) -> &'static str;
     fn set_secret(&self, account: &str, value: &str) -> Result<(), String>;
+    fn get_secret(&self, account: &str) -> Result<String, String>;
     fn delete_secret(&self, account: &str) -> Result<(), String>;
 }
 
@@ -36,6 +37,12 @@ impl SecretStore for KeyringSecretStore {
         self.entry(account)?
             .set_password(value)
             .map_err(|error| format!("Failed to write secret to OS credential store: {}", error))
+    }
+
+    fn get_secret(&self, account: &str) -> Result<String, String> {
+        self.entry(account)?
+            .get_password()
+            .map_err(|error| format!("Failed to read secret from OS credential store: {}", error))
     }
 
     fn delete_secret(&self, account: &str) -> Result<(), String> {

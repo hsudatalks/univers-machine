@@ -255,6 +255,26 @@ impl SqliteSecretRepository {
         Ok(())
     }
 
+    pub(super) fn resolve_credential_secret_value(
+        &self,
+        store: &dyn SecretStore,
+        credential_id: &str,
+    ) -> Result<String, String> {
+        let connection = self.connect()?;
+        let existing = self
+            .get_credential(&connection, credential_id)?
+            .ok_or_else(|| format!("Secret credential {} does not exist.", credential_id))?;
+
+        if !existing.has_secret || existing.secret_account.trim().is_empty() {
+            return Err(format!(
+                "Secret credential {} does not have a stored secret.",
+                credential_id
+            ));
+        }
+
+        store.get_secret(&existing.secret_account)
+    }
+
     pub(super) fn upsert_assignment(
         &self,
         input: SecretAssignmentInput,

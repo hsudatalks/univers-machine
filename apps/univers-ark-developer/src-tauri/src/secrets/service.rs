@@ -45,6 +45,11 @@ impl SecretManager {
             .upsert_credential(self.store.as_ref(), input)
     }
 
+    fn load_credential_secret_value(&self, credential_id: &str) -> Result<String, String> {
+        self.repository
+            .resolve_credential_secret_value(self.store.as_ref(), credential_id)
+    }
+
     fn delete_credential(&self, credential_id: &str) -> Result<(), String> {
         self.repository
             .delete_credential(self.store.as_ref(), credential_id)
@@ -138,4 +143,8 @@ impl SecretManagementState {
             .map_err(|_| String::from("Failed to lock secret manager state"))?
             .delete_assignment(assignment_id)
     }
+}
+
+pub(crate) fn load_secret_credential_value(credential_id: &str) -> Result<String, String> {
+    SecretManager::new()?.load_credential_secret_value(credential_id)
 }

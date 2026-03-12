@@ -6,6 +6,7 @@ use crate::{
     services::{actions::execute_command_service_action, catalog::tmux_command_service},
 };
 use tauri::{async_runtime, AppHandle, State};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 
 #[tauri::command]
 pub(crate) async fn restart_tmux(app: AppHandle, target_id: String) -> Result<(), String> {
@@ -34,21 +35,25 @@ pub(crate) async fn execute_command_service(
 }
 
 #[tauri::command]
-pub(crate) fn clipboard_write(text: String) -> Result<(), String> {
-    let mut clipboard =
-        arboard::Clipboard::new().map_err(|error| format!("Clipboard unavailable: {}", error))?;
-    clipboard
-        .set_text(text)
-        .map_err(|error| format!("Failed to write to clipboard: {}", error))
+pub(crate) async fn clipboard_write(app: AppHandle, text: String) -> Result<(), String> {
+    async_runtime::spawn_blocking(move || {
+        app.clipboard()
+            .write_text(text)
+            .map_err(|error| format!("Failed to write to clipboard: {}", error))
+    })
+    .await
+    .map_err(|error| format!("Failed to join clipboard write task: {}", error))?
 }
 
 #[tauri::command]
-pub(crate) fn clipboard_read() -> Result<String, String> {
-    let mut clipboard =
-        arboard::Clipboard::new().map_err(|error| format!("Clipboard unavailable: {}", error))?;
-    clipboard
-        .get_text()
-        .map_err(|error| format!("Failed to read clipboard: {}", error))
+pub(crate) async fn clipboard_read(app: AppHandle) -> Result<String, String> {
+    async_runtime::spawn_blocking(move || {
+        app.clipboard()
+            .read_text()
+            .map_err(|error| format!("Failed to read clipboard: {}", error))
+    })
+    .await
+    .map_err(|error| format!("Failed to join clipboard read task: {}", error))?
 }
 
 #[tauri::command]

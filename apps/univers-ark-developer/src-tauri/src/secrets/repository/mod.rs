@@ -27,6 +27,11 @@ pub(super) trait SecretRepository: Send + Sync {
         store: &dyn SecretStore,
         input: SecretCredentialInput,
     ) -> Result<SecretCredentialRecord, String>;
+    fn resolve_credential_secret_value(
+        &self,
+        store: &dyn SecretStore,
+        credential_id: &str,
+    ) -> Result<String, String>;
     fn delete_credential(&self, store: &dyn SecretStore, credential_id: &str)
         -> Result<(), String>;
     fn upsert_assignment(
@@ -139,6 +144,14 @@ impl SecretRepository for SqliteSecretRepository {
         input: SecretCredentialInput,
     ) -> Result<SecretCredentialRecord, String> {
         SqliteSecretRepository::upsert_credential(self, store, input)
+    }
+
+    fn resolve_credential_secret_value(
+        &self,
+        store: &dyn SecretStore,
+        credential_id: &str,
+    ) -> Result<String, String> {
+        SqliteSecretRepository::resolve_credential_secret_value(self, store, credential_id)
     }
 
     fn delete_credential(

@@ -1,16 +1,15 @@
 mod lifecycle;
 mod menu;
 
-use self::{
-    lifecycle::{handle_run_event, manage_app_state, setup_app},
-};
+use self::lifecycle::{handle_run_event, manage_app_state, setup_app};
 use crate::commands;
 
 #[cfg(desktop)]
 use self::menu::{build_app_menu, handle_menu_event};
 
 pub(crate) fn run() {
-    let builder = manage_app_state(tauri::Builder::default());
+    let builder =
+        manage_app_state(tauri::Builder::default()).plugin(tauri_plugin_clipboard_manager::init());
     #[cfg(desktop)]
     let builder = builder
         // NOTE: Keyboard shortcuts for container navigation (Ctrl+Alt+Left/Right/Up
