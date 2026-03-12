@@ -1,12 +1,31 @@
+use crate::machine::execute_target_command_via_russh;
 use crate::models::{MachineTransport, ManagedContainer, ManagedServer};
 
-use super::super::super::ssh::{
-    probe_machine_host_ssh, probe_managed_container_ssh, ssh_destination,
-};
+use super::super::super::ssh::ssh_destination;
 use super::super::super::{DiscoveredContainer, DiscoveredServerInventory, RemoteContainerServer};
 use super::super::sources::{cached_server_containers, scan_server_containers};
 use super::super::ssh_users::resolve_container_ssh_user;
 use super::target::{build_machine_host_target, build_target_from_container};
+
+fn probe_target_ssh(target_id: &str, success_message: String) -> (bool, String, String) {
+    match execute_target_command_via_russh(target_id, "true") {
+        Ok(output) if output.exit_status == 0 => (true, String::from("ready"), success_message),
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let detail = if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                format!("SSH probe exited with {}", output.exit_status)
+            };
+
+            (false, String::from("error"), detail)
+        }
+        Err(error) => (false, String::from("error"), error),
+    }
+}
 
 fn build_managed_container(
     server: &RemoteContainerServer,
@@ -32,7 +51,7 @@ fn build_managed_container(
                 String::from("Local workspace is ready."),
             )
         } else if probe_ssh {
-            probe_managed_container_ssh(server, &container.ipv4, &container.name, &ssh_user)
+            probe_target_ssh(&target.id, format!("SSH ready via {}.", server.host))
         } else {
             (
                 false,
@@ -64,7 +83,11 @@ fn build_managed_container(
     )
 }
 
-fn machine_host_state(server: &RemoteContainerServer, probe_ssh: bool) -> (bool, String, String) {
+fn machine_host_state(
+    server: &RemoteContainerServer,
+    host_target_id: &str,
+    probe_ssh: bool,
+) -> (bool, String, String) {
     if matches!(server.transport, MachineTransport::Local) {
         return (
             true,
@@ -74,7 +97,7 @@ fn machine_host_state(server: &RemoteContainerServer, probe_ssh: bool) -> (bool,
     }
 
     if probe_ssh {
-        return probe_machine_host_ssh(server);
+        return probe_target_ssh(host_target_id, format!("SSH ready via {}.", server.host));
     }
 
     (
@@ -213,7 +236,7 @@ fn build_server_inventory(
     }
 
     let (state, message) = if probe_ssh {
-        let (host_reachable, _, host_message) = machine_host_state(server, true);
+        let (host_reachable, _, host_message) = machine_host_state(server, &host_target.id, true);
         server_state_for_machine(host_reachable, &host_message, &managed_containers)
     } else {
         (
@@ -259,7 +282,8 @@ pub(crate) fn discover_remote_server_inventory(
         Ok(containers) => build_server_inventory(server, containers, true),
         Err(error) => {
             let host_target = build_machine_host_target(server);
-            let (host_reachable, _, host_message) = machine_host_state(server, true);
+            let (host_reachable, _, host_message) =
+                machine_host_state(server, &host_target.id, true);
             let message = if host_reachable {
                 format!(
                     "Machine host is ready, but container discovery failed: {}",

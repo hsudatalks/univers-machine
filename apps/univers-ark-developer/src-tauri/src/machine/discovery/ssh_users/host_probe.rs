@@ -1,7 +1,9 @@
-use crate::{infra::shell, models::ManagedContainerKind};
+use crate::{
+    machine::{execute_target_command_via_russh, ssh::shell_single_quote},
+    models::ManagedContainerKind,
+};
 use std::collections::HashSet;
 
-use super::super::super::ssh::{build_host_ssh_command, shell_single_quote};
 use super::super::super::{ContainerManagerType, DiscoveredContainer, RemoteContainerServer};
 
 const CONTAINER_LOGIN_USERS_QUERY: &str = r#"if command -v getent >/dev/null 2>&1; then getent passwd; elif [ -r /etc/passwd ]; then cat /etc/passwd; fi | awk -F: '($1 == "root" || $3 >= 1000) && $6 ~ /^\// && $7 !~ /(nologin|false)$/ { print $1 }'"#;
@@ -50,11 +52,8 @@ fn host_container_users_command(
         command = exec_command,
     );
 
-    Some(build_host_ssh_command(
-        server,
-        &[],
-        Some(&shell_single_quote(&remote_command)),
-    ))
+    let _ = server;
+    Some(remote_command)
 }
 
 pub(super) fn parse_discovered_container_users(output: &str) -> Vec<String> {
@@ -81,11 +80,12 @@ pub(super) fn discover_container_ssh_users_via_host(
         return Vec::new();
     };
 
-    let Ok(output) = shell::shell_command(&command).output() else {
+    let Ok(output) = execute_target_command_via_russh(&format!("{}::host", server.id), &command)
+    else {
         return Vec::new();
     };
 
-    if !output.status.success() {
+    if output.exit_status != 0 {
         return Vec::new();
     }
 

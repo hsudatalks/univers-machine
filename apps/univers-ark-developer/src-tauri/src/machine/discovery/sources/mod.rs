@@ -1,42 +1,26 @@
 mod manual;
 mod parse;
 
-use crate::{infra::shell, models::MachineTransport};
+use crate::{infra::shell, machine::execute_target_command_via_russh, models::MachineTransport};
 use std::collections::HashSet;
 
 pub(crate) use self::manual::cached_server_containers;
 #[cfg(test)]
 pub(crate) use self::parse::parse_discovered_containers;
 use self::{manual::discover_manual_containers, parse::parse_discovered_containers_for_manager};
-use super::super::ssh::{build_host_ssh_command, shell_single_quote};
 use super::super::{
     ContainerDiscoveryMode, ContainerManagerType, DiscoveredContainer, RemoteContainerServer,
 };
 use super::ssh_users::enrich_discovered_container_ssh_users;
 
-fn default_discovery_command_for_manager(
-    server: &RemoteContainerServer,
-    manager_type: ContainerManagerType,
-) -> String {
+fn default_discovery_command_for_manager(manager_type: ContainerManagerType) -> String {
     match manager_type {
         ContainerManagerType::None => String::new(),
-        ContainerManagerType::Lxd => build_host_ssh_command(
-            server,
-            &[],
-            Some(&shell_single_quote("lxc list --format csv -c ns4")),
+        ContainerManagerType::Lxd => String::from("lxc list --format csv -c ns4"),
+        ContainerManagerType::Docker => String::from(
+            "docker ps --format \"{{.Names}}\" | while read -r name; do [ -z \"$name\" ] && continue; ip=$(docker inspect -f \"{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}\" \"$name\" 2>/dev/null); printf \"%s,RUNNING,%s\\n\" \"$name\" \"$ip\"; done",
         ),
-        ContainerManagerType::Docker => build_host_ssh_command(
-            server,
-            &[],
-            Some(&shell_single_quote(
-                "docker ps --format \"{{.Names}}\" | while read -r name; do [ -z \"$name\" ] && continue; ip=$(docker inspect -f \"{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}\" \"$name\" 2>/dev/null); printf \"%s,RUNNING,%s\\n\" \"$name\" \"$ip\"; done",
-            )),
-        ),
-        ContainerManagerType::Orbstack => build_host_ssh_command(
-            server,
-            &[],
-            Some(&shell_single_quote("/opt/homebrew/bin/orb list --format json")),
-        ),
+        ContainerManagerType::Orbstack => String::from("/opt/homebrew/bin/orb list --format json"),
     }
 }
 
@@ -51,7 +35,23 @@ fn discovery_managers(server: &RemoteContainerServer) -> Vec<ContainerManagerTyp
     }
 }
 
-fn run_discovery_command(server: &RemoteContainerServer, command: &str) -> Result<String, String> {
+fn host_target_id(server: &RemoteContainerServer) -> String {
+    format!("{}::host", server.id)
+}
+
+fn should_use_russh_discovery(server: &RemoteContainerServer) -> bool {
+    cfg!(mobile)
+        || !server.ssh_credential_id.trim().is_empty()
+        || server
+            .jump_chain
+            .iter()
+            .any(|jump| !jump.ssh_credential_id.trim().is_empty())
+}
+
+fn run_discovery_command_locally(
+    server: &RemoteContainerServer,
+    command: &str,
+) -> Result<String, String> {
     let output = shell::shell_command(command).output().map_err(|error| {
         format!(
             "Failed to discover containers on {} with `{}`: {}",
@@ -60,6 +60,30 @@ fn run_discovery_command(server: &RemoteContainerServer, command: &str) -> Resul
     })?;
 
     if !output.status.success() {
+        return Err(format!(
+            "Failed to discover containers on {} with `{}`: {}",
+            server.host,
+            command,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn run_discovery_command_via_russh(
+    server: &RemoteContainerServer,
+    command: &str,
+) -> Result<String, String> {
+    let output =
+        execute_target_command_via_russh(&host_target_id(server), command).map_err(|error| {
+            format!(
+                "Failed to discover containers on {}: {}",
+                server.host, error
+            )
+        })?;
+
+    if output.exit_status != 0 {
         return Err(format!(
             "Failed to discover containers on {} with `{}`: {}",
             server.host,
@@ -108,7 +132,7 @@ fn discover_containers_with_supported_managers(
             .into_iter()
             .map(|manager_type| {
                 scope.spawn(move || {
-                    let command = default_discovery_command_for_manager(server, manager_type);
+                    let command = default_discovery_command_for_manager(manager_type);
                     if command.trim().is_empty() {
                         return ManagerDiscoveryResult {
                             manager_type,
@@ -116,7 +140,7 @@ fn discover_containers_with_supported_managers(
                             containers: Ok(Vec::new()),
                         };
                     }
-                    let output = match run_discovery_command(server, &command) {
+                    let output = match run_discovery_command_via_russh(server, &command) {
                         Ok(output) => output,
                         Err(error) => {
                             return ManagerDiscoveryResult {
@@ -206,7 +230,11 @@ pub(crate) fn scan_server_containers(
     let mut containers = Vec::new();
 
     if !server.discovery_command.trim().is_empty() {
-        let output = run_discovery_command(server, &server.discovery_command)?;
+        let output = if should_use_russh_discovery(server) {
+            run_discovery_command_via_russh(server, &server.discovery_command)?
+        } else {
+            run_discovery_command_locally(server, &server.discovery_command)?
+        };
         containers.extend(parse::parse_discovered_containers(server, &output)?);
         return Ok(enrich_discovered_container_ssh_users(server, containers));
     }
