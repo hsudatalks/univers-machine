@@ -150,7 +150,7 @@ pub async fn sftp_read_file_preview(
     })
 }
 
-async fn expand_remote_path(sftp: &SftpSession, path: &str) -> Result<String, RusshError> {
+async fn expand_remote_path(_sftp: &SftpSession, path: &str) -> Result<String, RusshError> {
     if path.starts_with('~') {
         // Try to get the home directory by opening "."
         // The SFTP session typically starts at the user's home directory
