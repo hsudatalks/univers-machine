@@ -145,6 +145,8 @@ pub enum RusshError {
     MissingIdentity(String),
     #[error("forward task failed: {0}")]
     ForwardTask(String),
+    #[error("sftp error: {0}")]
+    Sftp(String),
 }
 
 #[derive(Clone)]
