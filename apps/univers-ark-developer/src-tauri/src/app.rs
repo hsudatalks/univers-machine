@@ -10,10 +10,13 @@ use crate::{
     secret_management::SecretManagementState,
     tunnel::stop_all_tunnels,
 };
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 #[cfg(desktop)]
 use crate::cleanup::cleanup_stale_ssh_tunnels;
+
+#[cfg(desktop)]
+use tauri::Emitter;
 
 #[cfg(desktop)]
 use tauri::menu::{
