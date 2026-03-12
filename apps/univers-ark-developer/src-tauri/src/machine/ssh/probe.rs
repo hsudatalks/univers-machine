@@ -1,4 +1,6 @@
 use crate::infra::shell;
+use crate::machine::{inventory::resolve_raw_target, repository::read_raw_targets_file};
+use crate::models::ManagedContainerKind;
 use std::{fs, path::PathBuf};
 
 use super::super::{ContainerManagerType, RemoteContainerServer};
@@ -133,10 +135,20 @@ fn deploy_key_command(
     ssh_user: &str,
     public_key: &str,
 ) -> String {
-    let user_home = format!("/home/{}", ssh_user);
     let inject_script = format!(
-        "mkdir -p {home}/.ssh && chmod 700 {home}/.ssh && echo {key} >> {home}/.ssh/authorized_keys && chmod 600 {home}/.ssh/authorized_keys",
-        home = user_home,
+        "target_home=$(getent passwd {user} 2>/dev/null | cut -d: -f6); \
+if [ -z \"$target_home\" ]; then \
+  if [ {user} = 'root' ]; then \
+    target_home=/root; \
+  else \
+    target_home=/home/{user}; \
+  fi; \
+fi; \
+mkdir -p \"$target_home/.ssh\" && chmod 700 \"$target_home/.ssh\" && \
+touch \"$target_home/.ssh/authorized_keys\" && \
+grep -Fqx {key} \"$target_home/.ssh/authorized_keys\" || echo {key} >> \"$target_home/.ssh/authorized_keys\" && \
+chmod 600 \"$target_home/.ssh/authorized_keys\"",
+        user = shell_single_quote(ssh_user),
         key = shell_single_quote(public_key),
     );
 
@@ -193,6 +205,51 @@ fn auto_deploy_public_key(
     }
 
     None
+}
+
+fn looks_like_auth_failure(error: &str) -> bool {
+    let normalized = error.to_ascii_lowercase();
+    normalized.contains("authentication failed") || normalized.contains("permission denied")
+}
+
+pub(crate) fn maybe_auto_deploy_target_public_key(
+    target_id: &str,
+    probe_error: &str,
+) -> Option<String> {
+    if !looks_like_auth_failure(probe_error) {
+        return None;
+    }
+
+    let target = resolve_raw_target(target_id).ok()?;
+    if matches!(target.container_kind, ManagedContainerKind::Host) || target.container_id.is_empty()
+    {
+        return None;
+    }
+
+    let raw_targets_file = read_raw_targets_file().ok()?;
+    let server = raw_targets_file
+        .machines
+        .into_iter()
+        .find(|server| server.id == target.machine_id)?;
+    let container = server
+        .containers
+        .iter()
+        .find(|container| {
+            container.id == target.container_id || container.name == target.container_id
+        });
+    let container_name = container
+        .map(|container| container.name.as_str())
+        .unwrap_or(target.container_id.as_str());
+    let ssh_user = container
+        .map(|container| container.ssh_user.trim())
+        .filter(|ssh_user| !ssh_user.is_empty())
+        .or_else(|| {
+            let ssh_user = server.container_ssh_user.trim();
+            (!ssh_user.is_empty()).then_some(ssh_user)
+        })
+        .unwrap_or(server.ssh_user.as_str());
+
+    auto_deploy_public_key(&server, container_name, ssh_user)
 }
 
 pub(crate) fn probe_managed_container_ssh(

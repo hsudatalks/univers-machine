@@ -7,7 +7,9 @@ use super::{
 };
 use crate::{
     infra::russh::execute_chain_blocking,
-    machine::{resolve_raw_target, resolve_target_ssh_chain},
+    machine::{
+        maybe_auto_deploy_target_public_key, resolve_raw_target, resolve_target_ssh_chain,
+    },
     models::{
         ConnectivitySnapshot, ConnectivityState, ConnectivityStatusEvent, MachineTransport,
         ManagedServer, TerminalState, TunnelState,
@@ -159,24 +161,57 @@ pub(super) fn probe_target_snapshot<R: Runtime>(
         }
     };
 
-    let snapshot =
-        match execute_chain_blocking(&chain, CONNECTIVITY_PROBE_COMMAND, &probe_options()) {
-            Ok(output) if output.exit_status == 0 => ready_snapshot(ready_message),
-            Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                let detail = if !stderr.is_empty() {
-                    stderr
-                } else if !stdout.is_empty() {
-                    stdout
-                } else {
-                    format!("Probe command exited with {}", output.exit_status)
-                };
+    let snapshot = match execute_chain_blocking(&chain, CONNECTIVITY_PROBE_COMMAND, &probe_options())
+    {
+        Ok(output) if output.exit_status == 0 => ready_snapshot(ready_message),
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let detail = if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                format!("Probe command exited with {}", output.exit_status)
+            };
 
-                error_snapshot(detail)
+            error_snapshot(detail)
+        }
+        Err(error) => {
+            let error_message = format!("russh probe failed: {}", error);
+            if let Some(deploy_message) =
+                maybe_auto_deploy_target_public_key(target_id, &error_message)
+            {
+                match execute_chain_blocking(&chain, CONNECTIVITY_PROBE_COMMAND, &probe_options()) {
+                    Ok(output) if output.exit_status == 0 => {
+                        ready_snapshot(format!("{ready_message} {deploy_message}"))
+                    }
+                    Ok(output) => {
+                        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                        let detail = if !stderr.is_empty() {
+                            stderr
+                        } else if !stdout.is_empty() {
+                            stdout
+                        } else {
+                            format!("Probe command exited with {}", output.exit_status)
+                        };
+
+                        error_snapshot(format!(
+                            "Auto-deployed key but russh probe still failed: {}",
+                            detail
+                        ))
+                    }
+                    Err(retry_error) => error_snapshot(format!(
+                        "Auto-deployed key but russh probe still failed: {}",
+                        retry_error
+                    )),
+                }
+            } else {
+                error_snapshot(error_message)
             }
-            Err(error) => error_snapshot(format!("russh probe failed: {}", error)),
-        };
+        }
+    };
 
     ProbeOutcome {
         snapshot,

@@ -21,6 +21,7 @@ pub(crate) use self::{
         scan_and_store_server_inventory,
     },
     repository::{initialize_targets_file_path, read_targets_config, save_targets_config},
+    ssh::maybe_auto_deploy_target_public_key,
 };
 
 use self::types::*;

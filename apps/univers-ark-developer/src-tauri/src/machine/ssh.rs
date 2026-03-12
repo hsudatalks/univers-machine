@@ -12,6 +12,7 @@ pub(super) use self::{
     },
     probe::{probe_machine_host_ssh, probe_managed_container_ssh},
 };
+pub(crate) use self::probe::maybe_auto_deploy_target_public_key;
 
 pub(super) fn run_target_shell_command_internal(
     target_id: &str,
