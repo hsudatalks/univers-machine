@@ -2,8 +2,8 @@ use crate::{
     activity::{
         current_runtime_activity, detect_runtime_suspend_gap, RUNTIME_BACKGROUND_SUPERVISOR_FLOOR,
     },
-    config::resolve_raw_target,
-    config::resolve_target_ssh_chain,
+    machine::resolve_raw_target,
+    machine::resolve_target_ssh_chain,
     constants::{TUNNEL_PROBE_INTERVAL, TUNNEL_PROBE_MESSAGE_DELAY, TUNNEL_PROBE_TIMEOUT},
     models::{
         BrowserServiceType, BrowserSurface, MachineTransport, RusshTunnelForward, TunnelProcess,

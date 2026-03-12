@@ -1,5 +1,5 @@
 use crate::{
-    config::{read_targets_file, resolve_raw_target},
+    machine::{read_targets_file, resolve_raw_target},
     constants::{
         INTERNAL_TUNNEL_PORT_END, INTERNAL_TUNNEL_PORT_START, SURFACE_HOST, SURFACE_PORT_END,
         SURFACE_PORT_START,

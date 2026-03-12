@@ -1,5 +1,5 @@
 use crate::{
-    config::resolve_raw_target,
+    machine::resolve_raw_target,
     models::{
         ContainerDashboard, DeveloperServiceKind, ServiceRegistration, ServiceState, ServiceStatus,
         TunnelStatus,

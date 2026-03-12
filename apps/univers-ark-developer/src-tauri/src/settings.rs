@@ -1,4 +1,4 @@
-use crate::{config::univers_config_dir, models::AppSettings};
+use crate::{machine::univers_config_dir, models::AppSettings};
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, Runtime};

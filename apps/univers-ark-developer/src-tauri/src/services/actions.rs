@@ -1,5 +1,5 @@
 use crate::{
-    config::{execute_target_command_via_russh, resolve_raw_target},
+    machine::{execute_target_command_via_russh, resolve_raw_target},
     services::{catalog::command_service, registry::emit_command_service_status},
 };
 use tauri::{AppHandle, Runtime};

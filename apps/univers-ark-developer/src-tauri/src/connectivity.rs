@@ -2,7 +2,7 @@ use crate::{
     activity::{
         current_runtime_activity, detect_runtime_suspend_gap, RUNTIME_BACKGROUND_MONITOR_INTERVAL,
     },
-    config::{read_server_inventory, resolve_raw_target, resolve_target_ssh_chain},
+    machine::{read_server_inventory, resolve_raw_target, resolve_target_ssh_chain},
     models::{
         ConnectivitySnapshot, ConnectivityState, ConnectivityStatusEvent, MachineTransport,
         ManagedServer, RuntimeActivityState, TerminalState, TunnelState,

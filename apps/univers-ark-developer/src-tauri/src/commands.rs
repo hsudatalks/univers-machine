@@ -1,6 +1,6 @@
 use crate::{
     activity::{current_runtime_activity, update_runtime_activity as apply_runtime_activity},
-    config::{
+    machine::{
         read_bootstrap_data, read_server_inventory, read_targets_config, resolve_raw_target,
         restart_container as restart_remote_container, save_targets_config,
         scan_and_store_server_inventory, targets_file_path,

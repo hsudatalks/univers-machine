@@ -1,5 +1,5 @@
 use crate::{
-    config::univers_config_dir,
+    machine::univers_config_dir,
     models::{
         SecretAssignmentInput, SecretAssignmentRecord, SecretAssignmentTargetKind,
         SecretAuditEventRecord, SecretCredentialInput, SecretCredentialRecord, SecretInventory,

@@ -653,7 +653,7 @@ fn enrich_discovered_container_ssh_users(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{
+    use crate::machine::{
         ContainerDiscoveryMode, ContainerManagerType, DiscoveredContainer, RemoteContainerServer,
     };
     use crate::models::{ContainerWorkspace, MachineTransport, ManagedContainerKind};

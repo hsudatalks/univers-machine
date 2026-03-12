@@ -1,5 +1,5 @@
 use crate::{
-    config::resolve_target_ssh_chain,
+    machine::resolve_target_ssh_chain,
     models::{RemoteDirectoryListing, RemoteFileEntry, RemoteFilePreview},
 };
 use univers_ark_russh::{

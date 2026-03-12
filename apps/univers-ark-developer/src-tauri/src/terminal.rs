@@ -1,5 +1,5 @@
 use crate::{
-    config::resolve_target_ssh_chain,
+    machine::resolve_target_ssh_chain,
     constants::OUTPUT_BUFFER_LIMIT,
     models::{
         DeveloperTarget, RusshTerminalSession, TerminalExitEvent, TerminalOutputEvent,

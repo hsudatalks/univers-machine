@@ -8,6 +8,7 @@ mod constants;
 mod dashboard;
 mod files;
 mod github;
+mod machine;
 mod models;
 mod proxy;
 mod scheduler;

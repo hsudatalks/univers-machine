@@ -1,6 +1,6 @@
 use crate::{
     commands,
-    config::initialize_targets_file_path,
+    machine::initialize_targets_file_path,
     dashboard::stop_all_dashboard_monitors,
     models::{
         ConnectivityState, DashboardState, RuntimeActivityState, SchedulerState, ServiceState,

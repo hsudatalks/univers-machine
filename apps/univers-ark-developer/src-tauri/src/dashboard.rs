@@ -1,6 +1,6 @@
 use crate::{
     activity::{current_runtime_activity, RUNTIME_BACKGROUND_DASHBOARD_REFRESH_SECS},
-    config::{resolve_raw_target, resolve_target_ssh_chain, run_target_shell_command},
+    machine::{resolve_raw_target, resolve_target_ssh_chain, run_target_shell_command},
     models::{
         ContainerAgentInfo, ContainerDashboard, ContainerDashboardUpdate, ContainerProjectInfo,
         ContainerRuntimeInfo, ContainerTmuxInfo, ContainerTmuxSessionInfo, DashboardMonitor,
