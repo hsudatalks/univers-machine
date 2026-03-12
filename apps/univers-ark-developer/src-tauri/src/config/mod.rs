@@ -542,13 +542,33 @@ fn bundled_targets_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> PathBuf {
         .unwrap_or_else(|_| app_root().join(BUNDLED_TARGETS_TEMPLATE_NAME))
 }
 
-fn legacy_targets_file_path<R: Runtime>(app_handle: &AppHandle<R>) -> Option<PathBuf> {
+fn targets_file_uses_machine_schema(path: &PathBuf) -> bool {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<Value>(&content).ok())
+        .map(|value| value.get("machines").and_then(Value::as_array).is_some())
+        .unwrap_or(false)
+}
+
+fn legacy_targets_file_path<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    bundled_path: &PathBuf,
+) -> Option<PathBuf> {
     app_handle
         .path()
         .app_config_dir()
         .ok()
         .map(|dir| dir.join(BUNDLED_TARGETS_TEMPLATE_NAME))
         .filter(|path| path.exists())
+        .and_then(|path| {
+            if targets_file_uses_machine_schema(&path) {
+                return Some(path);
+            }
+
+            fs::copy(bundled_path, &path).ok()?;
+
+            targets_file_uses_machine_schema(&path).then_some(path)
+        })
 }
 
 pub(crate) fn initialize_targets_file_path<R: Runtime>(
@@ -567,8 +587,9 @@ pub(crate) fn initialize_targets_file_path<R: Runtime>(
     let writable_targets_path = app_config_dir.join(targets_file_name());
 
     if !writable_targets_path.exists() {
-        let source_path = legacy_targets_file_path(app_handle)
-            .unwrap_or_else(|| bundled_targets_file_path(app_handle));
+        let bundled_path = bundled_targets_file_path(app_handle);
+        let source_path = legacy_targets_file_path(app_handle, &bundled_path)
+            .unwrap_or(bundled_path);
 
         fs::copy(&source_path, &writable_targets_path).map_err(|error| {
             format!(
