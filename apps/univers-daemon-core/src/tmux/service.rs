@@ -20,6 +20,13 @@ pub struct TmuxServiceStatus {
 #[derive(Debug, Clone)]
 pub struct TmuxServiceManager {
     repo_root: PathBuf,
+    profile: TmuxServiceProfile,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TmuxServiceProfile {
+    Machine,
+    Container,
 }
 
 #[derive(Debug, Clone)]
@@ -64,8 +71,20 @@ struct DevServerConfig {
 
 impl TmuxServiceManager {
     pub fn new() -> Self {
+        Self::for_machine()
+    }
+
+    pub fn for_machine() -> Self {
         Self {
             repo_root: repo_root(),
+            profile: TmuxServiceProfile::Machine,
+        }
+    }
+
+    pub fn for_container() -> Self {
+        Self {
+            repo_root: repo_root(),
+            profile: TmuxServiceProfile::Container,
         }
     }
 
@@ -184,23 +203,27 @@ impl TmuxServiceManager {
     }
 
     fn service_definitions(&self) -> Vec<TmuxServiceDefinition> {
-        let mut services = vec![
-            machine_service(
-                "machine-desktop-view",
-                "Machine desktop aggregate view",
-                "Attachs VM/container desktop panes into a local tmux workspace.",
-            ),
-            machine_service(
-                "machine-mobile-view",
-                "Machine mobile aggregate view",
-                "Aggregates VM/container mobile panes for compact machine-level monitoring.",
-            ),
-            machine_service(
-                "univers-machine-manage",
-                "Machine manage control session",
-                "Local machine management session created by machine-view-manager.",
-            ),
-        ];
+        let mut services = if matches!(self.profile, TmuxServiceProfile::Machine) {
+            vec![
+                machine_service(
+                    "machine-desktop-view",
+                    "Machine desktop aggregate view",
+                    "Attachs VM/container desktop panes into a local tmux workspace.",
+                ),
+                machine_service(
+                    "machine-mobile-view",
+                    "Machine mobile aggregate view",
+                    "Aggregates VM/container mobile panes for compact machine-level monitoring.",
+                ),
+                machine_service(
+                    "univers-machine-manage",
+                    "Machine manage control session",
+                    "Local machine management session created by machine-view-manager.",
+                ),
+            ]
+        } else {
+            Vec::new()
+        };
 
         match self.load_dev_session_services() {
             Ok(mut dev_services) => services.append(&mut dev_services),
@@ -331,11 +354,23 @@ fn capture_tmux_logs(server: &str, session: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::dev_tmux_server_name;
+    use super::{dev_tmux_server_name, TmuxServiceManager, TmuxServiceProfile};
 
     #[test]
     fn strips_dev_suffix_for_tmux_server() {
         assert_eq!(dev_tmux_server_name("ark-dev"), "ark");
         assert_eq!(dev_tmux_server_name("sandbox"), "sandbox");
+    }
+
+    #[test]
+    fn defaults_to_machine_profile() {
+        assert!(matches!(
+            TmuxServiceManager::new().profile,
+            TmuxServiceProfile::Machine
+        ));
+        assert!(matches!(
+            TmuxServiceManager::for_container().profile,
+            TmuxServiceProfile::Container
+        ));
     }
 }
