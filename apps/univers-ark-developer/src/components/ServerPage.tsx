@@ -273,7 +273,7 @@ export function ServerPage({
         <header className="content-header content-header-mobile">
           <div className="content-header-mobile-topline">
             <div className="content-header-copy">
-              <span className="panel-title">Machine</span>
+              <span className="panel-title">Provider</span>
               <div className="content-title-row">
                 <h1 className="content-title content-title-container">{server.label}</h1>
                 <span className="content-chip">{server.host}</span>
@@ -285,7 +285,7 @@ export function ServerPage({
                 aria-label={`Open ${server.label} settings`}
                 onClick={onOpenSettings}
                 size="icon"
-                title="Machine settings"
+                title="Provider settings"
                 variant="ghost"
               >
                 <Settings2 size={16} />
@@ -293,7 +293,7 @@ export function ServerPage({
             </div>
           </div>
 
-          <div aria-label="Machine panels" className="content-panel-rail">
+          <div aria-label="Provider panels" className="content-panel-rail">
             <Button
               className="content-panel-rail-button"
               isActive={activeMobilePanel === "terminal"}
@@ -340,7 +340,7 @@ export function ServerPage({
       ) : (
         <header className="content-header">
           <div className="content-header-copy">
-            <span className="panel-title">Machine</span>
+            <span className="panel-title">Provider</span>
             <div className="content-title-row">
               <h1 className="content-title content-title-container">{server.label}</h1>
               <span className="content-chip">{server.host}</span>
@@ -352,19 +352,19 @@ export function ServerPage({
               aria-label={`Open ${server.label} settings`}
               onClick={onOpenSettings}
               size="icon"
-              title="Machine settings"
+              title="Provider settings"
               variant="ghost"
             >
               <Settings2 size={16} />
             </Button>
             <Button
-              aria-label="Machine dashboard"
+              aria-label="Provider dashboard"
               isActive={activeTool === "dashboard"}
               onClick={() => {
                 setActiveTool("dashboard");
               }}
               size="icon"
-              title="Machine dashboard"
+              title="Provider dashboard"
               variant={activeTool === "dashboard" ? "default" : "ghost"}
             >
               <LayoutDashboard size={16} />
@@ -420,7 +420,7 @@ export function ServerPage({
                     <section className="state-panel">
                       <span className="state-label">Host unavailable</span>
                       <p className="state-copy">
-                        The Host workspace for this machine is not available in the current inventory.
+                        The host workspace for this provider is not available in the current inventory.
                       </p>
                     </section>
                   )}
@@ -497,7 +497,7 @@ export function ServerPage({
                 <section className="state-panel">
                   <span className="state-label">Host unavailable</span>
                   <p className="state-copy">
-                    The Host workspace for this machine is not available in the current inventory.
+                    The host workspace for this provider is not available in the current inventory.
                   </p>
                 </section>
               )}

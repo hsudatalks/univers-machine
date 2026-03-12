@@ -78,7 +78,7 @@ export function ServerTerminalsPane({
           <section className="server-empty-state">
             <span className="state-label">No containers</span>
             <p className="state-copy">
-              This machine does not currently expose any managed containers.
+              This provider does not currently expose any managed containers.
             </p>
           </section>
         )}

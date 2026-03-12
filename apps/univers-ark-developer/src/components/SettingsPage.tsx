@@ -218,7 +218,7 @@ export function SettingsPage({
         <div className="settings-header-copy">
           <span className="panel-title">Settings</span>
           <p className="panel-description settings-description">
-            Application configuration and machine inventory
+            Application configuration and provider inventory
           </p>
         </div>
       </header>
@@ -234,7 +234,7 @@ export function SettingsPage({
               ["appearance", "Appearance"],
               ["configuration", "Configuration"],
               ["profiles", "Profiles"],
-              ["machines", "Machines"],
+              ["machines", "Providers"],
               ["secrets", "Secrets"],
               ["diagnostics", "Diagnostics"],
             ] as Array<[SettingsTab, string]>
@@ -326,15 +326,15 @@ export function SettingsPage({
             <section className="settings-section">
             <div className="settings-section-heading">
               <h3 className="settings-section-title">
-                Machines
+                Providers
                 <span className="settings-count">{machines.length}</span>
               </h3>
               <Button onClick={onAddMachine} size="sm" variant="outline">
-                Add machine
+                Add provider
               </Button>
             </div>
             {machines.length === 0 ? (
-              <p className="settings-empty">No machines configured.</p>
+              <p className="settings-empty">No providers configured.</p>
             ) : (
               <div className="settings-server-list">
                 {machines.map((machine, index) => (

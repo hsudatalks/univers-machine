@@ -209,7 +209,7 @@ export function AddMachineDialog({
         <header className="dialog-header">
           <div className="dialog-header-copy">
             <span className="dialog-title">Add provider</span>
-            <span className="dialog-subtitle">Choose a provider type, then select the setup path that fits it</span>
+            <span className="dialog-subtitle">Providers supply workbenches. Choose a provider type, then select its setup path.</span>
           </div>
           <Button aria-label="Close" className="dialog-close" onClick={onClose} size="icon" variant="ghost">
             <svg aria-hidden="true" className="panel-button-icon-svg" fill="none" viewBox="0 0 16 16">
@@ -244,7 +244,7 @@ export function AddMachineDialog({
                 </div>
                 <div className="provider-type-card-title">Machine</div>
                 <p className="dialog-empty">
-                  SSH-managed hosts with host terminals, discovered containers, services, and workbenches.
+                  Connect to an SSH-managed host, then discover and manage the container workbenches that live on it.
                 </p>
               </button>
 
@@ -289,7 +289,7 @@ export function AddMachineDialog({
               <div>
                 <div className="dialog-card-title">Machine setup</div>
                 <p className="dialog-empty">
-                  Pick how this machine provider should be discovered or defined.
+                  Pick how this machine provider host should be discovered or defined.
                 </p>
               </div>
               <Badge variant="neutral">3 paths</Badge>
@@ -306,7 +306,7 @@ export function AddMachineDialog({
                   <Badge variant="neutral">Bulk import</Badge>
                 </div>
                 <p className="dialog-empty">
-                  Scan named hosts and jump chains from your local SSH config, then import the ones you want.
+                  Scan named hosts and jump chains from your local SSH config, then import the provider hosts you want.
                 </p>
               </button>
 
@@ -320,7 +320,7 @@ export function AddMachineDialog({
                   <Badge variant="neutral">Tailnet discovery</Badge>
                 </div>
                 <p className="dialog-empty">
-                  Discover reachable devices from the active tailnet and turn them into managed providers.
+                  Discover reachable tailnet machines and turn the ones you want into managed provider hosts.
                 </p>
               </button>
 
@@ -334,7 +334,7 @@ export function AddMachineDialog({
                   <Badge variant="neutral">Full control</Badge>
                 </div>
                 <p className="dialog-empty">
-                  Start from a blank provider and define the host, SSH identity, discovery behavior, and defaults.
+                  Start from a blank provider host and define the SSH identity, discovery behavior, and defaults.
                 </p>
               </button>
             </div>
@@ -381,7 +381,7 @@ export function AddMachineDialog({
                   <div>
                     <div className="dialog-card-title">Manual machine provider</div>
                     <p className="dialog-empty">
-                      Define the SSH connection, discovery mode, and workspace defaults yourself.
+                      Define the SSH connection, discovery mode, and provider defaults yourself.
                     </p>
                   </div>
                   <Badge variant="neutral">Manual</Badge>
@@ -391,7 +391,7 @@ export function AddMachineDialog({
                   <div className="dialog-field">
                     <span className="dialog-field-label">Use when</span>
                     <span className="dialog-field-value">
-                      You want full control over host, user, identity files, discovery mode, and services.
+                      You want full control over the provider host, identity files, discovery mode, and defaults.
                     </span>
                   </div>
                 </div>
@@ -449,7 +449,7 @@ function MachineImportTab({
           <div>
             <div className="dialog-card-title">{sourceLabel} scan</div>
             <p className="dialog-empty">
-              Scan available machine definitions, review the candidates, and import the ones you want.
+              Scan available provider hosts, review the candidates, and import the ones you want.
             </p>
           </div>
           <Badge variant="neutral">{candidates.length} found</Badge>
@@ -488,7 +488,7 @@ function MachineImportTab({
       </div>
 
       {candidates.length === 0 && !error ? (
-        <p className="dialog-empty">No provider candidates found yet.</p>
+        <p className="dialog-empty">No provider host candidates found yet.</p>
       ) : null}
 
       <div className="dialog-choice-list">
@@ -510,7 +510,7 @@ function MachineImportTab({
                     <div className="dialog-card-title">{candidate.label}</div>
                     <div className="dialog-field-mono">{candidate.machineId}</div>
                   </div>
-                  <Badge variant="neutral">Machine</Badge>
+                  <Badge variant="neutral">Machine provider</Badge>
                 </div>
 
                 <div className="dialog-choice-meta">

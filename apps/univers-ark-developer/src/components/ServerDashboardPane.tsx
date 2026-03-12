@@ -29,7 +29,7 @@ export function ServerDashboardPane({
           <CardContent className="dashboard-summary-bar dashboard-card-content">
             <div className="dashboard-summary-copy">
               <div className="dashboard-summary-item">
-                <span className="dashboard-meta-label">Machine host</span>
+                <span className="dashboard-meta-label">Provider host</span>
                 <span className="dashboard-meta-value">{server.host}</span>
               </div>
               <div className="dashboard-summary-item">
@@ -56,7 +56,7 @@ export function ServerDashboardPane({
           <CardHeader>
             <CardTitle className="dashboard-section-title">
               <Activity size={16} />
-              Machine status
+              Provider status
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -72,7 +72,7 @@ export function ServerDashboardPane({
               </div>
               <div className="is-wide">
                 <dt>Mode</dt>
-                <dd>Direct machine shell on the left, container terminals on the right.</dd>
+                <dd>Direct provider shell on the left, container workbenches on the right.</dd>
               </div>
             </dl>
           </CardContent>
@@ -90,13 +90,13 @@ export function ServerDashboardPane({
               <li className="dashboard-action-item">
                 <span className="dashboard-action-title">Dashboard pane</span>
                 <p className="dashboard-copy">
-                  Machine inventory, SSH reachability, and a quick read on container health.
+                  Provider inventory, SSH reachability, and a quick read on container health.
                 </p>
               </li>
               <li className="dashboard-action-item">
                 <span className="dashboard-action-title">Container terminals pane</span>
                 <p className="dashboard-copy">
-                  Live terminal cards for discovered containers, without leaving the machine context.
+                  Live terminal cards for discovered workbenches, without leaving the provider context.
                 </p>
               </li>
             </ul>
@@ -144,7 +144,7 @@ export function ServerDashboardPane({
                 );
               })
             ) : (
-              <p className="dashboard-copy">No managed containers discovered for this machine.</p>
+              <p className="dashboard-copy">No managed containers discovered for this provider.</p>
             )}
           </CardContent>
         </Card>

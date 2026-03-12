@@ -190,11 +190,11 @@ export function ServerDialog({
 
     const nextId = form.id.trim();
     if (!nextId) {
-      setError("Machine ID is required.");
+      setError("Provider ID is required.");
       return;
     }
     if (hasIdConflict) {
-      setError(`Machine "${nextId}" already exists.`);
+      setError(`Provider "${nextId}" already exists.`);
       return;
     }
 
@@ -306,14 +306,14 @@ export function ServerDialog({
   return (
     <div className="dialog-backdrop" onClick={onClose}>
       <div
-        aria-label={isCreateMode ? "Create machine" : `${form.label || form.id} machine settings`}
+        aria-label={isCreateMode ? "Create provider" : `${form.label || form.id} provider settings`}
         className="dialog-panel dialog-panel-wide"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
         <header className="dialog-header">
           <div className="dialog-header-copy">
-            <span className="dialog-title">{isCreateMode ? "New machine" : form.label || form.id}</span>
+            <span className="dialog-title">{isCreateMode ? "New provider" : form.label || form.id}</span>
             <span className="dialog-subtitle">{form.host || "Define connection and discovery settings"}</span>
           </div>
           <Button
@@ -334,7 +334,7 @@ export function ServerDialog({
           onValueChange={(value) => setActiveTab(value as ServerDialogTab)}
           value={activeTab}
         >
-          <TabsList className="dialog-tabs" aria-label="Machine settings sections">
+          <TabsList className="dialog-tabs" aria-label="Provider settings sections">
             <TabsTrigger className="dialog-tab" value="general">General</TabsTrigger>
             <TabsTrigger className="dialog-tab" value="connection">Connection</TabsTrigger>
             <TabsTrigger className="dialog-tab" value="discovery">Discovery</TabsTrigger>
@@ -365,8 +365,8 @@ export function ServerDialog({
                       value={form.description}
                     />
                     <SelectField
-                      hint="Used as the default for this machine and for containers that do not override it."
-                      label="Machine Profile"
+                      hint="Used as the default for this provider and for containers that do not override it."
+                      label="Provider Profile"
                       onChange={(value) => updateWorkspaceField("profile", value)}
                       options={profileOptions.map((profile) => ({ value: profile, label: profile }))}
                       emptyLabel="No profile"
@@ -534,8 +534,8 @@ export function ServerDialog({
                                   options={profileOptions.map((profile) => ({ value: profile, label: profile }))}
                                   emptyLabel={
                                     form.workspace.profile
-                                      ? `Inherit machine profile (${form.workspace.profile})`
-                                      : "Inherit machine profile"
+                                      ? `Inherit provider profile (${form.workspace.profile})`
+                                      : "Inherit provider profile"
                                   }
                                   value={container.workspace.profile}
                                 />
@@ -565,7 +565,7 @@ export function ServerDialog({
                     />
                   ) : (
                     <div className="dialog-tab-content">
-                      <p className="dialog-empty">Save the server first. Auto-discovery will run once after creation.</p>
+                      <p className="dialog-empty">Save the provider first. Auto-discovery will run once after creation.</p>
                     </div>
                   )}
                 </TabsContent>
@@ -581,7 +581,7 @@ export function ServerDialog({
             <div className="dialog-footer-danger-group">
               {isDeleteConfirming ? (
                 <span className="dialog-footer-danger-copy">
-                  Delete this machine from config?
+                  Delete this provider from config?
                 </span>
               ) : null}
               <Button
@@ -594,7 +594,7 @@ export function ServerDialog({
                   ? "Deleting…"
                   : isDeleteConfirming
                     ? "Confirm delete"
-                    : "Delete machine"}
+                    : "Delete provider"}
               </Button>
               {isDeleteConfirming ? (
                 <Button
@@ -655,7 +655,7 @@ function ContainersTable({
             {isScanning ? "Scanning…" : "Scan containers"}
           </Button>
         </div>
-        <p className="dialog-empty">No containers discovered in config for this machine.</p>
+        <p className="dialog-empty">No containers discovered in config for this provider.</p>
       </div>
     );
   }
@@ -672,12 +672,12 @@ function ContainersTable({
           size="sm"
           variant="ghost"
         >
-          Use machine profile
+          Use provider profile
         </Button>
       </div>
       <p className="dialog-section-copy">
-        Containers inherit the machine profile by default. Set a container profile only when it needs to override
-        {machineProfileId ? ` ${machineProfileId}` : " the machine profile"}.
+        Containers inherit the provider profile by default. Set a container profile only when it needs to override
+        {machineProfileId ? ` ${machineProfileId}` : " the provider profile"}.
       </p>
       <div className="dialog-table-scroll">
         <table className="dialog-table">
@@ -750,8 +750,8 @@ function ProfileSelectInput({
     <select className="dialog-input" onChange={(event) => onChange(event.target.value)} value={value}>
       <option value="">
         {machineProfileId
-          ? `Inherit machine profile (${machineProfileId})`
-          : "Inherit machine profile"}
+          ? `Inherit provider profile (${machineProfileId})`
+          : "Inherit provider profile"}
       </option>
       {options.map((option) => (
         <option key={option} value={option}>

@@ -39,14 +39,14 @@ function MachineNavigation({
   prevMachine?: MachineNavEntry;
 }) {
   return (
-    <div className="status-bar-machine-nav" aria-label="Machine navigation">
+    <div className="status-bar-machine-nav" aria-label="Provider navigation">
       <Button
-        aria-label={prevMachine ? `Go to ${prevMachine.label}` : "No previous machine"}
+        aria-label={prevMachine ? `Go to ${prevMachine.label}` : "No previous provider"}
         className="status-bar-button"
         disabled={!prevMachine}
         onClick={() => prevMachine && onNavigateMachine?.(prevMachine.id)}
         size="sm"
-        title={prevMachine ? prevMachine.label : "No previous machine"}
+        title={prevMachine ? prevMachine.label : "No previous provider"}
         variant="ghost"
       >
         <svg aria-hidden="true" className="panel-button-icon-svg" fill="none" viewBox="0 0 16 16">
@@ -55,12 +55,12 @@ function MachineNavigation({
       </Button>
       <span className="status-bar-machine-label">{activeMachineLabel}</span>
       <Button
-        aria-label={nextMachine ? `Go to ${nextMachine.label}` : "No next machine"}
+        aria-label={nextMachine ? `Go to ${nextMachine.label}` : "No next provider"}
         className="status-bar-button"
         disabled={!nextMachine}
         onClick={() => nextMachine && onNavigateMachine?.(nextMachine.id)}
         size="sm"
-        title={nextMachine ? nextMachine.label : "No next machine"}
+        title={nextMachine ? nextMachine.label : "No next provider"}
         variant="ghost"
       >
         <svg aria-hidden="true" className="panel-button-icon-svg" fill="none" viewBox="0 0 16 16">

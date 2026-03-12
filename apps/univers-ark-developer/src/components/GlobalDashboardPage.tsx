@@ -133,7 +133,7 @@ export function GlobalDashboardPage({
                     <div className="server-dashboard-row-actions">
                       <ConnectionStatusLight className="dashboard-row-status" state={machine.state} />
                       <Badge className="dashboard-row-badge" variant="neutral">
-                        Machine
+                        Machine provider
                       </Badge>
                       <Button
                         aria-label={`Edit ${machine.label}`}

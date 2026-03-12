@@ -58,7 +58,7 @@ export function HomeMachinesPage({
               }}
               scale={overviewZoom}
               target={target}
-              title={`${machine.label} (Machine)`}
+              title={`${machine.label} (Machine provider)`}
             />
           ))}
         </div>
