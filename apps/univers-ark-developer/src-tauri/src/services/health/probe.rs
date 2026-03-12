@@ -1,16 +1,6 @@
-use crate::models::{ContainerServiceInfo, DeveloperTarget, EndpointProbeType};
-use serde::{Deserialize, Serialize};
+use crate::models::{DeveloperTarget, EndpointProbeType};
+use serde::Serialize;
 use url::Url;
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct DashboardServicePayload {
-    pub(crate) id: String,
-    pub(crate) label: String,
-    pub(crate) status: String,
-    pub(crate) detail: String,
-    pub(crate) url: Option<String>,
-}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -525,19 +515,4 @@ PY"##,
         shell_single_quote(&declared_services),
         default_project = project_path,
     ))
-}
-
-pub(crate) fn into_container_service_infos(
-    payloads: Vec<DashboardServicePayload>,
-) -> Vec<ContainerServiceInfo> {
-    payloads
-        .into_iter()
-        .map(|service| ContainerServiceInfo {
-            id: service.id,
-            label: service.label,
-            status: service.status,
-            detail: service.detail,
-            url: service.url,
-        })
-        .collect()
 }
