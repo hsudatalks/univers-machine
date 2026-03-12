@@ -2,6 +2,7 @@ use super::{
     LOCAL_MACHINE_DESCRIPTION, LOCAL_MACHINE_HOST, LOCAL_MACHINE_ID, LOCAL_MACHINE_LABEL,
     RawTargetsFile, RemoteContainerServer, current_username, default_known_hosts_path,
 };
+use crate::infra::russh::execute_chain_blocking;
 use crate::machine::{
     fs_store::{
         initialize_targets_file_storage, read_targets_file_content, sanitize_targets_json_content,
@@ -15,7 +16,7 @@ use serde_json::{Value, json};
 use std::time::Duration;
 use tauri::{AppHandle, Runtime};
 use univers_ark_russh::{
-    ClientOptions as RusshClientOptions, ResolvedEndpoint, ResolvedEndpointChain, execute_chain,
+    ClientOptions as RusshClientOptions, ResolvedEndpoint, ResolvedEndpointChain,
 };
 
 pub(super) trait MachineRepository {
@@ -133,14 +134,6 @@ fn local_machine_available() -> bool {
     let Some(ssh_user) = current_username() else {
         return false;
     };
-    let runtime = match tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(runtime) => runtime,
-        Err(_) => return false,
-    };
-
     let options = RusshClientOptions {
         connect_timeout: Duration::from_secs(2),
         inactivity_timeout: Some(Duration::from_secs(2)),
@@ -148,14 +141,13 @@ fn local_machine_available() -> bool {
         keepalive_max: 0,
     };
 
-    runtime
-        .block_on(execute_chain(
-            &local_machine_probe_chain(&ssh_user),
-            "printf univers-ark-local-ready",
-            &options,
-        ))
-        .map(|output| output.exit_status == 0)
-        .unwrap_or(false)
+    execute_chain_blocking(
+        &local_machine_probe_chain(&ssh_user),
+        "printf univers-ark-local-ready",
+        &options,
+    )
+    .map(|output| output.exit_status == 0)
+    .unwrap_or(false)
 }
 
 fn sync_local_machine_config() -> Result<(), String> {

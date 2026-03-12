@@ -1,5 +1,6 @@
 use super::{session::spawn_managed_tunnel_session, starting_tunnel_status};
 use crate::{
+    infra::russh::start_local_forward_chain_blocking,
     machine::{resolve_raw_target, resolve_target_ssh_chain},
     models::{
         BrowserServiceType, BrowserSurface, MachineTransport, RusshTunnelForward, TunnelSession,
@@ -16,9 +17,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tauri::{AppHandle, Runtime};
-use univers_ark_russh::{
-    start_local_forward_chain, ClientOptions as RusshClientOptions, ResolvedEndpointChain,
-};
+use univers_ark_russh::{ClientOptions as RusshClientOptions, ResolvedEndpointChain};
 use url::Url;
 
 fn resolve_container_chain(target_id: &str) -> Result<ResolvedEndpointChain, String> {
@@ -111,19 +110,14 @@ fn spawn_russh_forward(
     label: impl Into<String>,
 ) -> Result<RusshTunnelForward, String> {
     let chain = resolve_container_chain(target_id)?;
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| format!("Failed to build russh runtime: {}", error))?;
-    let forward = runtime
-        .block_on(start_local_forward_chain(
-            &chain,
-            local_bind_addr,
-            remote_host,
-            remote_port,
-            &RusshClientOptions::default(),
-        ))
-        .map_err(|error| format!("Failed to start russh forward: {}", error))?;
+    let forward = start_local_forward_chain_blocking(
+        &chain,
+        local_bind_addr,
+        remote_host,
+        remote_port,
+        &RusshClientOptions::default(),
+    )
+    .map_err(|error| format!("Failed to start russh forward: {}", error))?;
 
     Ok(RusshTunnelForward {
         label: label.into(),

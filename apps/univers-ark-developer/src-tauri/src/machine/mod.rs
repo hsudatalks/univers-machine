@@ -1,6 +1,7 @@
 mod actions;
-mod connection;
+mod chain;
 mod discovery;
+mod exec;
 mod fs_store;
 mod inventory;
 mod profiles;
@@ -12,9 +13,8 @@ mod types;
 
 pub(crate) use self::{
     actions::restart_container,
-    connection::{
-        execute_target_command_via_russh, resolve_target_ssh_chain, run_target_shell_command,
-    },
+    chain::resolve_target_ssh_chain,
+    exec::{execute_target_command_via_russh, run_target_shell_command},
     fs_store::{targets_file_path, univers_config_dir},
     inventory::{
         read_bootstrap_data, read_server_inventory, read_targets_file, resolve_raw_target,

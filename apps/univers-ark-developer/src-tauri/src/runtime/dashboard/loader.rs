@@ -1,4 +1,5 @@
 use crate::{
+    infra::russh::execute_chain_blocking,
     machine::{resolve_raw_target, resolve_target_ssh_chain, run_target_shell_command},
     models::{
         ContainerAgentInfo, ContainerDashboard, ContainerProjectInfo, ContainerRuntimeInfo,
@@ -9,7 +10,7 @@ use crate::{
     },
 };
 use serde::Deserialize;
-use univers_ark_russh::{ClientOptions as RusshClientOptions, execute_chain};
+use univers_ark_russh::ClientOptions as RusshClientOptions;
 
 const DEFAULT_PROJECT_PATH: &str = "~/repos";
 
@@ -185,17 +186,7 @@ fn load_container_dashboard_stdout(target_id: &str) -> Result<Vec<u8>, String> {
 
 fn load_container_dashboard_via_russh(target_id: &str, command: &str) -> Result<Vec<u8>, String> {
     let chain = resolve_target_ssh_chain(target_id)?;
-
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| format!("Failed to build russh runtime: {}", error))?;
-    let output = runtime
-        .block_on(execute_chain(
-            &chain,
-            command,
-            &RusshClientOptions::default(),
-        ))
+    let output = execute_chain_blocking(&chain, command, &RusshClientOptions::default())
         .map_err(|error| format!("russh dashboard exec failed for {}: {}", target_id, error))?;
 
     if output.exit_status != 0 {

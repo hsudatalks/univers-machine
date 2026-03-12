@@ -1,10 +1,11 @@
 use crate::{
+    infra::russh::{list_directory_chain_blocking, read_file_preview_chain_blocking},
     machine::resolve_target_ssh_chain,
     models::{RemoteDirectoryListing, RemoteFileEntry, RemoteFilePreview},
 };
 use univers_ark_russh::{
-    list_directory_chain, read_file_preview_chain, ClientOptions as RusshClientOptions,
-    RemoteDirectoryListing as RusshDirectoryListing, RemoteFilePreview as RusshFilePreview,
+    ClientOptions as RusshClientOptions, RemoteDirectoryListing as RusshDirectoryListing,
+    RemoteFilePreview as RusshFilePreview,
 };
 
 fn list_remote_directory_via_russh(
@@ -12,16 +13,7 @@ fn list_remote_directory_via_russh(
     path: Option<&str>,
 ) -> Result<RemoteDirectoryListing, String> {
     let chain = resolve_target_ssh_chain(target_id)?;
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| format!("Failed to build russh runtime: {}", error))?;
-    let listing = runtime
-        .block_on(list_directory_chain(
-            &chain,
-            path,
-            &RusshClientOptions::default(),
-        ))
+    let listing = list_directory_chain_blocking(&chain, path, &RusshClientOptions::default())
         .map_err(|error| {
             format!(
                 "russh directory listing failed for {}: {}",
@@ -37,16 +29,7 @@ fn read_remote_file_preview_via_russh(
     path: &str,
 ) -> Result<RemoteFilePreview, String> {
     let chain = resolve_target_ssh_chain(target_id)?;
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| format!("Failed to build russh runtime: {}", error))?;
-    let preview = runtime
-        .block_on(read_file_preview_chain(
-            &chain,
-            path,
-            &RusshClientOptions::default(),
-        ))
+    let preview = read_file_preview_chain_blocking(&chain, path, &RusshClientOptions::default())
         .map_err(|error| format!("russh file preview failed for {}: {}", target_id, error))?;
 
     Ok(map_russh_file_preview(target_id, preview))

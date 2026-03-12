@@ -1,11 +1,11 @@
 use super::{
+    CONNECTIVITY_ACTIVE_RECHECK_INTERVAL, CONNECTIVITY_CHECKING_RETRY_INTERVAL,
+    CONNECTIVITY_ERROR_BACKOFF_BASE, CONNECTIVITY_ERROR_BACKOFF_MAX, CONNECTIVITY_PROBE_COMMAND,
+    CONNECTIVITY_READY_RECHECK_INTERVAL, ConnectivityMonitorState,
     status::{checking_snapshot, error_snapshot, queue_target_snapshot, ready_snapshot},
-    ConnectivityMonitorState, CONNECTIVITY_ACTIVE_RECHECK_INTERVAL,
-    CONNECTIVITY_CHECKING_RETRY_INTERVAL, CONNECTIVITY_ERROR_BACKOFF_BASE,
-    CONNECTIVITY_ERROR_BACKOFF_MAX, CONNECTIVITY_PROBE_COMMAND,
-    CONNECTIVITY_READY_RECHECK_INTERVAL,
 };
 use crate::{
+    infra::russh::execute_chain_blocking,
     machine::{resolve_raw_target, resolve_target_ssh_chain},
     models::{
         ConnectivitySnapshot, ConnectivityState, ConnectivityStatusEvent, MachineTransport,
@@ -18,7 +18,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Manager, Runtime};
-use univers_ark_russh::{execute_chain, ClientOptions as RusshClientOptions};
+use univers_ark_russh::ClientOptions as RusshClientOptions;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum ProbeMode {
@@ -158,40 +158,24 @@ pub(super) fn probe_target_snapshot<R: Runtime>(
         }
     };
 
-    let runtime = match tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            return ProbeOutcome {
-                snapshot: error_snapshot(format!("Failed to build russh runtime: {}", error)),
-                mode: ProbeMode::Russh,
-            };
-        }
-    };
+    let snapshot =
+        match execute_chain_blocking(&chain, CONNECTIVITY_PROBE_COMMAND, &probe_options()) {
+            Ok(output) if output.exit_status == 0 => ready_snapshot(ready_message),
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                let detail = if !stderr.is_empty() {
+                    stderr
+                } else if !stdout.is_empty() {
+                    stdout
+                } else {
+                    format!("Probe command exited with {}", output.exit_status)
+                };
 
-    let snapshot = match runtime.block_on(execute_chain(
-        &chain,
-        CONNECTIVITY_PROBE_COMMAND,
-        &probe_options(),
-    )) {
-        Ok(output) if output.exit_status == 0 => ready_snapshot(ready_message),
-        Ok(output) => {
-            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            let detail = if !stderr.is_empty() {
-                stderr
-            } else if !stdout.is_empty() {
-                stdout
-            } else {
-                format!("Probe command exited with {}", output.exit_status)
-            };
-
-            error_snapshot(detail)
-        }
-        Err(error) => error_snapshot(format!("russh probe failed: {}", error)),
-    };
+                error_snapshot(detail)
+            }
+            Err(error) => error_snapshot(format!("russh probe failed: {}", error)),
+        };
 
     ProbeOutcome {
         snapshot,
