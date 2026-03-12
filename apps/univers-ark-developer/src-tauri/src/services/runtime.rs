@@ -4,10 +4,8 @@ use crate::{
         INTERNAL_TUNNEL_PORT_END, INTERNAL_TUNNEL_PORT_START, SURFACE_HOST, SURFACE_PORT_END,
         SURFACE_PORT_START,
     },
-    models::{
-        web_service, BrowserSurface, DeveloperService, DeveloperTarget, MachineTransport,
-        TargetsFile, TunnelState,
-    },
+    models::{BrowserSurface, DeveloperService, DeveloperTarget, MachineTransport, TargetsFile, TunnelState},
+    services::catalog::web_service,
 };
 use std::net::TcpListener;
 use url::Url;

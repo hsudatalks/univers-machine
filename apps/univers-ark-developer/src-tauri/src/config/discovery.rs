@@ -1,6 +1,9 @@
-use crate::models::{
-    web_service, BrowserServiceType, BrowserSurface, ContainerWorkspace, DeveloperService,
-    DeveloperTarget, MachineTransport, ManagedContainer, ManagedContainerKind, ManagedServer,
+use crate::{
+    models::{
+        BrowserServiceType, BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget,
+        MachineTransport, ManagedContainer, ManagedContainerKind, ManagedServer,
+    },
+    services::catalog::web_service,
 };
 use csv::ReaderBuilder;
 use std::collections::HashSet;

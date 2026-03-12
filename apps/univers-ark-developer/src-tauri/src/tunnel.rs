@@ -10,11 +10,14 @@ use crate::{
         RuntimeActivityState, TunnelRegistration, TunnelSession, TunnelState, TunnelStatus,
     },
     proxy::{proxy_error_message, start_vite_proxy},
-    runtime::{
-        allocate_internal_tunnel_port, internal_probe_url, resolve_runtime_vite_hmr_tunnel_command,
-        resolve_runtime_web_surface, service_key, surface_key, surface_local_port,
+    services::{
+        registry::emit_tunnel_service_status,
+        runtime::{
+            allocate_internal_tunnel_port, internal_probe_url,
+            resolve_runtime_vite_hmr_tunnel_command, resolve_runtime_web_surface, service_key,
+            surface_key, surface_local_port,
+        },
     },
-    service_registry::emit_tunnel_service_status,
 };
 use std::{
     collections::HashMap,

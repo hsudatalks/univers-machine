@@ -1,9 +1,9 @@
 use crate::{
     activity::{current_runtime_activity, update_runtime_activity as apply_runtime_activity},
     config::{
-        execute_target_command_via_russh, read_bootstrap_data, read_server_inventory,
-        read_targets_config, resolve_raw_target, restart_container as restart_remote_container,
-        save_targets_config, scan_and_store_server_inventory, targets_file_path,
+        read_bootstrap_data, read_server_inventory, read_targets_config, resolve_raw_target,
+        restart_container as restart_remote_container, save_targets_config,
+        scan_and_store_server_inventory, targets_file_path,
     },
     connectivity::apply_connectivity_snapshots,
     dashboard::{
@@ -21,20 +21,22 @@ use crate::{
         merge_github_pull_request as execute_github_pull_request_merge, open_external_url,
     },
     models::{
-        command_service, tmux_command_service, AppBootstrap, AppDiagnostics, AppSettings,
-        ConnectivityDiagnostics, ConnectivityState, ContainerDashboard, DashboardDiagnostics,
-        DashboardState, GithubProjectState, GithubPullRequestDetail, MachineImportCandidate,
-        ManagedServer, PortRangeDiagnostics, RemoteDirectoryListing, RemoteFilePreview,
+        AppBootstrap, AppDiagnostics, AppSettings, ConnectivityDiagnostics, ConnectivityState,
+        ContainerDashboard, DashboardDiagnostics, DashboardState,
+        GithubProjectState, GithubPullRequestDetail, MachineImportCandidate, ManagedServer,
+        PortRangeDiagnostics, RemoteDirectoryListing, RemoteFilePreview,
         RuntimeActivityDiagnostics, RuntimeActivityState, SchedulerState, SecretAssignmentInput,
-        SecretAssignmentRecord, SecretCredentialInput, SecretCredentialRecord,
-        SecretInventory, SecretProviderInput, SecretProviderRecord, TerminalDiagnostics,
-        TerminalSnapshot, TerminalState, TunnelDiagnostics, TunnelState, TunnelStatus,
+        SecretAssignmentRecord, SecretCredentialInput, SecretCredentialRecord, SecretInventory,
+        SecretProviderInput, SecretProviderRecord, TerminalDiagnostics, TerminalSnapshot,
+        TerminalState, TunnelDiagnostics, TunnelState, TunnelStatus,
     },
-    runtime::{read_runtime_targets_file, resolve_runtime_web_surface, surface_key},
     scheduler::scheduler_budget_diagnostics,
     secret_management::SecretManagementState,
-    service_registry::{
-        emit_command_service_status, emit_dashboard_service_statuses, sync_registered_web_services,
+    services::{
+        actions::execute_command_service_action,
+        catalog::tmux_command_service,
+        registry::{emit_dashboard_service_statuses, sync_registered_web_services},
+        runtime::{read_runtime_targets_file, resolve_runtime_web_surface, surface_key},
     },
     settings::{load_app_settings as read_app_settings, save_app_settings as write_app_settings},
     shell::shell_command,
@@ -299,84 +301,6 @@ pub(crate) struct CommandServiceActionSpec {
     pub(crate) target_id: String,
     pub(crate) service_id: String,
     pub(crate) action: String,
-}
-
-fn execute_command_service_inner(
-    app: Option<&AppHandle>,
-    target_id: &str,
-    service_id: &str,
-    action: &str,
-) -> Result<(), String> {
-    let target = resolve_raw_target(target_id)?;
-    let service = command_service(&target, service_id).ok_or_else(|| {
-        format!(
-            "Unknown command service {} for target {}",
-            service_id, target_id
-        )
-    })?;
-
-    let command = match action {
-        "restart" => service
-            .command
-            .as_ref()
-            .map(|command| command.restart.trim())
-            .filter(|command| !command.is_empty())
-            .ok_or_else(|| {
-                format!(
-                    "Command service {} does not define a restart action",
-                    service_id
-                )
-            })?,
-        other => {
-            return Err(format!(
-                "Unsupported command service action {} for {}",
-                other, service_id
-            ));
-        }
-    };
-
-    if let Some(app) = app {
-        emit_command_service_status(
-            app,
-            target_id,
-            service_id,
-            "running",
-            format!("Executing {} action.", action),
-        );
-    }
-
-    let output = execute_target_command_via_russh(target_id, command)?;
-    let (exit_status, stdout, stderr) = (output.exit_status, output.stdout, output.stderr);
-
-    if exit_status == 0 {
-        if let Some(app) = app {
-            emit_command_service_status(
-                app,
-                target_id,
-                service_id,
-                "ready",
-                format!("{} action finished successfully.", action),
-            );
-        }
-        return Ok(());
-    }
-
-    let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
-    let stdout = String::from_utf8_lossy(&stdout).trim().to_string();
-
-    let error = if !stderr.is_empty() {
-        stderr
-    } else if !stdout.is_empty() {
-        stdout
-    } else {
-        format!("Failed to execute {} action for {}", action, service_id)
-    };
-
-    if let Some(app) = app {
-        emit_command_service_status(app, target_id, service_id, "error", error.clone());
-    }
-
-    Err(error)
 }
 
 fn restart_tunnel_inner(
@@ -873,7 +797,7 @@ pub(crate) async fn restart_tmux(app: AppHandle, target_id: String) -> Result<()
             .map(|service| service.id.clone())
             .unwrap_or_else(|| String::from("tmux-developer"));
 
-        execute_command_service_inner(Some(&app), &target_id, &service_id, "restart")
+        execute_command_service_action(Some(&app), &target_id, &service_id, "restart")
     })
     .await
     .map_err(|error| format!("Failed to join restart tmux task: {}", error))?
@@ -885,7 +809,12 @@ pub(crate) async fn execute_command_service(
     spec: CommandServiceActionSpec,
 ) -> Result<(), String> {
     async_runtime::spawn_blocking(move || {
-        execute_command_service_inner(Some(&app), &spec.target_id, &spec.service_id, &spec.action)
+        execute_command_service_action(
+            Some(&app),
+            &spec.target_id,
+            &spec.service_id,
+            &spec.action,
+        )
     })
     .await
     .map_err(|error| format!("Failed to join command service task: {}", error))?

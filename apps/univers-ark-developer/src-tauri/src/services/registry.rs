@@ -4,7 +4,7 @@ use crate::{
         ContainerDashboard, DeveloperServiceKind, ServiceRegistration, ServiceState, ServiceStatus,
         TunnelStatus,
     },
-    runtime::service_key,
+    services::runtime::service_key,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
@@ -29,14 +29,13 @@ fn upsert_service_status<R: Runtime>(app: &AppHandle<R>, status: ServiceStatus) 
 fn existing_service_status<R: Runtime>(
     app: &AppHandle<R>,
     target_id: &str,
-    service_id: &str,
 ) -> Option<ServiceStatus> {
     let statuses = app
         .try_state::<ServiceState>()
         .map(|service_state| service_state.statuses.clone())?;
     let statuses = statuses.lock().ok()?;
 
-    statuses.get(&service_key(target_id, service_id)).cloned()
+    statuses.get(target_id).cloned()
 }
 
 fn register_service<R: Runtime>(
@@ -143,7 +142,6 @@ pub(crate) fn emit_dashboard_service_statuses<R: Runtime>(
     dashboard: &ContainerDashboard,
 ) {
     let target = resolve_raw_target(target_id).ok();
-
     for service in &dashboard.services {
         let kind = target
             .as_ref()
@@ -157,7 +155,8 @@ pub(crate) fn emit_dashboard_service_statuses<R: Runtime>(
             .unwrap_or(DeveloperServiceKind::Endpoint);
 
         register_service(app, target_id, &service.id, kind);
-        let existing_status = existing_service_status(app, target_id, &service.id);
+        let existing_status =
+            existing_service_status(app, &service_key(target_id, &service.id));
         upsert_service_status(
             app,
             ServiceStatus {

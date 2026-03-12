@@ -4,7 +4,7 @@ use crate::{
         INTERNAL_TUNNEL_PORT_END, INTERNAL_TUNNEL_PORT_START, SURFACE_PORT_END, SURFACE_PORT_START,
     },
     models::{ManagedTunnelSignature, ObservedTunnelProcess},
-    runtime::replace_known_tunnel_placeholders,
+    services::runtime::replace_known_tunnel_placeholders,
 };
 use std::{
     process::{Command, Stdio},
