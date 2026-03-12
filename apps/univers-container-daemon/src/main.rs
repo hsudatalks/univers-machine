@@ -1,6 +1,7 @@
-mod daemon;
 mod container;
+mod daemon;
 mod dashboard;
+mod self_daemon;
 mod status;
 
 use clap::{Parser, Subcommand};

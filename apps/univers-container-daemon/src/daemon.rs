@@ -6,17 +6,24 @@ use crate::dashboard::{
     ContainerDashboard, DashboardAgentInfo, DashboardProjectInfo, DashboardRequest,
     DashboardServiceInfo, DashboardTmuxInfo,
 };
+use crate::self_daemon::{
+    collect_daemon_info, collect_service_status, install_service, record_process_start,
+    restart_service, start_service, stop_service, uninstall_service, DaemonInfo,
+    DaemonServiceMutationResult, DaemonServiceStatus, InstallDaemonServiceRequest,
+};
 use axum::routing::{get, post};
 use axum::{extract::State, response::Json, Router};
 use std::sync::Arc;
 use tracing::info;
 use univers_daemon_core::agent::state::AgentState;
 use univers_daemon_core::api::response::ApiResponse;
-use univers_daemon_core::api::routes::{shared_routes, legacy_compat_routes, DaemonState};
+use univers_daemon_core::api::routes::{legacy_compat_routes, shared_routes, DaemonState};
 use univers_daemon_core::installer::InstallerRegistry;
 use univers_daemon_core::tmux::service::TmuxServiceManager;
 
 pub async fn run_daemon(port: u16) -> anyhow::Result<()> {
+    record_process_start(port);
+
     let agent_state = AgentState::new();
     let tmux_manager = Arc::new(TmuxServiceManager::for_container());
     let installer_registry = Arc::new(InstallerRegistry::with_defaults());
@@ -38,6 +45,16 @@ pub async fn run_daemon(port: u16) -> anyhow::Result<()> {
         .route("/api/container/agent", post(get_container_agent))
         .route("/api/container/tmux", post(get_container_tmux))
         .route("/api/container/dashboard", post(get_container_dashboard))
+        .route("/api/daemon", get(get_daemon_info))
+        .route("/api/daemon/service", get(get_daemon_service_status))
+        .route("/api/daemon/service/install", post(install_daemon_service))
+        .route("/api/daemon/service/start", post(start_daemon_service))
+        .route("/api/daemon/service/stop", post(stop_daemon_service))
+        .route("/api/daemon/service/restart", post(restart_daemon_service))
+        .route(
+            "/api/daemon/service/uninstall",
+            post(uninstall_daemon_service),
+        )
         // Shared routes from core
         .merge(shared_routes())
         // Legacy backward-compatible routes
@@ -123,6 +140,62 @@ async fn get_container_tmux(
 ) -> Json<ApiResponse<DashboardTmuxInfo>> {
     match collect_tmux(request).await {
         Ok(tmux) => Json(ApiResponse::ok(tmux)),
+        Err(error) => Json(ApiResponse::err(error.to_string())),
+    }
+}
+
+async fn get_daemon_info(State(_state): State<Arc<DaemonState>>) -> Json<ApiResponse<DaemonInfo>> {
+    Json(ApiResponse::ok(collect_daemon_info()))
+}
+
+async fn get_daemon_service_status(
+    State(_state): State<Arc<DaemonState>>,
+) -> Json<ApiResponse<DaemonServiceStatus>> {
+    Json(ApiResponse::ok(collect_service_status()))
+}
+
+async fn install_daemon_service(
+    State(_state): State<Arc<DaemonState>>,
+    Json(request): Json<InstallDaemonServiceRequest>,
+) -> Json<ApiResponse<DaemonServiceMutationResult>> {
+    match install_service(request).await {
+        Ok(result) => Json(ApiResponse::ok(result)),
+        Err(error) => Json(ApiResponse::err(error.to_string())),
+    }
+}
+
+async fn start_daemon_service(
+    State(_state): State<Arc<DaemonState>>,
+) -> Json<ApiResponse<DaemonServiceMutationResult>> {
+    match start_service().await {
+        Ok(result) => Json(ApiResponse::ok(result)),
+        Err(error) => Json(ApiResponse::err(error.to_string())),
+    }
+}
+
+async fn stop_daemon_service(
+    State(_state): State<Arc<DaemonState>>,
+) -> Json<ApiResponse<DaemonServiceMutationResult>> {
+    match stop_service().await {
+        Ok(result) => Json(ApiResponse::ok(result)),
+        Err(error) => Json(ApiResponse::err(error.to_string())),
+    }
+}
+
+async fn restart_daemon_service(
+    State(_state): State<Arc<DaemonState>>,
+) -> Json<ApiResponse<DaemonServiceMutationResult>> {
+    match restart_service().await {
+        Ok(result) => Json(ApiResponse::ok(result)),
+        Err(error) => Json(ApiResponse::err(error.to_string())),
+    }
+}
+
+async fn uninstall_daemon_service(
+    State(_state): State<Arc<DaemonState>>,
+) -> Json<ApiResponse<DaemonServiceMutationResult>> {
+    match uninstall_service().await {
+        Ok(result) => Json(ApiResponse::ok(result)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
 }
