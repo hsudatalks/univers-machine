@@ -96,7 +96,7 @@ function HomeViewSwitcher({
             viewMode === "dashboard"
               ? "Show dashboard view"
               : viewMode === "machines"
-                ? "Show machines view"
+                ? "Show providers view"
                 : viewMode === "grid"
                 ? "Show grid view"
                 : "Show focus view"
@@ -107,7 +107,7 @@ function HomeViewSwitcher({
           {viewMode === "dashboard"
             ? "Dashboard"
             : viewMode === "machines"
-              ? "Machines"
+              ? "Providers"
               : viewMode === "grid"
               ? "Grid"
               : "Focus"}

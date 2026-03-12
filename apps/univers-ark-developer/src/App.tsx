@@ -1028,7 +1028,7 @@ function App() {
                 onAddMachine={() => {
                   setIsAddMachineDialogOpen(true);
                 }}
-                onEditAgentTeam={(machineId) => {
+                onEditWorkbench={(machineId) => {
                   openMachineSettings(machineId, "containers");
                 }}
                 onEditMachine={(machineId) => {

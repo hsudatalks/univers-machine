@@ -20,7 +20,7 @@ interface OverviewEntry {
 
 interface GlobalDashboardPageProps {
   onAddMachine: () => void;
-  onEditAgentTeam: (machineId: string) => void;
+  onEditWorkbench: (machineId: string) => void;
   onEditMachine: (machineId: string) => void;
   onOpenGrid?: () => void;
   onOpenMachines?: () => void;
@@ -38,7 +38,7 @@ function serviceKey(targetId: string, serviceId: string): string {
 
 export function GlobalDashboardPage({
   onAddMachine,
-  onEditAgentTeam,
+  onEditWorkbench,
   onEditMachine,
   onOpenGrid,
   onOpenMachines,
@@ -61,11 +61,11 @@ export function GlobalDashboardPage({
             <CardContent className="dashboard-summary-bar dashboard-card-content">
               <div className="dashboard-summary-copy">
                 <div className="dashboard-summary-item">
-                  <span className="dashboard-meta-label">Machines</span>
+                  <span className="dashboard-meta-label">Providers</span>
                   <span className="dashboard-meta-value">{machines.length}</span>
                 </div>
                 <div className="dashboard-summary-item">
-                  <span className="dashboard-meta-label">Agent teams</span>
+                  <span className="dashboard-meta-label">Workbenches</span>
                   <span className="dashboard-meta-value">{overviewContainers.length}</span>
                 </div>
                 <div className="dashboard-summary-item">
@@ -77,10 +77,6 @@ export function GlobalDashboardPage({
               </div>
 
               <div className="dashboard-summary-actions">
-                <Button className="dashboard-summary-button" onClick={onAddMachine} size="sm">
-                  <Server size={14} />
-                  Add machine
-                </Button>
                 {onOpenMachines ? (
                   <Button
                     className="dashboard-summary-button"
@@ -89,7 +85,7 @@ export function GlobalDashboardPage({
                     variant="ghost"
                   >
                     <Server size={14} />
-                    Open machines
+                    Open providers
                   </Button>
                 ) : null}
                 {onOpenGrid ? (
@@ -109,10 +105,16 @@ export function GlobalDashboardPage({
 
           <Card className="dashboard-card-wide border-border/80 bg-card/95">
             <CardHeader className="dashboard-card-header">
-              <CardTitle className="dashboard-section-title">
-                <Server size={16} />
-                Machines
-              </CardTitle>
+              <div className="dashboard-card-header-row">
+                <CardTitle className="dashboard-section-title">
+                  <Server size={16} />
+                  Providers
+                </CardTitle>
+                <Button className="dashboard-summary-button" onClick={onAddMachine} size="sm">
+                  <Server size={14} />
+                  Add provider
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="server-dashboard-list dashboard-card-list dashboard-card-content">
               {machines.map((machine) => {
@@ -130,6 +132,9 @@ export function GlobalDashboardPage({
 
                     <div className="server-dashboard-row-actions">
                       <ConnectionStatusLight className="dashboard-row-status" state={machine.state} />
+                      <Badge className="dashboard-row-badge" variant="neutral">
+                        Machine
+                      </Badge>
                       <Button
                         aria-label={`Edit ${machine.label}`}
                         className="dashboard-row-icon-button"
@@ -164,7 +169,7 @@ export function GlobalDashboardPage({
             <CardHeader className="dashboard-card-header">
               <CardTitle className="dashboard-section-title">
                 <Boxes size={16} />
-                Agent teams
+                Workbenches
               </CardTitle>
             </CardHeader>
             <CardContent className="server-dashboard-list dashboard-card-list dashboard-card-content">
@@ -194,14 +199,14 @@ export function GlobalDashboardPage({
                           {primary.label}
                         </Badge>
                       ) : null}
-                      <Button
-                        aria-label={`Edit ${container.label}`}
-                        className="dashboard-row-icon-button"
-                        onClick={() => {
-                          onEditAgentTeam(machine.id);
-                        }}
-                        size="icon"
-                        title="Container settings"
+                        <Button
+                          aria-label={`Edit ${container.label}`}
+                          className="dashboard-row-icon-button"
+                          onClick={() => {
+                            onEditWorkbench(machine.id);
+                          }}
+                          size="icon"
+                          title="Container settings"
                         variant="ghost"
                       >
                         <Settings2 size={14} />

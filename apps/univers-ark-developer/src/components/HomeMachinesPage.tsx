@@ -58,16 +58,16 @@ export function HomeMachinesPage({
               }}
               scale={overviewZoom}
               target={target}
-              title={machine.label}
+              title={`${machine.label} (Machine)`}
             />
           ))}
         </div>
       ) : (
         <section className="server-empty-state">
           <div>
-            <p className="dashboard-copy">No machines configured yet.</p>
+            <p className="dashboard-copy">No providers configured yet.</p>
             <Button onClick={onAddMachine} size="sm">
-              Add machine
+              Add provider
             </Button>
           </div>
         </section>
