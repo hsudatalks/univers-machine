@@ -222,6 +222,51 @@ export function ServerPage({
     };
   }, [focusableTerminalTargetIds, focusedTerminalTargetId, pageVisible]);
 
+  useEffect(() => {
+    const focusedContainerTarget =
+      focusedTerminalTargetId && focusedTerminalTargetId !== terminalTarget?.id
+        ? resolveTarget(focusedTerminalTargetId)
+        : undefined;
+    const isContainerTerminalPanelActive = isMobileLayout
+      ? activeMobilePanel === "terminals"
+      : activeTool === "terminals";
+
+    if (!pageVisible || !isContainerTerminalPanelActive || !focusedContainerTarget) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        !isPlatformModifier(event) ||
+        event.altKey ||
+        event.shiftKey ||
+        event.key !== "Enter" ||
+        (isEditableEventTarget(event.target) && !isXtermHelperTextarea(event.target))
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      onOpenWorkspace(focusedContainerTarget.id);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [
+    activeMobilePanel,
+    activeTool,
+    focusedTerminalTargetId,
+    isMobileLayout,
+    onOpenWorkspace,
+    pageVisible,
+    resolveTarget,
+    terminalTarget,
+  ]);
+
   return (
     <>
       {isMobileLayout ? (
