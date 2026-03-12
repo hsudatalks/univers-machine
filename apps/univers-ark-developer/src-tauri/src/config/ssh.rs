@@ -1,5 +1,10 @@
 use crate::shell;
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    io::Write,
+    path::PathBuf,
+    process::Stdio,
+};
 
 use super::{ContainerManagerType, RemoteContainerContext, RemoteContainerServer};
 
@@ -380,13 +385,11 @@ fn deploy_key_command(
     manager_type: ContainerManagerType,
     container_name: &str,
     ssh_user: &str,
-    public_key: &str,
 ) -> String {
     let user_home = format!("/home/{}", ssh_user);
     let inject_script = format!(
-        "mkdir -p {home}/.ssh && chmod 700 {home}/.ssh && echo {key} >> {home}/.ssh/authorized_keys && chmod 600 {home}/.ssh/authorized_keys",
+        "mkdir -p {home}/.ssh && chmod 700 {home}/.ssh && cat >> {home}/.ssh/authorized_keys && chmod 600 {home}/.ssh/authorized_keys",
         home = user_home,
-        key = shell_single_quote(public_key),
     );
 
     let is_orbstack = matches!(manager_type, ContainerManagerType::Orbstack);
@@ -427,9 +430,19 @@ fn auto_deploy_public_key(
 ) -> Option<String> {
     let public_key = local_public_key()?;
     for manager_type in deploy_key_managers(server) {
-        let command =
-            deploy_key_command(server, manager_type, container_name, ssh_user, &public_key);
-        let Ok(output) = shell::shell_command(&command).output() else {
+        let command = deploy_key_command(server, manager_type, container_name, ssh_user);
+        let Ok(mut child) = shell::shell_command(&command)
+            .stdin(Stdio::piped())
+            .spawn()
+        else {
+            continue;
+        };
+
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(format!("{}\n", public_key).as_bytes());
+        }
+
+        let Ok(output) = child.wait_with_output() else {
             continue;
         };
 
@@ -453,7 +466,10 @@ pub(super) fn probe_managed_container_ssh(
     let (mut ssh_reachable, mut ssh_state, mut ssh_message) =
         probe_container_ssh(server, container_ip, container_name, ssh_user);
 
-    if !ssh_reachable && ssh_message.contains("Permission denied") {
+    if !ssh_reachable
+        && (ssh_message.contains("Permission denied")
+            || ssh_message.contains("authentication failed"))
+    {
         if let Some(deploy_message) = auto_deploy_public_key(server, container_name, ssh_user) {
             let (retry_reachable, retry_state, retry_message) =
                 probe_container_ssh(server, container_ip, container_name, ssh_user);
