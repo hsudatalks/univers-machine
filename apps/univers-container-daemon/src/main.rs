@@ -5,6 +5,11 @@ mod self_daemon;
 mod status;
 
 use clap::{Parser, Subcommand};
+use self_daemon::{
+    collect_daemon_info, collect_service_status, install_service, restart_service, start_service,
+    stop_service, uninstall_service, DaemonServiceMutationResult, DaemonServiceStatus,
+    InstallDaemonServiceRequest,
+};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use univers_daemon_core::agent::db::Db;
 use univers_daemon_core::agent::event::HookEvent;
@@ -63,6 +68,75 @@ enum Commands {
         /// Actually perform install (default: check only)
         #[arg(long)]
         run: bool,
+    },
+    /// Show daemon runtime and service metadata
+    Info {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Manage the daemon user service
+    Service {
+        #[command(subcommand)]
+        command: ServiceCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ServiceCommands {
+    /// Show current service status
+    Status {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Install a user-level systemd service
+    Install {
+        /// Override the daemon binary path
+        #[arg(long)]
+        binary_path: Option<String>,
+        /// Override the working directory
+        #[arg(long)]
+        working_directory: Option<String>,
+        /// Daemon port for the installed service
+        #[arg(long, default_value_t = DEFAULT_DAEMON_PORT)]
+        port: u16,
+        /// RUST_LOG value for the service
+        #[arg(long)]
+        log_level: Option<String>,
+        /// Do not enable the service after installing it
+        #[arg(long)]
+        no_enable: bool,
+        /// Do not start the service after installing it
+        #[arg(long)]
+        no_start: bool,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Start the installed service
+    Start {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Stop the installed service
+    Stop {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Restart the installed service
+    Restart {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove the installed service
+    Uninstall {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -130,6 +204,18 @@ async fn main() {
         }
         Commands::Install { name, run } => {
             if let Err(e) = handle_install_cmd(&name, run).await {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Commands::Info { json } => {
+            if let Err(e) = handle_info_cmd(json) {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Commands::Service { command } => {
+            if let Err(e) = handle_service_cmd(command).await {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
@@ -227,4 +313,103 @@ async fn handle_install_cmd(name: &str, run: bool) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn handle_info_cmd(json: bool) -> anyhow::Result<()> {
+    let info = collect_daemon_info();
+    if json {
+        println!("{}", serde_json::to_string_pretty(&info)?);
+    } else {
+        println!("name: {}", info.name);
+        println!("version: {}", info.version);
+        println!("pid: {}", info.pid);
+        println!("executable: {}", info.executable_path);
+        println!("started_at: {}", info.started_at);
+        println!(
+            "listen_port: {}",
+            info.listen_port
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "unknown".into())
+        );
+        print_service_status(&info.service);
+    }
+    Ok(())
+}
+
+async fn handle_service_cmd(command: ServiceCommands) -> anyhow::Result<()> {
+    match command {
+        ServiceCommands::Status { json } => {
+            let status = collect_service_status();
+            if json {
+                println!("{}", serde_json::to_string_pretty(&status)?);
+            } else {
+                print_service_status(&status);
+            }
+        }
+        ServiceCommands::Install {
+            binary_path,
+            working_directory,
+            port,
+            log_level,
+            no_enable,
+            no_start,
+            json,
+        } => {
+            let result = install_service(InstallDaemonServiceRequest {
+                binary_path,
+                working_directory,
+                port: Some(port),
+                log_level,
+                enable: Some(!no_enable),
+                start: Some(!no_start),
+            })
+            .await?;
+            print_service_mutation_result(&result, json)?;
+        }
+        ServiceCommands::Start { json } => {
+            let result = start_service().await?;
+            print_service_mutation_result(&result, json)?;
+        }
+        ServiceCommands::Stop { json } => {
+            let result = stop_service().await?;
+            print_service_mutation_result(&result, json)?;
+        }
+        ServiceCommands::Restart { json } => {
+            let result = restart_service().await?;
+            print_service_mutation_result(&result, json)?;
+        }
+        ServiceCommands::Uninstall { json } => {
+            let result = uninstall_service().await?;
+            print_service_mutation_result(&result, json)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn print_service_mutation_result(
+    result: &DaemonServiceMutationResult,
+    json: bool,
+) -> anyhow::Result<()> {
+    if json {
+        println!("{}", serde_json::to_string_pretty(result)?);
+    } else {
+        println!("{}", result.message);
+        print_service_status(&result.service);
+    }
+    Ok(())
+}
+
+fn print_service_status(status: &DaemonServiceStatus) {
+    println!("service_manager: {}", status.manager);
+    println!("manager_available: {}", status.manager_available);
+    println!("user_session_available: {}", status.user_session_available);
+    println!("unit_name: {}", status.unit_name);
+    println!("unit_path: {}", status.unit_path);
+    println!("installed: {}", status.installed);
+    println!("enabled: {}", status.enabled);
+    println!("active: {}", status.active);
+    if let Some(error) = &status.last_error {
+        println!("last_error: {error}");
+    }
 }
