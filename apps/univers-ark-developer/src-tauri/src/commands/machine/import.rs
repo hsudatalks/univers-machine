@@ -1,16 +1,7 @@
-use crate::{
-    infra::shell::shell_command,
-    machine::{
-        read_bootstrap_data, read_server_inventory, read_targets_config, save_targets_config,
-        scan_and_store_server_inventory, targets_file_path,
-    },
-    models::{AppBootstrap, ConnectivityState, MachineImportCandidate, ManagedServer},
-    runtime::connectivity::apply_connectivity_snapshots,
-    services::runtime::read_runtime_targets_file,
-};
+use crate::{infra::shell::shell_command, models::MachineImportCandidate};
 use serde::Deserialize;
 use std::{collections::HashMap, path::PathBuf};
-use tauri::{async_runtime, State};
+use tauri::async_runtime;
 use univers_ark_russh::SshConfigResolver;
 
 #[derive(Debug, Deserialize, Default)]
@@ -231,106 +222,6 @@ fn scan_tailscale_machine_candidates_inner() -> Result<Vec<MachineImportCandidat
 }
 
 #[tauri::command]
-pub(crate) async fn load_bootstrap(
-    tunnel_state: State<'_, crate::models::TunnelState>,
-    connectivity_state: State<'_, ConnectivityState>,
-) -> Result<AppBootstrap, String> {
-    let tunnel_state_inner = tunnel_state.inner().clone();
-    let connectivity_state_inner = connectivity_state.inner().clone();
-
-    async_runtime::spawn_blocking(move || {
-        let (targets_file, mut servers) = read_bootstrap_data(false)?;
-        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
-        let hydrated_targets_file = read_runtime_targets_file(&tunnel_state_inner)?;
-        let config_path = targets_file_path();
-
-        Ok(AppBootstrap {
-            app_name: "Univers Ark Developer".into(),
-            config_path: config_path.display().to_string(),
-            selected_target_id: targets_file.selected_target_id,
-            targets: hydrated_targets_file.targets,
-            machines: servers,
-        })
-    })
-    .await
-    .map_err(|error| format!("Failed to join bootstrap task: {}", error))?
-}
-
-#[tauri::command]
-pub(crate) async fn refresh_bootstrap(
-    tunnel_state: State<'_, crate::models::TunnelState>,
-    connectivity_state: State<'_, ConnectivityState>,
-) -> Result<AppBootstrap, String> {
-    let tunnel_state_inner = tunnel_state.inner().clone();
-    let connectivity_state_inner = connectivity_state.inner().clone();
-
-    async_runtime::spawn_blocking(move || {
-        let (targets_file, mut servers) = read_bootstrap_data(false)?;
-        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
-        let hydrated_targets_file = read_runtime_targets_file(&tunnel_state_inner)?;
-        let config_path = targets_file_path();
-
-        Ok(AppBootstrap {
-            app_name: "Univers Ark Developer".into(),
-            config_path: config_path.display().to_string(),
-            selected_target_id: targets_file.selected_target_id,
-            targets: hydrated_targets_file.targets,
-            machines: servers,
-        })
-    })
-    .await
-    .map_err(|error| format!("Failed to join refresh bootstrap task: {}", error))?
-}
-
-#[tauri::command]
-pub(crate) async fn load_machine_inventory(
-    connectivity_state: State<'_, ConnectivityState>,
-) -> Result<Vec<ManagedServer>, String> {
-    let connectivity_state_inner = connectivity_state.inner().clone();
-
-    async_runtime::spawn_blocking(move || {
-        let mut servers = read_server_inventory(false)?;
-        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
-        Ok(servers)
-    })
-    .await
-    .map_err(|error| format!("Failed to join machine inventory task: {}", error))?
-}
-
-#[tauri::command]
-pub(crate) async fn refresh_machine_inventory(
-    connectivity_state: State<'_, ConnectivityState>,
-) -> Result<Vec<ManagedServer>, String> {
-    let connectivity_state_inner = connectivity_state.inner().clone();
-
-    async_runtime::spawn_blocking(move || {
-        let mut servers = read_server_inventory(false)?;
-        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
-        Ok(servers)
-    })
-    .await
-    .map_err(|error| format!("Failed to join refresh machine inventory task: {}", error))?
-}
-
-#[tauri::command]
-pub(crate) async fn scan_machine_inventory(
-    machine_id: String,
-    connectivity_state: State<'_, ConnectivityState>,
-) -> Result<ManagedServer, String> {
-    let connectivity_state_inner = connectivity_state.inner().clone();
-
-    async_runtime::spawn_blocking(move || {
-        let mut server = scan_and_store_server_inventory(&machine_id)?;
-        let mut servers = vec![server.clone()];
-        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
-        server = servers.into_iter().next().unwrap_or(server);
-        Ok(server)
-    })
-    .await
-    .map_err(|error| format!("Failed to join machine scan task: {}", error))?
-}
-
-#[tauri::command]
 pub(crate) async fn scan_ssh_config_machine_candidates(
 ) -> Result<Vec<MachineImportCandidate>, String> {
     async_runtime::spawn_blocking(scan_ssh_config_machine_candidates_inner)
@@ -344,26 +235,4 @@ pub(crate) async fn scan_tailscale_machine_candidates(
     async_runtime::spawn_blocking(scan_tailscale_machine_candidates_inner)
         .await
         .map_err(|error| format!("Failed to join Tailscale scan task: {}", error))?
-}
-
-#[tauri::command]
-pub(crate) async fn restart_container(
-    server_id: String,
-    container_name: String,
-) -> Result<(), String> {
-    async_runtime::spawn_blocking(move || {
-        crate::machine::restart_container(&server_id, &container_name)
-    })
-    .await
-    .map_err(|error| format!("Failed to join restart container task: {}", error))?
-}
-
-#[tauri::command]
-pub(crate) fn load_targets_config() -> Result<String, String> {
-    read_targets_config()
-}
-
-#[tauri::command]
-pub(crate) fn update_targets_config(content: String) -> Result<(), String> {
-    save_targets_config(&content)
 }
