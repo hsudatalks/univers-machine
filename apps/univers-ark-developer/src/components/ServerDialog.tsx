@@ -105,6 +105,52 @@ export function ServerDialog({
     return config.machines.some((entry) => entry.id === nextId && entry.id !== originalId);
   }, [config, form.id, originalId]);
 
+  const persistCurrentMachineConfig = async (): Promise<{
+    nextConfig: TargetsConfigDocument;
+    nextServer: MachineConfig;
+    isNewServer: boolean;
+  }> => {
+    if (!config) {
+      throw new Error("Provider config is not loaded.");
+    }
+
+    const nextId = form.id.trim();
+    if (!nextId) {
+      throw new Error("Provider ID is required.");
+    }
+    if (hasIdConflict) {
+      throw new Error(`Provider "${nextId}" already exists.`);
+    }
+
+    const nextConfig: TargetsConfigDocument = {
+      ...config,
+      machines: [...config.machines],
+    };
+    const nextServer: MachineConfig = {
+      ...form,
+      id: nextId,
+      containers: form.containers.filter(
+        (container) => container.kind === "managed" && container.name.trim(),
+      ),
+    };
+
+    const existingIndex = nextConfig.machines.findIndex((entry) => entry.id === originalId);
+    const isNewServer = existingIndex < 0;
+
+    if (existingIndex >= 0) {
+      nextConfig.machines[existingIndex] = nextServer;
+    } else {
+      nextConfig.machines.push(nextServer);
+    }
+
+    await updateTargetsConfig(stringifyTargetsConfig(nextConfig));
+    setConfig(nextConfig);
+    setOriginalId(nextServer.id);
+    setForm(nextServer);
+
+    return { nextConfig, nextServer, isNewServer };
+  };
+
   const updateField = <K extends keyof MachineConfig>(field: K, value: MachineConfig[K]) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setIsDeleteConfirming(false);
@@ -188,49 +234,12 @@ export function ServerDialog({
   const handleSave = async () => {
     if (!config) return;
 
-    const nextId = form.id.trim();
-    if (!nextId) {
-      setError("Provider ID is required.");
-      return;
-    }
-    if (hasIdConflict) {
-      setError(`Provider "${nextId}" already exists.`);
-      return;
-    }
-
     setIsSaving(true);
     setError(null);
     setSaveMessage(null);
 
     try {
-      const nextConfig: TargetsConfigDocument = {
-        ...config,
-        machines: [...config.machines],
-      };
-      const nextServer: MachineConfig = {
-        ...form,
-        id: nextId,
-        containers: form.containers.filter(
-          (container) => container.kind === "managed" && container.name.trim(),
-        ),
-      };
-
-      const existingIndex = nextConfig.machines.findIndex(
-        (entry) => entry.id === originalId,
-      );
-
-      const isNewServer = existingIndex < 0;
-
-      if (existingIndex >= 0) {
-        nextConfig.machines[existingIndex] = nextServer;
-      } else {
-        nextConfig.machines.push(nextServer);
-      }
-
-      await updateTargetsConfig(stringifyTargetsConfig(nextConfig));
-      setConfig(nextConfig);
-      setOriginalId(nextServer.id);
-      setForm(nextServer);
+      const { nextServer, isNewServer } = await persistCurrentMachineConfig();
 
       if (isNewServer && nextServer.discoveryMode === "auto") {
         setIsScanning(true);
@@ -250,23 +259,18 @@ export function ServerDialog({
   };
 
   const handleScan = async () => {
-    const serverId = form.id.trim();
-    if (!serverId) {
-      setError("Save the server first so it has an ID.");
-      return;
-    }
-
     setIsScanning(true);
     setError(null);
     setSaveMessage(null);
 
     try {
-      await scanMachineInventory(serverId);
-      await loadMachineFromDisk(serverId);
+      const { nextServer } = await persistCurrentMachineConfig();
+      await scanMachineInventory(nextServer.id);
+      await loadMachineFromDisk(nextServer.id);
       setSaveMessage("Scanned containers successfully.");
       onSaved({ close: false });
     } catch (scanError) {
-      setError(String(scanError));
+      setError(scanError instanceof Error ? scanError.message : String(scanError));
     } finally {
       setIsScanning(false);
     }
