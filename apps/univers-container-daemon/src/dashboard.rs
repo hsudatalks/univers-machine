@@ -157,6 +157,53 @@ pub(crate) async fn collect_dashboard(
     })
 }
 
+pub(crate) async fn collect_project(
+    request: DashboardRequest,
+) -> anyhow::Result<DashboardProjectInfo> {
+    let project_path = resolve_project_path(request.project_path.as_deref());
+    task::spawn_blocking(move || collect_project_info(&project_path)).await?
+}
+
+pub(crate) async fn collect_services(
+    request: DashboardRequest,
+) -> anyhow::Result<Vec<DashboardServiceInfo>> {
+    let project_path = resolve_project_path(request.project_path.as_deref());
+    Ok(collect_service_info(
+        &project_path.display().to_string(),
+        request.declared_services,
+    )
+    .await)
+}
+
+pub(crate) async fn collect_tmux(
+    request: DashboardRequest,
+) -> anyhow::Result<DashboardTmuxInfo> {
+    let project_path = resolve_project_path(request.project_path.as_deref());
+    task::spawn_blocking(move || collect_tmux_info(&project_path)).await?
+}
+
+pub(crate) async fn collect_agent(
+    request: DashboardRequest,
+    agent_state: Arc<AgentState>,
+) -> anyhow::Result<DashboardAgentInfo> {
+    let project_path = resolve_project_path(request.project_path.as_deref());
+    let project_path_for_tmux = project_path.clone();
+    let project_path_for_agent = project_path.clone();
+
+    let tmux_task = task::spawn_blocking(move || collect_tmux_info(&project_path_for_tmux));
+    let hints_task = task::spawn_blocking(move || collect_agent_workspace_hints(&project_path_for_agent));
+    let sessions = agent_state.list_sessions(true).await;
+    let tmux = tmux_task.await??;
+    let hints = hints_task.await??;
+
+    Ok(collect_agent_info(
+        &project_path.display().to_string(),
+        &tmux,
+        &sessions,
+        hints,
+    ))
+}
+
 fn resolve_project_path(requested: Option<&str>) -> PathBuf {
     let raw = requested
         .map(str::trim)

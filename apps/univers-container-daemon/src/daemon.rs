@@ -1,7 +1,11 @@
 use crate::container::{
     collect_ports, ContainerInfo, ContainerProcessesInfo, ContainerRuntimeInfo,
 };
-use crate::dashboard::{collect_dashboard, ContainerDashboard, DashboardRequest};
+use crate::dashboard::{
+    collect_agent, collect_dashboard, collect_project, collect_services, collect_tmux,
+    ContainerDashboard, DashboardAgentInfo, DashboardProjectInfo, DashboardRequest,
+    DashboardServiceInfo, DashboardTmuxInfo,
+};
 use axum::routing::{get, post};
 use axum::{extract::State, response::Json, Router};
 use std::sync::Arc;
@@ -29,6 +33,10 @@ pub async fn run_daemon(port: u16) -> anyhow::Result<()> {
         .route("/api/container/runtime", get(get_container_runtime))
         .route("/api/container/processes", get(get_container_processes))
         .route("/api/container/ports", get(get_container_ports))
+        .route("/api/container/project", post(get_container_project))
+        .route("/api/container/services", post(get_container_services))
+        .route("/api/container/agent", post(get_container_agent))
+        .route("/api/container/tmux", post(get_container_tmux))
         .route("/api/container/dashboard", post(get_container_dashboard))
         // Shared routes from core
         .merge(shared_routes())
@@ -75,6 +83,46 @@ async fn get_container_dashboard(
 ) -> Json<ApiResponse<ContainerDashboard>> {
     match collect_dashboard(request, state.agent_state.clone()).await {
         Ok(dashboard) => Json(ApiResponse::ok(dashboard)),
+        Err(error) => Json(ApiResponse::err(error.to_string())),
+    }
+}
+
+async fn get_container_project(
+    State(_state): State<Arc<DaemonState>>,
+    Json(request): Json<DashboardRequest>,
+) -> Json<ApiResponse<DashboardProjectInfo>> {
+    match collect_project(request).await {
+        Ok(project) => Json(ApiResponse::ok(project)),
+        Err(error) => Json(ApiResponse::err(error.to_string())),
+    }
+}
+
+async fn get_container_services(
+    State(_state): State<Arc<DaemonState>>,
+    Json(request): Json<DashboardRequest>,
+) -> Json<ApiResponse<Vec<DashboardServiceInfo>>> {
+    match collect_services(request).await {
+        Ok(services) => Json(ApiResponse::ok(services)),
+        Err(error) => Json(ApiResponse::err(error.to_string())),
+    }
+}
+
+async fn get_container_agent(
+    State(state): State<Arc<DaemonState>>,
+    Json(request): Json<DashboardRequest>,
+) -> Json<ApiResponse<DashboardAgentInfo>> {
+    match collect_agent(request, state.agent_state.clone()).await {
+        Ok(agent) => Json(ApiResponse::ok(agent)),
+        Err(error) => Json(ApiResponse::err(error.to_string())),
+    }
+}
+
+async fn get_container_tmux(
+    State(_state): State<Arc<DaemonState>>,
+    Json(request): Json<DashboardRequest>,
+) -> Json<ApiResponse<DashboardTmuxInfo>> {
+    match collect_tmux(request).await {
+        Ok(tmux) => Json(ApiResponse::ok(tmux)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
 }
