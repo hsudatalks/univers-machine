@@ -90,7 +90,12 @@ fn parse_orbstack_containers(
                         name: info.record.name,
                         source: String::from("orbstack"),
                         ssh_user: info.record.config.default_username.clone(),
-                        ssh_user_candidates: if info.record.config.default_username.trim().is_empty()
+                        ssh_user_candidates: if info
+                            .record
+                            .config
+                            .default_username
+                            .trim()
+                            .is_empty()
                         {
                             vec![]
                         } else {

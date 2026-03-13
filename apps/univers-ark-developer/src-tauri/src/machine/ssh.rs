@@ -3,6 +3,7 @@ mod probe;
 
 use crate::infra::shell;
 
+pub(crate) use self::probe::maybe_auto_deploy_target_public_key;
 pub(super) use self::{
     build::{
         build_host_ssh_command, build_ssh_command, container_host_key_alias,
@@ -12,7 +13,6 @@ pub(super) use self::{
     },
     probe::{probe_machine_host_ssh, probe_managed_container_ssh},
 };
-pub(crate) use self::probe::maybe_auto_deploy_target_public_key;
 
 pub(super) fn run_target_shell_command_internal(
     target_id: &str,

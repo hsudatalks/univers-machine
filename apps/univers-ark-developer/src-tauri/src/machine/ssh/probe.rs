@@ -231,12 +231,9 @@ pub(crate) fn maybe_auto_deploy_target_public_key(
         .machines
         .into_iter()
         .find(|server| server.id == target.machine_id)?;
-    let container = server
-        .containers
-        .iter()
-        .find(|container| {
-            container.id == target.container_id || container.name == target.container_id
-        });
+    let container = server.containers.iter().find(|container| {
+        container.id == target.container_id || container.name == target.container_id
+    });
     let container_name = container
         .map(|container| container.name.as_str())
         .unwrap_or(target.container_id.as_str());
