@@ -153,8 +153,7 @@ async fn main() -> ExitCode {
             };
 
             let request = format!(
-                "GET {} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
-                path
+                "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
             );
             if let Err(error) = socket.write_all(request.as_bytes()).await {
                 forward.request_stop();

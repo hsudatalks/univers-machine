@@ -19,7 +19,7 @@ async fn test_sftp(host_alias: Option<&str>) {
     let resolver = match univers_ark_russh::SshConfigResolver::from_default_path() {
         Ok(r) => r,
         Err(e) => {
-            println!("Failed to load SSH config: {}", e);
+            println!("Failed to load SSH config: {e}");
             return;
         }
     };
@@ -48,7 +48,7 @@ async fn test_sftp(host_alias: Option<&str>) {
             }
         }
         Err(e) => {
-            println!("✗ Failed: {:?}", e);
+            println!("✗ Failed: {e:?}");
             return;
         }
     }
@@ -67,7 +67,7 @@ async fn test_sftp(host_alias: Option<&str>) {
             println!("{}", &preview.content.chars().take(200).collect::<String>());
         }
         Err(e) => {
-            println!("✗ Failed: {:?}", e);
+            println!("✗ Failed: {e:?}");
         }
     }
 }

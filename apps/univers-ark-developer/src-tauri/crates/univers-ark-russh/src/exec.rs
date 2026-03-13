@@ -69,8 +69,7 @@ pub async fn probe_http_chain(
 
     let mut stream = channel.into_stream();
     let request = format!(
-        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
-        path, remote_host
+        "GET {path} HTTP/1.1\r\nHost: {remote_host}\r\nConnection: close\r\n\r\n"
     );
     stream.write_all(request.as_bytes()).await?;
     stream.flush().await?;

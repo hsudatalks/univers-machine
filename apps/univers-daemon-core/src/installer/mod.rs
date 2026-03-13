@@ -56,6 +56,12 @@ pub struct InstallerRegistry {
     installers: HashMap<String, Arc<dyn Installer>>,
 }
 
+impl Default for InstallerRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InstallerRegistry {
     pub fn new() -> Self {
         Self {

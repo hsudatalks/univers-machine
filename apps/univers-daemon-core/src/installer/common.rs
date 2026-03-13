@@ -44,7 +44,7 @@ pub async fn get_version(program: &str, args: &[&str]) -> Option<String> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Find first version-like token
     for token in stdout.split_whitespace() {
-        if token.starts_with('v') || token.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+        if token.starts_with('v') || token.chars().next().is_some_and(|c| c.is_ascii_digit()) {
             return Some(token.trim().to_string());
         }
     }

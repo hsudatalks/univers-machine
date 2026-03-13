@@ -481,13 +481,13 @@ async fn probe_service(
 
 fn build_http_probe_url(host: &str, port: u16, path: &str) -> String {
     if path.is_empty() {
-        return format!("http://{}:{}", host, port);
+        return format!("http://{host}:{port}");
     }
 
     if path.starts_with('/') {
-        format!("http://{}:{}{}", host, port, path)
+        format!("http://{host}:{port}{path}")
     } else {
-        format!("http://{}:{}/{}", host, port, path)
+        format!("http://{host}:{port}/{path}")
     }
 }
 
@@ -785,7 +785,7 @@ fn collect_agent_info(
                 .active_session
                 .as_ref()
                 .zip(tmux.active_command.as_ref())
-                .map(|(session, command)| format!("tmux · {} · {}", session, command)),
+                .map(|(session, command)| format!("tmux · {session} · {command}")),
             latest_report,
             latest_report_updated_at,
         };
@@ -803,7 +803,7 @@ fn collect_agent_info(
                 .active_session
                 .as_ref()
                 .zip(tmux.active_command.as_ref())
-                .map(|(session, command)| format!("tmux · {} · {}", session, command)),
+                .map(|(session, command)| format!("tmux · {session} · {command}")),
             latest_report,
             latest_report_updated_at,
         };
@@ -867,7 +867,7 @@ fn select_scoped_sessions(project_path: &str, sessions: &[SessionSnapshot]) -> V
         .iter()
         .filter(|session| {
             let cwd = session.cwd.trim_end_matches('/');
-            cwd == normalized_project || cwd.starts_with(&format!("{}/", normalized_project))
+            cwd == normalized_project || cwd.starts_with(&format!("{normalized_project}/"))
         })
         .cloned()
         .collect();

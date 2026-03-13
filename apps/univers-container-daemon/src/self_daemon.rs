@@ -245,13 +245,13 @@ fn update_service_blocking(
 
     let unit = collect_service_unit_file_blocking()?;
     if !unit.installed {
-        return Err(anyhow!("{} is not installed", UNIT_NAME));
+        return Err(anyhow!("{UNIT_NAME} is not installed"));
     }
 
     let current_config = parse_unit_config(
         unit.content
             .as_deref()
-            .ok_or_else(|| anyhow!("{} is missing content", UNIT_NAME))?,
+            .ok_or_else(|| anyhow!("{UNIT_NAME} is missing content"))?,
     )?;
     let current_status = collect_service_status();
     let binary_path = request
@@ -413,13 +413,13 @@ fn run_service_action(action: &'static str) -> Result<DaemonServiceMutationResul
     ensure_user_systemd()?;
 
     if !service_unit_path().exists() {
-        return Err(anyhow!("{} is not installed", UNIT_NAME));
+        return Err(anyhow!("{UNIT_NAME} is not installed"));
     }
 
     run_systemctl([action, UNIT_NAME])?;
     Ok(DaemonServiceMutationResult {
         action,
-        message: format!("{action} {}", UNIT_NAME),
+        message: format!("{action} {UNIT_NAME}"),
         service: collect_service_status(),
     })
 }

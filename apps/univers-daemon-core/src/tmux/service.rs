@@ -69,6 +69,12 @@ struct DevServerConfig {
     host: Option<String>,
 }
 
+impl Default for TmuxServiceManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TmuxServiceManager {
     pub fn new() -> Self {
         Self::for_machine()
