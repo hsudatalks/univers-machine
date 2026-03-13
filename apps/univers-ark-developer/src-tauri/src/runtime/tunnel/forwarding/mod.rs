@@ -14,7 +14,10 @@ use tauri::{AppHandle, Runtime};
 use univers_ark_russh::{ClientOptions as RusshClientOptions, ResolvedEndpointChain};
 
 use self::{targets::remote_forward_target, vite::spawn_vite_proxy_session};
-use super::{session::spawn_managed_tunnel_session, starting_tunnel_status};
+use super::{
+    session::{spawn_managed_tunnel_session, ManagedTunnelSessionSpec},
+    starting_tunnel_status,
+};
 
 fn resolve_container_chain(target_id: &str) -> Result<ResolvedEndpointChain, String> {
     resolve_target_ssh_chain(target_id)
@@ -47,7 +50,7 @@ fn spawn_russh_forward(
         remote_port,
         &RusshClientOptions::default(),
     )
-    .map_err(|error| format!("Failed to start russh forward: {}", error))?;
+    .map_err(|error| format!("Failed to start russh forward: {error}"))?;
 
     Ok(RusshTunnelForward {
         label: label.into(),
@@ -81,7 +84,7 @@ pub(crate) fn start_tunnel<R: Runtime>(
     } else {
         let local_port = surface_local_port(surface)?;
         let (remote_host, remote_port) = remote_forward_target(surface)?;
-        let local_bind_addr = format!("127.0.0.1:{}", local_port);
+        let local_bind_addr = format!("127.0.0.1:{local_port}");
         let forward = spawn_russh_forward(
             target_id,
             &local_bind_addr,
@@ -95,13 +98,15 @@ pub(crate) fn start_tunnel<R: Runtime>(
             tunnel_state.sessions.clone(),
             tunnel_state.status_snapshots.clone(),
             tunnel_state.telemetry.clone(),
-            session_id,
-            target_id,
-            surface,
-            Vec::new(),
-            vec![forward],
-            None,
-            vec![surface.local_url.clone()],
+            ManagedTunnelSessionSpec {
+                session_id,
+                target_id: target_id.to_string(),
+                surface: surface.clone(),
+                processes: Vec::new(),
+                russh_forwards: vec![forward],
+                proxy: None,
+                probe_urls: vec![surface.local_url.clone()],
+            },
         )
     };
 

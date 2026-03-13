@@ -118,17 +118,15 @@ fn renders_terminal_and_tunnel_commands_for_discovered_container() {
     } else {
         std::env::var("HOME").unwrap()
     };
-    let expected_known_hosts_file = format!("{}/.ssh/univers-ark-developer-known_hosts", home);
+    let expected_known_hosts_file = format!("{home}/.ssh/univers-ark-developer-known_hosts");
     let expected_terminal_command = format!(
-        "ssh -o UserKnownHostsFile={kh} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -o StrictHostKeyChecking=no -tt -J david@mechanism-dev -p 22 ubuntu@10.211.82.202 'exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l'",
-        kh = expected_known_hosts_file
+        "ssh -o UserKnownHostsFile={expected_known_hosts_file} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -o StrictHostKeyChecking=no -tt -J david@mechanism-dev -p 22 ubuntu@10.211.82.202 'exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l'"
     );
     assert_eq!(target.terminal_command, expected_terminal_command);
     assert_eq!(
         target.surfaces[0].tunnel_command,
         format!(
-            "ssh -o UserKnownHostsFile={} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -o StrictHostKeyChecking=no -NT -L {{localPort}}:127.0.0.1:3432 -J mechanism-dev ubuntu@10.211.82.202",
-            expected_known_hosts_file
+            "ssh -o UserKnownHostsFile={expected_known_hosts_file} -o HostKeyAlias=univers-ark-developer--mechanism-dev--workflow-dev -o StrictHostKeyChecking=no -NT -L {{localPort}}:127.0.0.1:3432 -J mechanism-dev ubuntu@10.211.82.202"
         )
     );
 }

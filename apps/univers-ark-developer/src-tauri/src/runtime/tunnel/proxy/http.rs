@@ -10,23 +10,30 @@ use super::socket_addr_for_local_port;
 const ARK_BROWSER_BRIDGE_MARKER: &str = "ark-browser-bridge";
 const ARK_BROWSER_BRIDGE_SNIPPET: &str = r#"<script>(function(){const SOURCE="ark-browser-bridge";const payload=()=>({href:window.location.href,path:window.location.pathname+window.location.search+window.location.hash,title:document.title||""});const emit=(type,data)=>{try{window.parent.postMessage({source:SOURCE,mode:"proxy-injected",type,payload:data},"*");}catch(_error){}};const emitNavigation=(type)=>emit(type,payload());const wrap=(name)=>{const original=history[name];if(typeof original!=="function"){return;}history[name]=function(){const result=original.apply(this,arguments);emitNavigation("navigation");return result;};};const resolveTargetUrl=(element,selector,attribute)=>{const matched=element&&typeof element.closest==="function"?element.closest(selector):null;const value=matched&&typeof matched.getAttribute==="function"?matched.getAttribute(attribute):null;if(!value){return null;}try{return new URL(value,window.location.href).href;}catch(_error){return value;}};wrap("pushState");wrap("replaceState");window.addEventListener("popstate",()=>emitNavigation("navigation"));window.addEventListener("hashchange",()=>emitNavigation("navigation"));window.addEventListener("load",()=>emitNavigation("ready"));window.addEventListener("contextmenu",(event)=>{if(event.shiftKey){return;}const target=event.target instanceof Element?event.target:null;const selection=typeof window.getSelection==="function"?window.getSelection()?.toString().trim()||"":"";event.preventDefault();emit("contextmenu",{...payload(),imageUrl:resolveTargetUrl(target,"img[src]","src"),linkUrl:resolveTargetUrl(target,"a[href]","href"),selectionText:selection||null,x:event.clientX,y:event.clientY});},true);const titleObserver=new MutationObserver(()=>emitNavigation("navigation"));const titleElement=document.querySelector("title");if(titleElement){titleObserver.observe(titleElement,{childList:true,subtree:true,characterData:true});}emitNavigation("ready");})();</script>"#;
 
+type HttpHeaders = Vec<(String, String)>;
+
+struct ParsedHttpRequestHead {
+    request_bytes: Vec<u8>,
+    body_offset: usize,
+    method: String,
+    path: String,
+    version: String,
+    headers: HttpHeaders,
+}
+
+struct ParsedHttpResponseHead {
+    status_line: String,
+    headers: HttpHeaders,
+    body_offset: usize,
+}
+
 fn find_header_terminator(bytes: &[u8]) -> Option<usize> {
     bytes.windows(4).position(|window| window == b"\r\n\r\n")
 }
 
 fn read_http_request_head(
     stream: &mut TcpStream,
-) -> Result<
-    (
-        Vec<u8>,
-        usize,
-        String,
-        String,
-        String,
-        Vec<(String, String)>,
-    ),
-    String,
-> {
+) -> Result<ParsedHttpRequestHead, String> {
     let mut buffer = Vec::new();
     let mut chunk = [0u8; 8192];
 
@@ -35,7 +42,7 @@ fn read_http_request_head(
     loop {
         let read_count = stream
             .read(&mut chunk)
-            .map_err(|error| format!("Failed to read proxy request: {}", error))?;
+            .map_err(|error| format!("Failed to read proxy request: {error}"))?;
 
         if read_count == 0 {
             return Err(String::from(
@@ -76,14 +83,14 @@ fn read_http_request_head(
                 })
                 .collect::<Vec<_>>();
 
-            return Ok((
-                buffer,
-                header_end + 4,
-                method.to_string(),
-                path.to_string(),
-                version.to_string(),
+            return Ok(ParsedHttpRequestHead {
+                request_bytes: buffer,
+                body_offset: header_end + 4,
+                method: method.to_string(),
+                path: path.to_string(),
+                version: version.to_string(),
                 headers,
-            ));
+            });
         }
     }
 }
@@ -101,7 +108,7 @@ fn rebuild_http_request(
     headers: &[(String, String)],
     body: &[u8],
 ) -> Vec<u8> {
-    let mut request = format!("{} {} {}\r\n", method, path, version);
+    let mut request = format!("{method} {path} {version}\r\n");
 
     for (name, value) in headers {
         if name.eq_ignore_ascii_case("accept-encoding")
@@ -127,9 +134,7 @@ fn rebuild_http_request(
     request_bytes
 }
 
-fn parse_http_response_head(
-    response: &[u8],
-) -> Result<(String, Vec<(String, String)>, usize), String> {
+fn parse_http_response_head(response: &[u8]) -> Result<ParsedHttpResponseHead, String> {
     let header_end = find_header_terminator(response)
         .ok_or_else(|| String::from("Proxy response was missing an HTTP header terminator."))?;
     let head = String::from_utf8(response[..header_end].to_vec())
@@ -147,7 +152,11 @@ fn parse_http_response_head(
         })
         .collect::<Vec<_>>();
 
-    Ok((status_line, headers, header_end + 4))
+    Ok(ParsedHttpResponseHead {
+        status_line,
+        headers,
+        body_offset: header_end + 4,
+    })
 }
 
 fn response_header_value<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
@@ -209,15 +218,14 @@ fn rewrite_vite_client_script(script: &str, public_port: u16) -> String {
     let script = replace_js_statement(
         script,
         "const hmrPort = ",
-        &format!("const hmrPort = {};", public_port),
+        &format!("const hmrPort = {public_port};"),
     );
 
     replace_js_statement(
         &script,
         "const directSocketHost = ",
         &format!(
-            "const directSocketHost = \"{}:{}/\";",
-            SURFACE_HOST, public_port
+            "const directSocketHost = \"{SURFACE_HOST}:{public_port}/\";"
         ),
     )
 }
@@ -301,7 +309,11 @@ fn inject_browser_bridge_into_html(html: &str) -> String {
 }
 
 fn rewrite_html_navigation_response(response: &[u8]) -> Result<Vec<u8>, String> {
-    let (status_line, headers, body_offset) = parse_http_response_head(response)?;
+    let ParsedHttpResponseHead {
+        status_line,
+        headers,
+        body_offset,
+    } = parse_http_response_head(response)?;
 
     if !is_html_response(&headers) {
         return Ok(response.to_vec());
@@ -320,7 +332,11 @@ fn rewrite_html_navigation_response(response: &[u8]) -> Result<Vec<u8>, String> 
 }
 
 fn rewrite_vite_client_response(response: &[u8], public_port: u16) -> Result<Vec<u8>, String> {
-    let (status_line, headers, body_offset) = parse_http_response_head(response)?;
+    let ParsedHttpResponseHead {
+        status_line,
+        headers,
+        body_offset,
+    } = parse_http_response_head(response)?;
     let body = decode_http_response_body(&headers, response, body_offset)?;
 
     let script = String::from_utf8(body)
@@ -374,37 +390,32 @@ fn proxy_websocket_connection(
 
 fn proxy_http_connection(
     client_stream: &mut TcpStream,
-    request_bytes: &[u8],
-    request_body_offset: usize,
-    method: &str,
-    path: &str,
-    version: &str,
-    headers: &[(String, String)],
+    request: &ParsedHttpRequestHead,
     upstream_port: u16,
     public_port: u16,
 ) -> Result<(), String> {
     let mut upstream_stream = TcpStream::connect(socket_addr_for_local_port(upstream_port))
-        .map_err(|error| format!("Failed to connect to the upstream dev server: {}", error))?;
+        .map_err(|error| format!("Failed to connect to the upstream dev server: {error}"))?;
     let _ = upstream_stream.set_read_timeout(Some(Duration::from_secs(10)));
     let _ = upstream_stream.set_write_timeout(Some(Duration::from_secs(10)));
 
-    let request = rebuild_http_request(
-        method,
-        path,
-        version,
-        headers,
-        &request_bytes[request_body_offset..],
+    let upstream_request = rebuild_http_request(
+        &request.method,
+        &request.path,
+        &request.version,
+        &request.headers,
+        &request.request_bytes[request.body_offset..],
     );
     upstream_stream
-        .write_all(&request)
-        .map_err(|error| format!("Failed to forward the proxy request: {}", error))?;
+        .write_all(&upstream_request)
+        .map_err(|error| format!("Failed to forward the proxy request: {error}"))?;
 
     let mut response = Vec::new();
     upstream_stream
         .read_to_end(&mut response)
-        .map_err(|error| format!("Failed to read the upstream response: {}", error))?;
+        .map_err(|error| format!("Failed to read the upstream response: {error}"))?;
 
-    let response_bytes = if path == "/@vite/client" {
+    let response_bytes = if request.path == "/@vite/client" {
         rewrite_vite_client_response(&response, public_port).unwrap_or(response)
     } else {
         rewrite_html_navigation_response(&response).unwrap_or(response)
@@ -412,7 +423,7 @@ fn proxy_http_connection(
 
     client_stream
         .write_all(&response_bytes)
-        .map_err(|error| format!("Failed to write the proxy response: {}", error))
+        .map_err(|error| format!("Failed to write the proxy response: {error}"))
 }
 
 pub(super) fn handle_vite_proxy_connection(
@@ -423,26 +434,25 @@ pub(super) fn handle_vite_proxy_connection(
 ) {
     let _ = client_stream.set_nonblocking(false);
     let request = read_http_request_head(&mut client_stream);
-    let Ok((request_bytes, request_body_offset, method, path, version, headers)) = request else {
+    let Ok(request_head) = request else {
         if let Err(error) = request {
             write_proxy_error_response(&mut client_stream, "HTTP/1.1 400 Bad Request", &error);
         }
         return;
     };
 
-    if is_websocket_request(&headers) {
-        proxy_websocket_connection(client_stream, &request_bytes, upstream_hmr_port);
+    if is_websocket_request(&request_head.headers) {
+        proxy_websocket_connection(
+            client_stream,
+            &request_head.request_bytes,
+            upstream_hmr_port,
+        );
         return;
     }
 
     if let Err(error) = proxy_http_connection(
         &mut client_stream,
-        &request_bytes,
-        request_body_offset,
-        &method,
-        &path,
-        &version,
-        &headers,
+        &request_head,
         upstream_http_port,
         public_port,
     ) {

@@ -102,7 +102,7 @@ fn resolved_machine_chain(server: &RemoteContainerServer) -> Result<ResolvedEndp
 pub(crate) fn resolve_target_ssh_chain(target_id: &str) -> Result<ResolvedEndpointChain, String> {
     let target = resolve_raw_target(target_id)?;
     if matches!(target.transport, MachineTransport::Local) {
-        return Err(format!("Target {} uses local transport", target_id));
+        return Err(format!("Target {target_id} uses local transport"));
     }
 
     let raw_targets_file: RawTargetsFile = read_raw_targets_file()?;
@@ -110,7 +110,7 @@ pub(crate) fn resolve_target_ssh_chain(target_id: &str) -> Result<ResolvedEndpoi
         .machines
         .iter()
         .find(|server| server.id == target.machine_id)
-        .ok_or_else(|| format!("Unknown machine for {}", target_id))?;
+        .ok_or_else(|| format!("Unknown machine for {target_id}"))?;
 
     if matches!(target.container_kind, ManagedContainerKind::Host) {
         return resolved_machine_chain(server);
@@ -143,7 +143,7 @@ pub(crate) fn resolve_target_ssh_chain(target_id: &str) -> Result<ResolvedEndpoi
         return Ok(chain);
     }
 
-    Err(format!("Unknown machine inventory for {}", target_id))
+    Err(format!("Unknown machine inventory for {target_id}"))
 }
 
 #[cfg(test)]
@@ -176,6 +176,7 @@ mod tests {
             target_label_template: String::new(),
             target_host_template: String::from("{machineHost}"),
             target_description_template: String::new(),
+            host_terminal_startup_command: String::new(),
             terminal_command_template: String::new(),
             notes: vec![],
             workspace: ContainerWorkspace::default(),

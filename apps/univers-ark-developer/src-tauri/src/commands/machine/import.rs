@@ -1,6 +1,9 @@
 use crate::{infra::shell::shell_command, models::MachineImportCandidate};
 use serde::Deserialize;
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::Path,
+};
 use tauri::async_runtime;
 use univers_ark_russh::SshConfigResolver;
 
@@ -70,7 +73,7 @@ fn display_label(value: &str) -> String {
         .join(" ")
 }
 
-fn path_to_string(path: &PathBuf) -> String {
+fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().to_string()
 }
 
@@ -83,7 +86,7 @@ fn default_import_ssh_user() -> String {
 
 fn scan_ssh_config_machine_candidates_inner() -> Result<Vec<MachineImportCandidate>, String> {
     let resolver = SshConfigResolver::from_default_path()
-        .map_err(|error| format!("Failed to read ~/.ssh/config: {}", error))?;
+        .map_err(|error| format!("Failed to read ~/.ssh/config: {error}"))?;
 
     let mut candidates = resolver
         .aliases()
@@ -99,7 +102,11 @@ fn scan_ssh_config_machine_candidates_inner() -> Result<Vec<MachineImportCandida
                     host: hop.host.clone(),
                     port: hop.port,
                     user: hop.user.clone(),
-                    identity_files: hop.identity_files().iter().map(path_to_string).collect(),
+                    identity_files: hop
+                        .identity_files()
+                        .iter()
+                        .map(|path| path_to_string(path.as_path()))
+                        .collect(),
                 })
                 .collect::<Vec<_>>();
 
@@ -118,7 +125,7 @@ fn scan_ssh_config_machine_candidates_inner() -> Result<Vec<MachineImportCandida
             };
 
             Some(MachineImportCandidate {
-                import_id: format!("ssh-config:{}", alias),
+                import_id: format!("ssh-config:{alias}"),
                 machine_id: sanitize_machine_id(&alias),
                 label: display_label(&alias),
                 host: final_hop.host.clone(),
@@ -127,10 +134,10 @@ fn scan_ssh_config_machine_candidates_inner() -> Result<Vec<MachineImportCandida
                 identity_files: final_hop
                     .identity_files()
                     .iter()
-                    .map(path_to_string)
+                    .map(|path| path_to_string(path.as_path()))
                     .collect(),
                 jump_chain,
-                description: format!("Imported from SSH config alias {}.", alias),
+                description: format!("Imported from SSH config alias {alias}."),
                 detail,
             })
         })
@@ -144,7 +151,7 @@ fn scan_ssh_config_machine_candidates_inner() -> Result<Vec<MachineImportCandida
 fn scan_tailscale_machine_candidates_inner() -> Result<Vec<MachineImportCandidate>, String> {
     let output = shell_command("tailscale status --json")
         .output()
-        .map_err(|error| format!("Failed to execute tailscale status --json: {}", error))?;
+        .map_err(|error| format!("Failed to execute tailscale status --json: {error}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -156,7 +163,7 @@ fn scan_tailscale_machine_candidates_inner() -> Result<Vec<MachineImportCandidat
     }
 
     let parsed: TailscaleStatusResponse = serde_json::from_slice(&output.stdout)
-        .map_err(|error| format!("Failed to parse tailscale status output: {}", error))?;
+        .map_err(|error| format!("Failed to parse tailscale status output: {error}"))?;
 
     let mut candidates = parsed
         .peer
@@ -200,7 +207,7 @@ fn scan_tailscale_machine_candidates_inner() -> Result<Vec<MachineImportCandidat
             .join(" · ");
 
             Some(MachineImportCandidate {
-                import_id: format!("tailscale:{}", host),
+                import_id: format!("tailscale:{host}"),
                 machine_id: sanitize_machine_id(&label_seed),
                 label: display_label(&label_seed),
                 host,
@@ -226,7 +233,7 @@ pub(crate) async fn scan_ssh_config_machine_candidates(
 ) -> Result<Vec<MachineImportCandidate>, String> {
     async_runtime::spawn_blocking(scan_ssh_config_machine_candidates_inner)
         .await
-        .map_err(|error| format!("Failed to join SSH config scan task: {}", error))?
+        .map_err(|error| format!("Failed to join SSH config scan task: {error}"))?
 }
 
 #[tauri::command]
@@ -234,5 +241,5 @@ pub(crate) async fn scan_tailscale_machine_candidates(
 ) -> Result<Vec<MachineImportCandidate>, String> {
     async_runtime::spawn_blocking(scan_tailscale_machine_candidates_inner)
         .await
-        .map_err(|error| format!("Failed to join Tailscale scan task: {}", error))?
+        .map_err(|error| format!("Failed to join Tailscale scan task: {error}"))?
 }

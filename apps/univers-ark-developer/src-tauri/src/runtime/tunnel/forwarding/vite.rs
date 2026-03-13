@@ -15,7 +15,10 @@ use std::{
 };
 use tauri::{AppHandle, Runtime};
 
-use super::super::{proxy::start_vite_proxy, session::spawn_managed_tunnel_session};
+use super::super::{
+    proxy::start_vite_proxy,
+    session::{spawn_managed_tunnel_session, ManagedTunnelSessionSpec},
+};
 
 pub(super) fn vite_hmr_forward_target(surface: &BrowserSurface) -> Result<(String, u16), String> {
     if !surface.vite_hmr_tunnel_command.trim().is_empty() {
@@ -57,7 +60,7 @@ pub(super) fn spawn_vite_proxy_session<R: Runtime>(
         vite_hmr_forward_target(surface)?
     };
 
-    let local_http_bind = format!("127.0.0.1:{}", http_forward_port);
+    let local_http_bind = format!("127.0.0.1:{http_forward_port}");
     let http_forward = spawn_russh_forward(
         target_id,
         &local_http_bind,
@@ -66,7 +69,7 @@ pub(super) fn spawn_vite_proxy_session<R: Runtime>(
         format!("{} HTTP tunnel", surface.label),
     )?;
 
-    let local_hmr_bind = format!("127.0.0.1:{}", hmr_forward_port);
+    let local_hmr_bind = format!("127.0.0.1:{hmr_forward_port}");
     let hmr_forward = match spawn_russh_forward(
         target_id,
         &local_hmr_bind,
@@ -97,15 +100,17 @@ pub(super) fn spawn_vite_proxy_session<R: Runtime>(
         sessions,
         tunnel_state.status_snapshots.clone(),
         tunnel_state.telemetry.clone(),
-        session_id,
-        target_id,
-        surface,
-        Vec::new(),
-        russh_forwards,
-        Some(proxy),
-        vec![
-            internal_probe_url(http_forward_port),
-            internal_probe_url(hmr_forward_port),
-        ],
+        ManagedTunnelSessionSpec {
+            session_id,
+            target_id: target_id.to_string(),
+            surface: surface.clone(),
+            processes: Vec::new(),
+            russh_forwards,
+            proxy: Some(proxy),
+            probe_urls: vec![
+                internal_probe_url(http_forward_port),
+                internal_probe_url(hmr_forward_port),
+            ],
+        },
     ))
 }

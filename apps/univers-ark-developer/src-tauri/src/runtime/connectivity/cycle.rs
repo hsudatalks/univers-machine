@@ -2,7 +2,8 @@ use super::{
     monitor::{load_inventory, ConnectivityMonitorState, ConnectivitySchedulerState},
     probe::{
         apply_probe_outcome, defer_container_until_host, probe_target_snapshot,
-        schedule_for_target, sort_probe_requests, ProbeOutcome, ProbeRequest, ProbeTargetKind,
+        schedule_for_target, sort_probe_requests, ProbeMutationContext, ProbeOutcome,
+        ProbeRequest, ProbeTargetKind,
     },
     status::{
         aggregate_machine_snapshot, checking_snapshot, clone_target_snapshots,
@@ -140,15 +141,18 @@ fn run_connectivity_probe_cycle<R: Runtime>(
     let host_probe_count = host_requests.len();
     let mut executed_probe_count = host_probe_count;
     for (request, outcome) in run_probe_batch(app, host_requests) {
-        apply_probe_outcome(
+        let mut mutation_context = ProbeMutationContext {
             connectivity_state,
             monitor_state,
-            &mut target_snapshots,
+            target_snapshots: &mut target_snapshots,
+            pending_events: &mut pending_events,
+        };
+        apply_probe_outcome(
+            &mut mutation_context,
             &request.machine_id,
             &request.target_id,
             outcome,
             now,
-            &mut pending_events,
         );
     }
 
@@ -170,17 +174,20 @@ fn run_connectivity_probe_cycle<R: Runtime>(
 
         for container in &machine.containers {
             if host_snapshot.state != "ready" || !host_snapshot.reachable {
-                defer_container_until_host(
+                let mut mutation_context = ProbeMutationContext {
                     connectivity_state,
                     monitor_state,
-                    &mut target_snapshots,
+                    target_snapshots: &mut target_snapshots,
+                    pending_events: &mut pending_events,
+                };
+                defer_container_until_host(
+                    &mut mutation_context,
                     &machine.id,
                     &machine.host,
                     &container.target_id,
                     &host_snapshot,
                     host_next_due_at,
                     now,
-                    &mut pending_events,
                 );
                 continue;
             }
@@ -209,15 +216,18 @@ fn run_connectivity_probe_cycle<R: Runtime>(
     executed_probe_count += container_requests.len();
 
     for (request, outcome) in run_probe_batch(app, container_requests) {
-        apply_probe_outcome(
+        let mut mutation_context = ProbeMutationContext {
             connectivity_state,
             monitor_state,
-            &mut target_snapshots,
+            target_snapshots: &mut target_snapshots,
+            pending_events: &mut pending_events,
+        };
+        apply_probe_outcome(
+            &mut mutation_context,
             &request.machine_id,
             &request.target_id,
             outcome,
             now,
-            &mut pending_events,
         );
     }
 

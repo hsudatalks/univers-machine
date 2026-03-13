@@ -124,7 +124,7 @@ pub(crate) fn server_state_for_containers(containers: &[ManagedContainer]) -> (S
     if reachable == containers.len() {
         return (
             String::from("ready"),
-            format!("{} development container(s) are SSH reachable.", reachable),
+            format!("{reachable} development container(s) are SSH reachable."),
         );
     }
 
@@ -170,7 +170,7 @@ fn server_state_for_machine(
 
         return (
             String::from("error"),
-            format!("Machine host is unreachable: {}", host_message),
+            format!("Machine host is unreachable: {host_message}"),
         );
     }
 
@@ -184,8 +184,7 @@ fn server_state_for_machine(
         return (
             String::from("ready"),
             format!(
-                "Machine host is ready. {} managed container(s) are SSH reachable.",
-                total
+                "Machine host is ready. {total} managed container(s) are SSH reachable."
             ),
         );
     }
@@ -193,7 +192,7 @@ fn server_state_for_machine(
     if host_message == "Waiting for background SSH probe." || reachable > 0 && !host_reachable {
         return (
             String::from("checking"),
-            format!("Checking machine host and {} managed container(s).", total),
+            format!("Checking machine host and {total} managed container(s)."),
         );
     }
 
@@ -201,8 +200,7 @@ fn server_state_for_machine(
         return (
             String::from("error"),
             format!(
-                "Machine host is ready, but only {} of {} managed container(s) are SSH reachable.",
-                reachable, total
+                "Machine host is ready, but only {reachable} of {total} managed container(s) are SSH reachable."
             ),
         );
     }
@@ -210,8 +208,7 @@ fn server_state_for_machine(
     (
         String::from("error"),
         format!(
-            "Machine host is unreachable: {} Detected {} managed container(s), but none are SSH reachable.",
-            host_message, total
+            "Machine host is unreachable: {host_message} Detected {total} managed container(s), but none are SSH reachable."
         ),
     )
 }
@@ -286,13 +283,11 @@ pub(crate) fn discover_remote_server_inventory(
                 machine_host_state(server, &host_target.id, true);
             let message = if host_reachable {
                 format!(
-                    "Machine host is ready, but container discovery failed: {}",
-                    error
+                    "Machine host is ready, but container discovery failed: {error}"
                 )
             } else {
                 format!(
-                    "Machine host is unreachable: {} Container discovery failed: {}",
-                    host_message, error
+                    "Machine host is unreachable: {host_message} Container discovery failed: {error}"
                 )
             };
 

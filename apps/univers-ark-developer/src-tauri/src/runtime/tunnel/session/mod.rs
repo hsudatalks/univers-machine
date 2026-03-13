@@ -6,7 +6,9 @@ use super::{
     TUNNEL_PROBE_INTERVAL, TUNNEL_PROBE_MESSAGE_DELAY, TUNNEL_READY_PROBE_INTERVAL,
 };
 use crate::{
-    models::{BrowserSurface, RusshTunnelForward, TunnelProcess, TunnelSession},
+    models::{
+        BrowserSurface, LocalProxyHandle, RusshTunnelForward, TunnelProcess, TunnelSession,
+    },
     services::runtime::service_key,
 };
 use std::{
@@ -25,41 +27,46 @@ use self::{
 };
 use super::proxy::proxy_error_message;
 
+pub(super) struct ManagedTunnelSessionSpec {
+    pub(super) session_id: u64,
+    pub(super) target_id: String,
+    pub(super) surface: BrowserSurface,
+    pub(super) processes: Vec<TunnelProcess>,
+    pub(super) russh_forwards: Vec<RusshTunnelForward>,
+    pub(super) proxy: Option<LocalProxyHandle>,
+    pub(super) probe_urls: Vec<String>,
+}
+
 pub(super) fn spawn_managed_tunnel_session<R: Runtime>(
     app: &AppHandle<R>,
     sessions: Arc<Mutex<HashMap<String, TunnelSession>>>,
     status_snapshots: Arc<Mutex<HashMap<String, crate::models::TunnelStatus>>>,
     telemetry: Arc<Mutex<crate::models::TunnelTelemetry>>,
-    session_id: u64,
-    target_id: &str,
-    surface: &BrowserSurface,
-    processes: Vec<TunnelProcess>,
-    russh_forwards: Vec<RusshTunnelForward>,
-    proxy: Option<crate::models::LocalProxyHandle>,
-    probe_urls: Vec<String>,
+    spec: ManagedTunnelSessionSpec,
 ) -> TunnelSession {
     let started_at = Instant::now();
     let session = TunnelSession {
-        session_id,
+        session_id: spec.session_id,
         started_at,
-        processes: processes.clone(),
-        russh_forwards: russh_forwards.clone(),
-        proxy: proxy.clone(),
+        processes: spec.processes.clone(),
+        russh_forwards: spec.russh_forwards.clone(),
+        proxy: spec.proxy.clone(),
         ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
 
     let app_handle = app.clone();
     let ready_flag = session.ready.clone();
     let monitor_sessions = sessions.clone();
-    let target_id = target_id.to_string();
-    let surface_id = surface.id.clone();
-    let surface_label = surface.label.clone();
-    let local_url = surface.local_url.clone();
+    let target_id = spec.target_id;
+    let surface_id = spec.surface.id;
+    let surface_label = spec.surface.label;
+    let local_url = spec.surface.local_url;
     let session_key = service_key(&target_id, &surface_id);
-    let monitored_processes = processes;
-    let monitored_forwards = russh_forwards;
-    let monitored_proxy = proxy;
-    let probe_targets = probe_urls;
+    let monitored_processes = spec.processes;
+    let monitored_forwards = spec.russh_forwards;
+    let monitored_proxy = spec.proxy;
+    let probe_targets = spec.probe_urls;
+    let session_id = session.session_id;
 
     std::thread::spawn(move || {
         let mut waiting_message_emitted = false;
@@ -80,8 +87,7 @@ pub(super) fn spawn_managed_tunnel_session<R: Runtime>(
                             Some(local_url.clone()),
                             "running",
                             format!(
-                                "{} is forwarding browser traffic to {}.",
-                                surface_label, local_url
+                                "{surface_label} is forwarding browser traffic to {local_url}."
                             ),
                         )],
                     );
@@ -98,8 +104,7 @@ pub(super) fn spawn_managed_tunnel_session<R: Runtime>(
                             Some(local_url.clone()),
                             "starting",
                             format!(
-                                "{} tunnel is up, waiting for {} to accept connections.",
-                                surface_label, local_url
+                                "{surface_label} tunnel is up, waiting for {local_url} to accept connections."
                             ),
                         )],
                     );
@@ -121,7 +126,7 @@ pub(super) fn spawn_managed_tunnel_session<R: Runtime>(
                                 Some(local_url.clone()),
                                 "error",
                                 proxy_error_message(proxy).unwrap_or_else(|| {
-                                    format!("{} proxy exited unexpectedly.", surface_label)
+                                    format!("{surface_label} proxy exited unexpectedly.")
                                 }),
                             )],
                         );
@@ -195,13 +200,13 @@ pub(super) fn spawn_managed_tunnel_session<R: Runtime>(
             if let Some((label, success, status)) = exited_process {
                 if remove_tunnel_session_if_current(&monitor_sessions, &session_key, session_id) {
                     let message = if success {
-                        format!("{} exited.", label)
+                        format!("{label} exited.")
                     } else if let Some(excerpt) = tunnel_process_excerpt(&monitored_processes)
                         .or_else(|| russh_forward_excerpt(&monitored_forwards))
                     {
-                        format!("{} exited with {}. {}", label, status, excerpt)
+                        format!("{label} exited with {status}. {excerpt}")
                     } else {
-                        format!("{} exited with {}.", label, status)
+                        format!("{label} exited with {status}.")
                     };
 
                     let state = if success { "stopped" } else { "error" };

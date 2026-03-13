@@ -63,6 +63,13 @@ pub(super) struct ProbeRequest {
     pub(super) kind: ProbeTargetKind,
 }
 
+pub(super) struct ProbeMutationContext<'a> {
+    pub(super) connectivity_state: &'a ConnectivityState,
+    pub(super) monitor_state: &'a mut ConnectivityMonitorState,
+    pub(super) target_snapshots: &'a mut HashMap<String, ConnectivitySnapshot>,
+    pub(super) pending_events: &'a mut Vec<ConnectivityStatusEvent>,
+}
+
 fn probe_options() -> RusshClientOptions {
     RusshClientOptions {
         connect_timeout: Duration::from_secs(10),
@@ -176,7 +183,7 @@ pub(super) fn probe_target_snapshot<R: Runtime>(
                 error_snapshot(detail)
             }
             Err(error) => {
-                let error_message = format!("russh probe failed: {}", error);
+                let error_message = format!("russh probe failed: {error}");
                 if let Some(deploy_message) =
                     maybe_auto_deploy_target_public_key(target_id, &error_message)
                 {
@@ -200,13 +207,11 @@ pub(super) fn probe_target_snapshot<R: Runtime>(
                             };
 
                             error_snapshot(format!(
-                                "Auto-deployed key but russh probe still failed: {}",
-                                detail
+                                "Auto-deployed key but russh probe still failed: {detail}"
                             ))
                         }
                         Err(retry_error) => error_snapshot(format!(
-                            "Auto-deployed key but russh probe still failed: {}",
-                            retry_error
+                            "Auto-deployed key but russh probe still failed: {retry_error}"
                         )),
                     }
                 } else {
@@ -264,7 +269,7 @@ fn target_priority(snapshot: Option<&ConnectivitySnapshot>) -> u8 {
 }
 
 pub(super) fn sort_probe_requests(
-    requests: &mut Vec<ProbeRequest>,
+    requests: &mut [ProbeRequest],
     target_snapshots: &HashMap<String, ConnectivitySnapshot>,
     prioritized_machine_id: Option<&str>,
     prioritized_target_id: Option<&str>,
@@ -288,25 +293,24 @@ pub(super) fn sort_probe_requests(
 }
 
 pub(super) fn apply_probe_outcome(
-    connectivity_state: &ConnectivityState,
-    monitor_state: &mut ConnectivityMonitorState,
-    target_snapshots: &mut HashMap<String, ConnectivitySnapshot>,
+    context: &mut ProbeMutationContext<'_>,
     machine_id: &str,
     target_id: &str,
     outcome: ProbeOutcome,
     now: Instant,
-    pending_events: &mut Vec<ConnectivityStatusEvent>,
 ) {
     queue_target_snapshot(
-        connectivity_state,
+        context.connectivity_state,
         machine_id,
         target_id,
         &outcome.snapshot,
-        pending_events,
+        context.pending_events,
     );
-    target_snapshots.insert(target_id.to_string(), outcome.snapshot.clone());
+    context
+        .target_snapshots
+        .insert(target_id.to_string(), outcome.snapshot.clone());
 
-    let schedule = schedule_for_target(monitor_state, target_id, now);
+    let schedule = schedule_for_target(context.monitor_state, target_id, now);
     if outcome.snapshot.reachable {
         schedule.consecutive_failures = 0;
         schedule.next_due_at = now
@@ -323,21 +327,17 @@ pub(super) fn apply_probe_outcome(
 }
 
 pub(super) fn defer_container_until_host(
-    connectivity_state: &ConnectivityState,
-    monitor_state: &mut ConnectivityMonitorState,
-    target_snapshots: &mut HashMap<String, ConnectivitySnapshot>,
+    context: &mut ProbeMutationContext<'_>,
     machine_id: &str,
     machine_host: &str,
     container_target_id: &str,
     host_snapshot: &ConnectivitySnapshot,
     host_next_due_at: Instant,
     now: Instant,
-    pending_events: &mut Vec<ConnectivityStatusEvent>,
 ) {
     let waiting_snapshot = if host_snapshot.state == "checking" {
         checking_snapshot(format!(
-            "Waiting for machine host {} connectivity.",
-            machine_host
+            "Waiting for machine host {machine_host} connectivity."
         ))
     } else {
         error_snapshot(format!(
@@ -347,15 +347,17 @@ pub(super) fn defer_container_until_host(
     };
 
     queue_target_snapshot(
-        connectivity_state,
+        context.connectivity_state,
         machine_id,
         container_target_id,
         &waiting_snapshot,
-        pending_events,
+        context.pending_events,
     );
-    target_snapshots.insert(container_target_id.to_string(), waiting_snapshot);
+    context
+        .target_snapshots
+        .insert(container_target_id.to_string(), waiting_snapshot);
 
-    let schedule = schedule_for_target(monitor_state, container_target_id, now);
+    let schedule = schedule_for_target(context.monitor_state, container_target_id, now);
     schedule.next_due_at = if host_snapshot.state == "checking" {
         host_next_due_at.min(now + CONNECTIVITY_CHECKING_RETRY_INTERVAL)
     } else {
