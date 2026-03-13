@@ -224,6 +224,22 @@ fn scan_prefers_detected_container_user_over_stale_saved_user() {
 }
 
 #[test]
+#[ignore = "requires a reachable SSH target from the local developer environment"]
+fn live_russh_exec_uses_configured_identity_file() {
+    let target_id =
+        std::env::var("UNIVERS_ARK_SSH_TARGET").unwrap_or_else(|_| String::from("domain-dev::host"));
+    let output =
+        super::execute_target_command_via_russh(&target_id, "printf univers-ark-russh-ok")
+            .unwrap_or_else(|error| panic!("live russh exec failed for {target_id}: {error}"));
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("univers-ark-russh-ok"),
+        "unexpected stdout for {target_id}: {stdout}"
+    );
+}
+
+#[test]
 fn builds_ready_server_state_from_reachable_containers() {
     let containers = vec![
         ManagedContainer {

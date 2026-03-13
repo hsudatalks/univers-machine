@@ -65,7 +65,7 @@ pub(super) struct ProbeRequest {
 
 fn probe_options() -> RusshClientOptions {
     RusshClientOptions {
-        connect_timeout: Duration::from_secs(2),
+        connect_timeout: Duration::from_secs(10),
         inactivity_timeout: Some(Duration::from_secs(3)),
         keepalive_interval: Some(Duration::from_secs(10)),
         keepalive_max: 1,

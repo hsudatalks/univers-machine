@@ -2,7 +2,10 @@ use super::{
     inventory::load_inventory,
     repository::read_raw_targets_file,
     resolve_raw_target,
-    ssh::{container_host_key_alias, machine_host_key_alias, resolved_known_hosts_path},
+    ssh::{
+        container_host_key_alias, expand_home_path, machine_host_key_alias,
+        resolved_known_hosts_path,
+    },
     RawTargetsFile, RemoteContainerServer,
 };
 use crate::models::{MachineTransport, ManagedContainerKind};
@@ -11,7 +14,9 @@ use std::path::PathBuf;
 use univers_ark_russh::{ResolvedEndpoint, ResolvedEndpointChain};
 
 fn identity_paths(paths: &[String]) -> Vec<PathBuf> {
-    paths.iter().map(PathBuf::from).collect()
+    paths.iter()
+        .map(|path| PathBuf::from(expand_home_path(path)))
+        .collect()
 }
 
 fn apply_identity_sources(
@@ -32,6 +37,10 @@ fn apply_identity_sources(
     }
 
     Ok(endpoint)
+}
+
+fn accept_new_host_keys(server: &RemoteContainerServer) -> bool {
+    server.strict_host_key_checking
 }
 
 fn resolved_machine_chain(server: &RemoteContainerServer) -> Result<ResolvedEndpointChain, String> {
@@ -62,7 +71,7 @@ fn resolved_machine_chain(server: &RemoteContainerServer) -> Result<ResolvedEndp
                 endpoint.with_known_hosts(
                     known_hosts_path.clone(),
                     jump.host.clone(),
-                    server.strict_host_key_checking,
+                    accept_new_host_keys(server),
                 )
             })
         })
@@ -83,7 +92,7 @@ fn resolved_machine_chain(server: &RemoteContainerServer) -> Result<ResolvedEndp
         .with_known_hosts(
             known_hosts_path,
             machine_host_key_alias(server),
-            server.strict_host_key_checking,
+            accept_new_host_keys(server),
         ),
     );
 
@@ -127,7 +136,7 @@ pub(crate) fn resolve_target_ssh_chain(target_id: &str) -> Result<ResolvedEndpoi
             .with_known_hosts(
                 resolved_known_hosts_path(server),
                 container_host_key_alias(server, &container.name),
-                server.strict_host_key_checking,
+                accept_new_host_keys(server),
             ),
         );
 
@@ -135,4 +144,57 @@ pub(crate) fn resolve_target_ssh_chain(target_id: &str) -> Result<ResolvedEndpoi
     }
 
     Err(format!("Unknown machine inventory for {}", target_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{accept_new_host_keys, identity_paths};
+    use crate::machine::{ContainerDiscoveryMode, ContainerManagerType, RemoteContainerServer};
+    use crate::models::{ContainerWorkspace, MachineTransport};
+    use std::path::PathBuf;
+
+    fn test_server(strict_host_key_checking: bool) -> RemoteContainerServer {
+        RemoteContainerServer {
+            id: String::from("infra-dev"),
+            label: String::from("Infra Dev"),
+            transport: MachineTransport::Ssh,
+            host: String::from("legion-ubuntu.mink-ph.ts.net"),
+            port: 22,
+            description: String::new(),
+            manager_type: ContainerManagerType::None,
+            discovery_mode: ContainerDiscoveryMode::HostOnly,
+            discovery_command: String::new(),
+            ssh_user: String::from("david"),
+            container_ssh_user: String::from("david"),
+            identity_files: vec![],
+            ssh_credential_id: String::new(),
+            jump_chain: vec![],
+            known_hosts_path: String::from("~/.univers/known_hosts"),
+            strict_host_key_checking,
+            container_name_suffix: String::new(),
+            include_stopped: false,
+            target_label_template: String::new(),
+            target_host_template: String::from("{machineHost}"),
+            target_description_template: String::new(),
+            terminal_command_template: String::new(),
+            notes: vec![],
+            workspace: ContainerWorkspace::default(),
+            services: vec![],
+            surfaces: vec![],
+            containers: vec![],
+        }
+    }
+
+    #[test]
+    fn relaxed_host_key_checking_accepts_new_keys() {
+        assert!(!accept_new_host_keys(&test_server(false)));
+        assert!(accept_new_host_keys(&test_server(true)));
+    }
+
+    #[test]
+    fn identity_paths_expand_home_prefix() {
+        let home = std::env::var("HOME").expect("HOME must be set for tests");
+        let paths = identity_paths(&[String::from("~/.ssh/id_ed25519")]);
+        assert_eq!(paths, vec![PathBuf::from(format!("{home}/.ssh/id_ed25519"))]);
+    }
 }

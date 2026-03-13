@@ -22,7 +22,7 @@ pub struct ClientOptions {
 impl Default for ClientOptions {
     fn default() -> Self {
         Self {
-            connect_timeout: Duration::from_secs(8),
+            connect_timeout: Duration::from_secs(12),
             inactivity_timeout: None,
             keepalive_interval: Some(Duration::from_secs(15)),
             keepalive_max: 3,
