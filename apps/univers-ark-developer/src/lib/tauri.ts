@@ -20,6 +20,7 @@ import type {
   ManagedMachine,
   RemoteDirectoryListing,
   RemoteFilePreview,
+  BrowserScreenshotCapture,
   SecretAssignmentInput,
   SecretAssignmentRecord,
   SecretCredentialInput,
@@ -608,6 +609,22 @@ export async function clipboardRead(): Promise<string> {
   }
 
   return invoke<string>("clipboard_read");
+}
+
+export async function captureBrowserScreenshot(
+  targetId: string,
+  serviceId: string,
+  rect: { x: number; y: number; width: number; height: number },
+): Promise<BrowserScreenshotCapture> {
+  if (!isTauri()) {
+    throw new Error("Browser screenshots require the Tauri backend.");
+  }
+
+  return invoke<BrowserScreenshotCapture>("capture_browser_screenshot", {
+    rect,
+    serviceId,
+    targetId,
+  });
 }
 
 export async function loadTargetsConfig(): Promise<string> {

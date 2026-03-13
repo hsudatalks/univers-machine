@@ -1,7 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Maximize2, Minimize2 } from "lucide-react";
+import {
+  Camera,
+  Check,
+  ExternalLink,
+  Maximize2,
+  Minimize2,
+  RotateCw,
+} from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { releaseBrowserFrames, syncBrowserFrames } from "../lib/browser-cache";
-import { openExternalLink } from "../lib/tauri";
+import { captureBrowserScreenshot, clipboardWrite, openExternalLink } from "../lib/tauri";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import type {
@@ -51,6 +59,8 @@ export function BrowserPane({
   const stageRef = useRef<HTMLDivElement | null>(null);
   const ownerId = useMemo(() => Symbol("browser-pane"), []);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
+  const [captureFeedback, setCaptureFeedback] = useState<string | null>(null);
   const tunnelStatusLabel = activeFrame
     ? TUNNEL_STATUS_LABELS[activeFrame.status.state] ?? activeFrame.status.state
     : "Unavailable";
@@ -118,6 +128,20 @@ export function BrowserPane({
     }
   }, [isVisible]);
 
+  useEffect(() => {
+    if (!captureFeedback) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setCaptureFeedback(null);
+    }, 1800);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [captureFeedback]);
+
   return (
     <article
       className={`panel browser-panel tool-panel ${isVisible ? "" : "is-hidden"} ${isFullscreen ? "is-pane-fullscreen" : ""}`}
@@ -173,29 +197,92 @@ export function BrowserPane({
             </Badge>
           )}
           <Button
-            disabled={!activeFrame}
-            onClick={onReload}
-            size="sm"
+            aria-label={
+              isCapturingScreenshot
+                ? "Capturing browser screenshot"
+                : captureFeedback ?? "Capture browser screenshot"
+            }
+            disabled={!activeFrame || !activeLocalUrl || isCapturingScreenshot}
+            onClick={async () => {
+              const stageElement = stageRef.current;
+
+              if (!activeFrame || !activeLocalUrl || !stageElement) {
+                return;
+              }
+
+              const bounds = stageElement.getBoundingClientRect();
+              if (bounds.width < 2 || bounds.height < 2) {
+                return;
+              }
+
+              setIsCapturingScreenshot(true);
+
+              try {
+                const currentWindow = getCurrentWindow();
+                const [innerPosition, scaleFactor] = await Promise.all([
+                  currentWindow.innerPosition(),
+                  currentWindow.scaleFactor(),
+                ]);
+
+                const result = await captureBrowserScreenshot(
+                  activeFrame.target.id,
+                  activeFrame.surface.id,
+                  {
+                    x: Math.round(innerPosition.x + bounds.left * scaleFactor),
+                    y: Math.round(innerPosition.y + bounds.top * scaleFactor),
+                    width: Math.max(1, Math.round(bounds.width * scaleFactor)),
+                    height: Math.max(1, Math.round(bounds.height * scaleFactor)),
+                  },
+                );
+
+                await clipboardWrite(result.path);
+                setCaptureFeedback("Path copied");
+              } catch (error) {
+                const message =
+                  error instanceof Error ? error.message : "Failed to capture screenshot.";
+                setCaptureFeedback(message);
+              } finally {
+                setIsCapturingScreenshot(false);
+              }
+            }}
+            title={
+              isCapturingScreenshot
+                ? "Capturing screenshot…"
+                : captureFeedback ?? "Capture browser screenshot to the target container"
+            }
+            size="icon"
             variant="outline"
           >
-            Reload
+            {captureFeedback === "Path copied" ? <Check size={14} /> : <Camera size={14} />}
+          </Button>
+          <Button
+            aria-label="Reload browser"
+            disabled={!activeFrame}
+            onClick={onReload}
+            size="icon"
+            title="Reload browser"
+            variant="outline"
+          >
+            <RotateCw size={14} />
           </Button>
           {activeFrame ? (
             <Button
+              aria-label="Open browser externally"
               className="panel-link"
               onClick={() => {
                 if (activeLocalUrl) {
                   void openExternalLink(activeLocalUrl);
                 }
               }}
-              size="sm"
+              size="icon"
+              title="Open browser externally"
               variant="outline"
             >
-              Open
+              <ExternalLink size={14} />
             </Button>
           ) : (
-            <Button disabled size="sm" variant="outline">
-              Open
+            <Button aria-label="Open browser externally" disabled size="icon" title="Open browser externally" variant="outline">
+              <ExternalLink size={14} />
             </Button>
           )}
         </div>

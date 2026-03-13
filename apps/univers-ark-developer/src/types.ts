@@ -140,6 +140,11 @@ export interface RemoteFilePreview {
   truncated: boolean;
 }
 
+export interface BrowserScreenshotCapture {
+  targetId: string;
+  path: string;
+}
+
 export interface ContainerProjectInfo {
   projectPath: string;
   repoFound: boolean;

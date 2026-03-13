@@ -28,3 +28,10 @@ pub(crate) struct RemoteFilePreview {
     pub(crate) is_binary: bool,
     pub(crate) truncated: bool,
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BrowserScreenshotCapture {
+    pub(crate) target_id: String,
+    pub(crate) path: String,
+}

@@ -1,9 +1,9 @@
 use std::future::Future;
 use univers_ark_russh::{
     execute_chain, list_directory_chain, read_file_preview_chain, start_local_forward_chain,
-    ClientOptions as RusshClientOptions, ExecOutput as RusshExecOutput, LocalForward,
-    RemoteDirectoryListing as RusshDirectoryListing, RemoteFilePreview as RusshFilePreview,
-    ResolvedEndpointChain, RusshError,
+    write_file_chain, ClientOptions as RusshClientOptions, ExecOutput as RusshExecOutput,
+    LocalForward, RemoteDirectoryListing as RusshDirectoryListing,
+    RemoteFilePreview as RusshFilePreview, ResolvedEndpointChain, RusshError,
 };
 
 fn block_on_russh<T, F>(future: F) -> Result<T, String>
@@ -40,6 +40,15 @@ pub(crate) fn read_file_preview_chain_blocking(
     options: &RusshClientOptions,
 ) -> Result<RusshFilePreview, String> {
     block_on_russh(read_file_preview_chain(chain, path, options))
+}
+
+pub(crate) fn write_file_chain_blocking(
+    chain: &ResolvedEndpointChain,
+    path: &str,
+    data: &[u8],
+    options: &RusshClientOptions,
+) -> Result<(), String> {
+    block_on_russh(write_file_chain(chain, path, data, options))
 }
 
 pub(crate) fn start_local_forward_chain_blocking(

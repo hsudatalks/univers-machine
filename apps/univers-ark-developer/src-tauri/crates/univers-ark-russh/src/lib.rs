@@ -8,7 +8,7 @@ mod ssh_config;
 mod types;
 
 pub use exec::{execute_chain, probe_http_chain, probe_pty_shell_chain};
-pub use files::{list_directory_chain, read_file_preview_chain};
+pub use files::{list_directory_chain, read_file_preview_chain, write_file_chain};
 pub use forward::start_local_forward_chain;
 pub use pty::start_pty_session_chain;
 pub use ssh_config::{ResolvedEndpoint, ResolvedEndpointChain, SshConfigResolver};

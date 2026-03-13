@@ -1,5 +1,7 @@
 use crate::{
-    infra::russh::{list_directory_chain_blocking, read_file_preview_chain_blocking},
+    infra::russh::{
+        list_directory_chain_blocking, read_file_preview_chain_blocking, write_file_chain_blocking,
+    },
     machine::resolve_target_ssh_chain,
     models::{RemoteDirectoryListing, RemoteFileEntry, RemoteFilePreview},
 };
@@ -78,4 +80,10 @@ pub(crate) fn read_remote_file_preview(
     path: &str,
 ) -> Result<RemoteFilePreview, String> {
     read_remote_file_preview_via_russh(target_id, path)
+}
+
+pub(crate) fn write_remote_file(target_id: &str, path: &str, data: &[u8]) -> Result<(), String> {
+    let chain = resolve_target_ssh_chain(target_id)?;
+    write_file_chain_blocking(&chain, path, data, &RusshClientOptions::default())
+        .map_err(|error| format!("russh file write failed for {}: {}", target_id, error))
 }

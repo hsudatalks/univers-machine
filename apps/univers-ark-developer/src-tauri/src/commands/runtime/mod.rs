@@ -1,3 +1,4 @@
+pub(crate) mod browser;
 pub(crate) mod dashboard;
 pub(crate) mod misc;
 pub(crate) mod terminal;
@@ -29,4 +30,13 @@ pub(crate) struct RuntimeActivityInput {
     online: bool,
     active_machine_id: Option<String>,
     active_target_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BrowserScreenshotRectInput {
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }

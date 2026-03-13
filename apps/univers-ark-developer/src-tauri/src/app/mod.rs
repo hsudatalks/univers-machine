@@ -25,6 +25,7 @@ pub(crate) fn run() {
             commands::machine::bootstrap::scan_machine_inventory,
             commands::machine::import::scan_ssh_config_machine_candidates,
             commands::machine::import::scan_tailscale_machine_candidates,
+            commands::runtime::browser::capture_browser_screenshot,
             commands::runtime::terminal::attach_terminal,
             commands::runtime::terminal::restart_terminal,
             commands::runtime::tunnel::ensure_tunnel,

@@ -1,4 +1,5 @@
 pub(crate) mod activity;
+pub(crate) mod browser;
 pub(crate) mod connectivity;
 pub(crate) mod dashboard;
 pub(crate) mod diagnostics;

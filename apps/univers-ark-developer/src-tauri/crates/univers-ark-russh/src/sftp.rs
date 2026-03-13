@@ -5,6 +5,7 @@ use crate::{
     ssh_config::ResolvedEndpointChain,
     types::{ClientOptions, RemoteDirectoryListing, RemoteFileEntry, RemoteFilePreview, RusshError},
 };
+use tokio::io::AsyncWriteExt;
 
 const MAX_DIRECTORY_ENTRIES: usize = 512;
 const MAX_PREVIEW_BYTES: usize = 131_072;
@@ -148,6 +149,90 @@ pub async fn sftp_read_file_preview(
         is_binary,
         truncated,
     })
+}
+
+pub async fn sftp_write_file(
+    chain: &ResolvedEndpointChain,
+    path: &str,
+    data: &[u8],
+    options: &ClientOptions,
+) -> Result<(), RusshError> {
+    let client = connect_chain(chain, options).await?;
+
+    let channel = client.handle.channel_open_session().await.map_err(|e| {
+        RusshError::Sftp(format!("failed to open channel: {}", e))
+    })?;
+
+    channel
+        .request_subsystem(true, "sftp")
+        .await
+        .map_err(|e| RusshError::Sftp(format!("failed to request sftp subsystem: {}", e)))?;
+
+    let sftp = SftpSession::new(channel.into_stream())
+        .await
+        .map_err(|e| RusshError::Sftp(format!("failed to create sftp session: {}", e)))?;
+
+    let remote_path = expand_remote_path(&sftp, path).await?;
+    ensure_parent_directories(&sftp, &remote_path).await?;
+
+    let mut file = sftp
+        .create(&remote_path)
+        .await
+        .map_err(|e| RusshError::Sftp(format!("failed to create file: {}", e)))?;
+
+    file.write_all(data)
+        .await
+        .map_err(|e| RusshError::Sftp(format!("failed to write file: {}", e)))?;
+    file.flush()
+        .await
+        .map_err(|e| RusshError::Sftp(format!("failed to flush file: {}", e)))?;
+    file.shutdown()
+        .await
+        .map_err(|e| RusshError::Sftp(format!("failed to close file: {}", e)))?;
+
+    Ok(())
+}
+
+async fn ensure_parent_directories(
+    sftp: &SftpSession,
+    remote_path: &str,
+) -> Result<(), RusshError> {
+    let Some(parent_path) = std::path::Path::new(remote_path).parent() else {
+        return Ok(());
+    };
+
+    let parent = parent_path.to_string_lossy();
+    if parent.is_empty() || parent == "." {
+        return Ok(());
+    }
+
+    let mut current = String::new();
+
+    for component in parent.split('/') {
+        if component.is_empty() {
+            continue;
+        }
+
+        if current.is_empty() {
+            current.push_str(component);
+        } else {
+            current.push('/');
+            current.push_str(component);
+        }
+
+        let exists = sftp
+            .try_exists(&current)
+            .await
+            .map_err(|e| RusshError::Sftp(format!("failed to stat directory: {}", e)))?;
+
+        if !exists {
+            sftp.create_dir(&current)
+                .await
+                .map_err(|e| RusshError::Sftp(format!("failed to create directory: {}", e)))?;
+        }
+    }
+
+    Ok(())
 }
 
 async fn expand_remote_path(_sftp: &SftpSession, path: &str) -> Result<String, RusshError> {
