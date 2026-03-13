@@ -106,6 +106,58 @@
   background: #020817;
 }
 
+.browser-context-menu {
+  position: absolute;
+  z-index: 3;
+  min-width: 14rem;
+  max-width: min(18rem, calc(100% - 1.5rem));
+  padding: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, black 10%);
+  border-radius: calc(var(--radius) + 0.05rem);
+  background: color-mix(in srgb, var(--popover) 94%, white 6%);
+  box-shadow: 0 16px 40px rgba(2, 8, 23, 0.3);
+  backdrop-filter: blur(18px);
+}
+
+.browser-context-menu-title {
+  padding: 0.45rem 0.55rem 0.35rem;
+  color: var(--text-3);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.browser-context-menu-item {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.52rem 0.6rem;
+  border: 0;
+  border-radius: calc(var(--radius) - 0.1rem);
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.browser-context-menu-item:hover,
+.browser-context-menu-item:focus-visible {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  outline: none;
+}
+
+.browser-context-menu-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .browser-panel.is-pane-fullscreen {
   position: fixed;
   inset: 0;

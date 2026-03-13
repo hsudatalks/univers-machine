@@ -36,7 +36,7 @@ interface ContainerPageProps {
   isTerminalCollapsed: boolean;
   onExecuteCommandService: (serviceId: string, action: "restart") => Promise<void>;
   onOpenBrowserService: (serviceId: string) => void;
-  onReloadBrowser: () => void;
+  onResetBrowser: () => void;
   onRestartContainer?: () => Promise<void>;
   onSelectTool: (panel: ContainerToolPanel) => void;
   onStartResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -62,7 +62,7 @@ export function ContainerPage({
   isTerminalCollapsed,
   onExecuteCommandService,
   onOpenBrowserService,
-  onReloadBrowser,
+  onResetBrowser,
   onRestartContainer,
   onSelectTool,
   onStartResize,
@@ -468,7 +468,7 @@ export function ContainerPage({
                     activeFrame={browserFrame}
                     activeServiceId={browserSurface.id}
                     isVisible={activeMobilePanel === "browser"}
-                    onReload={onReloadBrowser}
+                    onReset={onResetBrowser}
                     onSelectService={onOpenBrowserService}
                     retainedFrames={browserFrames}
                     services={browserServices}
@@ -526,7 +526,7 @@ export function ContainerPage({
                 activeFrame={browserFrame}
                 activeServiceId={browserSurface.id}
                 isVisible={activeTool === browserPanel}
-                onReload={onReloadBrowser}
+                onReset={onResetBrowser}
                 onSelectService={onOpenBrowserService}
                 retainedFrames={browserFrames}
                 services={browserServices}

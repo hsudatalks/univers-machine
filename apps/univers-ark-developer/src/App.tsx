@@ -856,7 +856,7 @@ function App() {
     containerTerminalWidths,
     containerTools,
     prepareContainerView,
-    reloadBrowserFrame,
+    resetBrowserFrame,
     selectContainerTool,
     setContainerTerminalCollapsedState,
     startContainerResize,
@@ -1333,9 +1333,9 @@ function App() {
                     onOpenBrowserService={(serviceId) => {
                       selectContainerTool(target, `browser:${serviceId}`);
                     }}
-                    onReloadBrowser={() => {
+                    onResetBrowser={() => {
                       if (browserSurface) {
-                        reloadBrowserFrame(target.id, browserSurface.id);
+                        resetBrowserFrame(target.id, browserSurface.id);
                       }
                     }}
                     onRestartContainer={

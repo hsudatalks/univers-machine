@@ -6,6 +6,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { resetBrowserFrame as resetBrowserFrameCache } from "../lib/browser-cache";
 import {
   listenNextContainerRequested,
   listenPreviousContainerRequested,
@@ -436,8 +437,9 @@ export function useContainerWorkspace({
     });
   }
 
-  function reloadBrowserFrame(targetId: string, surfaceId: string) {
+  function resetBrowserFrame(targetId: string, surfaceId: string) {
     const key = surfaceKey(targetId, surfaceId);
+    resetBrowserFrameCache(key);
 
     setBrowserFrameVersions((current) => ({
       ...current,
@@ -451,7 +453,7 @@ export function useContainerWorkspace({
     containerTerminalWidths,
     containerTools,
     prepareContainerView,
-    reloadBrowserFrame,
+    resetBrowserFrame,
     selectContainerTool,
     setContainerTerminalCollapsedState,
     startContainerResize,

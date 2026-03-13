@@ -1,4 +1,5 @@
 import {
+  type BrowserContextMenuSnapshot,
   type BrowserNavigationSnapshot,
   deriveBrowserPath,
   isBrowserBridgeMessage,
@@ -37,9 +38,13 @@ export interface BrowserFrameSnapshot {
 }
 
 const browserFrames = new Map<string, CachedBrowserFrame>();
+const browserContextMenuSnapshots = new Map<string, BrowserContextMenuSnapshot>();
 const browserNavigationSnapshots = new Map<string, BrowserNavigationSnapshot>();
 const HOT_BROWSER_FRAME_LIMIT = 12;
+const browserContextMenuListeners = new Set<() => void>();
 const browserNavigationListeners = new Set<() => void>();
+const BROWSER_IFRAME_SANDBOX =
+  "allow-scripts allow-same-origin allow-forms allow-downloads";
 
 let parkingLotElement: HTMLDivElement | null = null;
 let bridgeListenerInstalled = false;
@@ -78,6 +83,7 @@ function applyFrameDescriptor(
     frame.iframe.src = descriptor.src;
     frame.src = descriptor.src;
     frame.frameVersion = descriptor.frameVersion;
+    browserContextMenuSnapshots.delete(descriptor.cacheKey);
     browserNavigationSnapshots.set(descriptor.cacheKey, {
       cacheKey: descriptor.cacheKey,
       currentPath: null,
@@ -88,6 +94,7 @@ function applyFrameDescriptor(
       title: descriptor.title,
       updatedAt: Date.now(),
     });
+    notifyBrowserContextMenuListeners();
     notifyBrowserNavigationListeners();
   }
 }
@@ -111,6 +118,7 @@ function cachedBrowserFrame(
   const iframe = document.createElement("iframe");
   iframe.className = "browser-frame";
   iframe.referrerPolicy = "no-referrer";
+  iframe.setAttribute("sandbox", BROWSER_IFRAME_SANDBOX);
 
   const nextFrame: CachedBrowserFrame = {
     cacheKey: descriptor.cacheKey,
@@ -207,8 +215,27 @@ export function releaseBrowserFrames(ownerId: symbol) {
   }
 }
 
+export function resetBrowserFrame(cacheKey: string) {
+  const frame = browserFrames.get(cacheKey);
+
+  if (frame) {
+    frame.iframe.remove();
+    browserFrames.delete(cacheKey);
+  }
+
+  if (browserNavigationSnapshots.delete(cacheKey)) {
+    notifyBrowserNavigationListeners();
+  }
+
+  if (browserContextMenuSnapshots.delete(cacheKey)) {
+    notifyBrowserContextMenuListeners();
+  }
+}
+
 export function pruneBrowserFrames(retainedKeys: string[]) {
   const retainedKeySet = new Set(retainedKeys);
+  let removedNavigation = false;
+  let removedContextMenu = false;
 
   for (const [cacheKey, frame] of browserFrames.entries()) {
     if (retainedKeySet.has(cacheKey)) {
@@ -217,7 +244,16 @@ export function pruneBrowserFrames(retainedKeys: string[]) {
 
     frame.iframe.remove();
     browserFrames.delete(cacheKey);
-    browserNavigationSnapshots.delete(cacheKey);
+    removedContextMenu = browserContextMenuSnapshots.delete(cacheKey) || removedContextMenu;
+    removedNavigation = browserNavigationSnapshots.delete(cacheKey) || removedNavigation;
+  }
+
+  if (removedContextMenu) {
+    notifyBrowserContextMenuListeners();
+  }
+
+  if (removedNavigation) {
+    notifyBrowserNavigationListeners();
   }
 }
 
@@ -231,6 +267,8 @@ function pruneBrowserFramesToLimit(limit: number) {
     .sort((left, right) => left.lastAccessedAt - right.lastAccessedAt);
 
   let overflowCount = browserFrames.size - limit;
+  let removedNavigation = false;
+  let removedContextMenu = false;
 
   for (const frame of pruneCandidates) {
     if (overflowCount <= 0) {
@@ -239,8 +277,25 @@ function pruneBrowserFramesToLimit(limit: number) {
 
     frame.iframe.remove();
     browserFrames.delete(frame.cacheKey);
-    browserNavigationSnapshots.delete(frame.cacheKey);
+    removedContextMenu =
+      browserContextMenuSnapshots.delete(frame.cacheKey) || removedContextMenu;
+    removedNavigation =
+      browserNavigationSnapshots.delete(frame.cacheKey) || removedNavigation;
     overflowCount -= 1;
+  }
+
+  if (removedContextMenu) {
+    notifyBrowserContextMenuListeners();
+  }
+
+  if (removedNavigation) {
+    notifyBrowserNavigationListeners();
+  }
+}
+
+function notifyBrowserContextMenuListeners() {
+  for (const listener of browserContextMenuListeners) {
+    listener();
   }
 }
 
@@ -269,6 +324,32 @@ function handleBrowserBridgeMessage(event: MessageEvent) {
       continue;
     }
 
+    const expectedOrigin = browserOriginFromUrl(frame.src);
+    if (expectedOrigin && event.origin !== expectedOrigin) {
+      continue;
+    }
+
+    if (event.data.type === "contextmenu") {
+      browserContextMenuSnapshots.set(frame.cacheKey, {
+        cacheKey: frame.cacheKey,
+        currentPath:
+          event.data.payload.path?.trim() || deriveBrowserPath(event.data.payload.href),
+        currentUrl: event.data.payload.href,
+        entryPath: deriveBrowserPath(frame.src),
+        entryUrl: frame.src,
+        imageUrl: event.data.payload.imageUrl?.trim() || null,
+        linkUrl: event.data.payload.linkUrl?.trim() || null,
+        mode: event.data.mode ?? "cooperative",
+        selectionText: event.data.payload.selectionText?.trim() || null,
+        title: event.data.payload.title?.trim() || frame.iframe.title,
+        updatedAt: Date.now(),
+        x: event.data.payload.x,
+        y: event.data.payload.y,
+      });
+      notifyBrowserContextMenuListeners();
+      break;
+    }
+
     browserNavigationSnapshots.set(frame.cacheKey, {
       cacheKey: frame.cacheKey,
       currentPath:
@@ -285,10 +366,37 @@ function handleBrowserBridgeMessage(event: MessageEvent) {
   }
 }
 
+function browserOriginFromUrl(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
 export function getBrowserNavigationSnapshot(
   cacheKey: string,
 ): BrowserNavigationSnapshot | null {
   return browserNavigationSnapshots.get(cacheKey) ?? null;
+}
+
+export function getBrowserContextMenuSnapshot(
+  cacheKey: string,
+): BrowserContextMenuSnapshot | null {
+  return browserContextMenuSnapshots.get(cacheKey) ?? null;
+}
+
+export function clearBrowserContextMenu(cacheKey: string) {
+  if (browserContextMenuSnapshots.delete(cacheKey)) {
+    notifyBrowserContextMenuListeners();
+  }
+}
+
+export function subscribeBrowserContextMenu(listener: () => void): () => void {
+  browserContextMenuListeners.add(listener);
+  return () => {
+    browserContextMenuListeners.delete(listener);
+  };
 }
 
 export function subscribeBrowserNavigation(listener: () => void): () => void {
