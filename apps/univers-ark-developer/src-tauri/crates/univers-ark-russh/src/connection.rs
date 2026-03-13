@@ -9,28 +9,32 @@ use crate::{
 
 pub(crate) struct ClientConnection {
     pub(crate) handle: Handle<ClientHandler>,
+    _chain_handles: Vec<Handle<ClientHandler>>,
 }
 
 pub(crate) async fn connect_chain(
     chain: &ResolvedEndpointChain,
     options: &ClientOptions,
 ) -> Result<ClientConnection, RusshError> {
-    let mut current_handle: Option<Handle<ClientHandler>> = None;
+    let mut all_handles: Vec<Handle<ClientHandler>> = Vec::new();
 
     for endpoint in chain.hops() {
-        let next = if let Some(handle) = current_handle.take() {
-            connect_via_handle(handle, endpoint, options).await?
+        let next = if let Some(prev) = all_handles.last() {
+            connect_via_handle(prev, endpoint, options).await?
         } else {
             connect_endpoint(endpoint, options).await?
         };
 
-        current_handle = Some(next);
+        all_handles.push(next);
     }
 
+    let handle = all_handles.pop().ok_or_else(|| {
+        RusshError::ResolveDestination(String::from("resolved ssh chain was empty"))
+    })?;
+
     Ok(ClientConnection {
-        handle: current_handle.ok_or_else(|| {
-            RusshError::ResolveDestination(String::from("resolved ssh chain was empty"))
-        })?,
+        handle,
+        _chain_handles: all_handles,
     })
 }
 
@@ -50,7 +54,7 @@ async fn connect_endpoint(
 }
 
 async fn connect_via_handle(
-    handle: Handle<ClientHandler>,
+    handle: &Handle<ClientHandler>,
     endpoint: &ResolvedEndpoint,
     options: &ClientOptions,
 ) -> Result<Handle<ClientHandler>, RusshError> {
