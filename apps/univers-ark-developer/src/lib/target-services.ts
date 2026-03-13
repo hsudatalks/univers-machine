@@ -94,7 +94,7 @@ export function primaryWebService(target: DeveloperTarget): WebDeveloperService 
     }
   }
 
-  return webServiceById(target, "development") ?? webServices(target)[0];
+  return webServices(target)[0];
 }
 
 export function primaryWebSurface(target: DeveloperTarget): DeveloperSurface | undefined {
