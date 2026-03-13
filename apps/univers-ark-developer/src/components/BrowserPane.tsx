@@ -173,18 +173,6 @@ export function BrowserPane({
         </div>
 
         <div className="browser-bar">
-          <Button
-            aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen browser"}
-            isActive={isFullscreen}
-            onClick={() => {
-              setIsFullscreen((current) => !current);
-            }}
-            size="icon"
-            title={isFullscreen ? "Exit fullscreen" : "Fullscreen browser"}
-            variant={isFullscreen ? "default" : "ghost"}
-          >
-            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </Button>
           {compactStatus ? (
             <span
               aria-label={tunnelStatusLabel}
@@ -196,6 +184,18 @@ export function BrowserPane({
               {tunnelStatusLabel}
             </Badge>
           )}
+          <Button
+            aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen browser"}
+            isActive={isFullscreen}
+            onClick={() => {
+              setIsFullscreen((current) => !current);
+            }}
+            size="icon"
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen browser"}
+            variant="outline"
+          >
+            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </Button>
           <Button
             aria-label={
               isCapturingScreenshot
