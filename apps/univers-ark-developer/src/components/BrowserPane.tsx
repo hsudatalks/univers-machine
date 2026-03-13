@@ -60,7 +60,7 @@ export function BrowserPane({
     activeFrame?.status.state === "direct" || activeFrame?.status.state === "running";
   const showBrowserOverlay =
     !activeFrame ||
-    activeFrame.status.state === "starting" ||
+    (activeFrame.status.state === "starting" && !activeLocalUrl) ||
     activeFrame.status.state === "stopped" ||
     activeFrame.status.state === "error";
   const overlayMessage = activeFrame

@@ -125,7 +125,9 @@
   border: 0;
   background: #020817;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
+  z-index: 0;
 }
 
 .browser-frame.is-parked {
@@ -134,7 +136,9 @@
 
 .browser-frame.is-active {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
+  z-index: 1;
 }
 
 .browser-overlay {
@@ -144,6 +148,7 @@
   place-items: center;
   padding: 1rem;
   background: rgba(248, 250, 252, 0.82);
+  pointer-events: none;
 }
 
 .browser-placeholder {
