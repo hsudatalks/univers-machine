@@ -37,6 +37,34 @@ function serviceKey(targetId: string, serviceId: string): string {
   return `${targetId}::${serviceId}`;
 }
 
+function isSshReadyState(state: string | undefined): boolean {
+  switch ((state || "").trim().toLowerCase()) {
+    case "ready":
+    case "running":
+    case "connected":
+    case "direct":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function hostAvailabilityLabel(state: string | undefined): string {
+  switch ((state || "").trim().toLowerCase()) {
+    case "ready":
+    case "running":
+    case "connected":
+    case "direct":
+      return "host ready";
+    case "checking":
+    case "starting":
+    case "pending":
+      return "host checking";
+    default:
+      return "host unavailable";
+  }
+}
+
 const MOBILE_DASHBOARD_BREAKPOINT = 720;
 const PROVIDER_PANEL_MAX_RATIO = 0.36;
 
@@ -56,6 +84,11 @@ export function GlobalDashboardPage({
   const reachableContainerCount = overviewContainers.filter(
     (entry) => entry.container.sshReachable,
   ).length;
+  const reachableMachineCount = machines.filter((machine) =>
+    isSshReadyState(machine.state),
+  ).length;
+  const totalSshEndpointCount = machines.length + overviewContainers.length;
+  const reachableSshEndpointCount = reachableMachineCount + reachableContainerCount;
   const gridRef = useRef<HTMLDivElement>(null);
   const summaryCardRef = useRef<HTMLDivElement>(null);
   const providersHeaderRef = useRef<HTMLDivElement>(null);
@@ -178,7 +211,7 @@ export function GlobalDashboardPage({
                 <div className="dashboard-summary-item">
                   <span className="dashboard-meta-label">SSH ready</span>
                   <span className="dashboard-meta-value">
-                    {reachableContainerCount} / {overviewContainers.length}
+                    {reachableSshEndpointCount} / {totalSshEndpointCount}
                   </span>
                 </div>
               </div>
@@ -230,13 +263,16 @@ export function GlobalDashboardPage({
               {machines.map((machine) => {
                 const managedContainers = visibleContainers(machine.containers);
                 const reachable = managedContainers.filter((item) => item.sshReachable).length;
+                const machineMeta = managedContainers.length
+                  ? `${machine.host} · ${managedContainers.length} container(s) · ${reachable} ssh ready`
+                  : `${machine.host} · ${hostAvailabilityLabel(machine.state)}`;
 
                 return (
                   <div className="server-dashboard-row dashboard-card-row" key={machine.id}>
                     <div className="server-dashboard-row-copy">
                       <span className="server-dashboard-row-title">{machine.label}</span>
                       <span className="server-dashboard-row-meta">
-                        {machine.host} · {managedContainers.length} container(s) · {reachable} ssh ready
+                        {machineMeta}
                       </span>
                     </div>
 

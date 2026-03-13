@@ -11,6 +11,18 @@ interface ServerDashboardPaneProps {
   server: ManagedMachine;
 }
 
+function isSshReadyState(state: string | undefined): boolean {
+  switch ((state || "").trim().toLowerCase()) {
+    case "ready":
+    case "running":
+    case "connected":
+    case "direct":
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function ServerDashboardPane({
   onOpenWorkspace,
   resolveTarget,
@@ -20,6 +32,8 @@ export function ServerDashboardPane({
   const reachableContainers = managedContainers.filter(
     (container) => container.sshReachable,
   ).length;
+  const reachableSshEndpoints = reachableContainers + (isSshReadyState(server.state) ? 1 : 0);
+  const totalSshEndpoints = managedContainers.length + 1;
   const unreachableContainers = managedContainers.length - reachableContainers;
 
   return (
@@ -41,7 +55,7 @@ export function ServerDashboardPane({
               <div className="dashboard-summary-item">
                 <span className="dashboard-meta-label">SSH ready</span>
                 <span className="dashboard-meta-value">
-                  {reachableContainers} / {managedContainers.length}
+                  {reachableSshEndpoints} / {totalSshEndpoints}
                 </span>
               </div>
             </div>
