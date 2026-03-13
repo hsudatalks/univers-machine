@@ -12,9 +12,13 @@ import { ServerPage } from "./components/ServerPage";
 import { SidebarNav } from "./components/SidebarNav";
 import { StatusBar } from "./components/StatusBar";
 import {
+  closeContainerCompanionWindow,
   executeCommandService,
+  listenCompanionTargetRequested,
   listenParentViewRequested,
+  openContainerCompanionWindow,
   restartContainer,
+  syncContainerCompanionWindow,
   updateRuntimeActivity,
 } from "./lib/tauri";
 import {
@@ -192,6 +196,14 @@ function rootFontSizePx(): number {
   return Number.isFinite(parsed) ? parsed : 16;
 }
 
+function isCompanionWindowMode(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return new URLSearchParams(window.location.search).get("mode") === "companion";
+}
+
 function defaultTerminalPanelWidthPx(): number {
   return DEFAULT_TERMINAL_PANEL_WIDTH_REM * rootFontSizePx();
 }
@@ -215,6 +227,7 @@ function clampTerminalPanelWidth(value: number, workspaceWidth: number): number 
 }
 
 function App() {
+  const isCompanionWindow = useMemo(() => isCompanionWindowMode(), []);
   const [isDocumentVisible, setIsDocumentVisible] = useState(
     () =>
       typeof document === "undefined" || document.visibilityState === "visible",
@@ -343,6 +356,10 @@ function App() {
     homeViewMode === "machines"
       ? activeMachineOverviewFocusedTargetId
       : activeTerminalOverviewFocusedTargetId;
+  const activeFocusCompanionTarget =
+    activeView.kind === "home" && homeViewMode === "focus" && activeTerminalOverviewFocusedTargetId
+      ? targetById.get(activeTerminalOverviewFocusedTargetId) ?? null
+      : null;
   const isCompactWorkspaceLayout = isCompactHomeLayout
     && activeView.kind !== "home"
     && activeView.kind !== "settings";
@@ -618,6 +635,43 @@ function App() {
   }, [activeView.kind, homeViewMode, isCompactHomeLayout, setHomeViewMode]);
 
   useEffect(() => {
+    if (isCompanionWindow) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        activeView.kind !== "home" ||
+        homeViewMode !== "focus" ||
+        !isPlatformModifier(event) ||
+        !event.altKey ||
+        event.shiftKey ||
+        event.code !== "KeyO" ||
+        (isEditableEventTarget(event.target) && !isXtermHelperTextarea(event.target))
+      ) {
+        return;
+      }
+
+      if (!activeFocusCompanionTarget) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      void openContainerCompanionWindow(
+        activeFocusCompanionTarget.id,
+        activeFocusCompanionTarget.label,
+      ).catch(() => undefined);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [activeFocusCompanionTarget, activeView.kind, homeViewMode, isCompanionWindow]);
+
+  useEffect(() => {
     const machines = bootstrap?.machines ?? [];
 
     if (activeView.kind !== "machine" || machines.length <= 1) {
@@ -804,6 +858,7 @@ function App() {
     prepareContainerView,
     reloadBrowserFrame,
     selectContainerTool,
+    setContainerTerminalCollapsedState,
     startContainerResize,
     toggleTerminalCollapsed,
   } = useContainerWorkspace({
@@ -819,6 +874,40 @@ function App() {
     tunnelStatuses,
     targetById,
   });
+
+  useEffect(() => {
+    if (!isCompanionWindow) {
+      return;
+    }
+
+    let unlistenCompanionTarget: (() => void) | undefined;
+
+    void listenCompanionTargetRequested(({ targetId }) => {
+      const nextTarget = targetById.get(targetId);
+
+      if (!nextTarget) {
+        return;
+      }
+
+      setActiveView({ kind: "container", targetId });
+      setVisitedContainerIds((current) =>
+        uniqueStrings([...current, targetId]),
+      );
+      prepareContainerView(nextTarget);
+      setContainerTerminalCollapsedState(targetId, true);
+    }).then((dispose) => {
+      unlistenCompanionTarget = dispose;
+    });
+
+    return () => {
+      unlistenCompanionTarget?.();
+    };
+  }, [
+    isCompanionWindow,
+    prepareContainerView,
+    setContainerTerminalCollapsedState,
+    targetById,
+  ]);
 
   useEffect(() => {
     if (activeView.kind !== "machine") {
@@ -857,6 +946,30 @@ function App() {
       prepareContainerView(nextTarget);
     }
   }, [activeView, prepareContainerView, targetById, visitedContainerIds]);
+
+  useEffect(() => {
+    if (!isCompanionWindow || activeView.kind !== "container") {
+      return;
+    }
+
+    setContainerTerminalCollapsedState(activeView.targetId, true);
+  }, [activeView, isCompanionWindow, setContainerTerminalCollapsedState]);
+
+  useEffect(() => {
+    if (isCompanionWindow) {
+      return;
+    }
+
+    if (!activeFocusCompanionTarget) {
+      void closeContainerCompanionWindow().catch(() => undefined);
+      return;
+    }
+
+    void syncContainerCompanionWindow(
+      activeFocusCompanionTarget.id,
+      activeFocusCompanionTarget.label,
+    ).catch(() => undefined);
+  }, [activeFocusCompanionTarget, isCompanionWindow]);
 
   function setContainerView(targetId: string) {
     const nextTarget = targetById.get(targetId);
@@ -951,8 +1064,10 @@ function App() {
   }
 
   const isHomeLayout =
-    activeView.kind === "home" || activeView.kind === "settings";
-  const isSidebarVisible = !isCompactWorkspaceLayout && !isSidebarHidden;
+    !isCompanionWindow &&
+    (activeView.kind === "home" || activeView.kind === "settings");
+  const isSidebarVisible =
+    !isCompanionWindow && !isCompactWorkspaceLayout && !isSidebarHidden;
   const activeStatusLabel =
     activeView.kind === "home"
       ? "Home"
@@ -991,7 +1106,7 @@ function App() {
   };
 
   return (
-    <main className={`shell ${isHomeLayout ? "shell-overview" : ""} ${isSidebarVisible ? "" : "shell-sidebar-hidden"}`}>
+    <main className={`shell ${isHomeLayout ? "shell-overview" : ""} ${isSidebarVisible ? "" : "shell-sidebar-hidden"} ${isCompanionWindow ? "shell-companion" : ""}`}>
       <section
         className={`shell-layout ${isHomeLayout ? "shell-layout-overview" : ""} ${isSidebarVisible ? "" : "shell-layout-sidebar-hidden"}`}
       >
@@ -1261,7 +1376,7 @@ function App() {
         </section>
       </section>
 
-      {isCompactWorkspaceLayout ? (
+      {isCompactWorkspaceLayout && !isCompanionWindow ? (
         <div className={`mobile-sidebar-overlay ${isMobileSidebarOpen ? "is-open" : ""}`}>
           <button
             aria-label="Close workspace navigation"
@@ -1288,28 +1403,30 @@ function App() {
         </div>
       ) : null}
 
-      <StatusBar
-        activeMachineId={activeView.kind === "machine" ? activeView.machineId : undefined}
-        activeStatusLabel={activeStatusLabel}
-        containerCount={overviewContainers.length}
-        homeViewModes={isCompactHomeLayout ? ["dashboard"] : HOME_VIEW_MODES}
-        isHomeActive={activeView.kind === "home"}
-        isSidebarHidden={isCompactWorkspaceLayout ? !isMobileSidebarOpen : isSidebarHidden}
-        machineEntries={bootstrap.machines.map((machine) => ({ id: machine.id, label: machine.label }))}
-        onNavigateMachine={openMachineView}
-        onSetHomeViewMode={setHomeViewMode}
-        onOpenSettings={() => {
-          setActiveView((current) =>
-            current.kind === "settings"
-              ? previousNonSettingsViewRef.current
-              : { kind: "settings" },
-          );
-        }}
-        onToggleSidebar={handleStatusBarSidebarToggle}
-        homeViewMode={homeViewMode}
-        reachableContainerCount={reachableContainerCount}
-        serverCount={bootstrap.machines.length}
-      />
+      {!isCompanionWindow ? (
+        <StatusBar
+          activeMachineId={activeView.kind === "machine" ? activeView.machineId : undefined}
+          activeStatusLabel={activeStatusLabel}
+          containerCount={overviewContainers.length}
+          homeViewModes={isCompactHomeLayout ? ["dashboard"] : HOME_VIEW_MODES}
+          isHomeActive={activeView.kind === "home"}
+          isSidebarHidden={isCompactWorkspaceLayout ? !isMobileSidebarOpen : isSidebarHidden}
+          machineEntries={bootstrap.machines.map((machine) => ({ id: machine.id, label: machine.label }))}
+          onNavigateMachine={openMachineView}
+          onSetHomeViewMode={setHomeViewMode}
+          onOpenSettings={() => {
+            setActiveView((current) =>
+              current.kind === "settings"
+                ? previousNonSettingsViewRef.current
+                : { kind: "settings" },
+            );
+          }}
+          onToggleSidebar={handleStatusBarSidebarToggle}
+          homeViewMode={homeViewMode}
+          reachableContainerCount={reachableContainerCount}
+          serverCount={bootstrap.machines.length}
+        />
+      ) : null}
 
       {isAddMachineDialogOpen ? (
         <AddMachineDialog

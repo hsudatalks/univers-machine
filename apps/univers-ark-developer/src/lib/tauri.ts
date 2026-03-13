@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow, WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type {
   AppDiagnostics,
   AppSettings,
@@ -44,6 +45,8 @@ const SERVICE_STATUS_EVENT = "service-status";
 const PREVIOUS_CONTAINER_REQUESTED_EVENT = "previous-container-requested";
 const NEXT_CONTAINER_REQUESTED_EVENT = "next-container-requested";
 const PARENT_VIEW_REQUESTED_EVENT = "parent-view-requested";
+const COMPANION_SET_TARGET_EVENT = "companion:set-target";
+const CONTAINER_COMPANION_WINDOW_LABEL = "container-companion";
 
 const fallbackBootstrapSeed: AppBootstrap = {
   appName: "Ark Console",
@@ -919,6 +922,87 @@ export async function listenParentViewRequested(
   return listen(PARENT_VIEW_REQUESTED_EVENT, () => {
     handler();
   });
+}
+
+export async function listenCompanionTargetRequested(
+  handler: (payload: { targetId: string }) => void,
+): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => undefined;
+  }
+
+  return getCurrentWebviewWindow().listen<{ targetId: string }>(
+    COMPANION_SET_TARGET_EVENT,
+    (event) => {
+      handler(event.payload);
+    },
+  );
+}
+
+function containerCompanionUrl(targetId: string): string {
+  return `/?mode=companion#/container/${encodeURIComponent(targetId)}`;
+}
+
+async function getContainerCompanionWindow(): Promise<WebviewWindow | null> {
+  if (!isTauri()) {
+    return null;
+  }
+
+  return WebviewWindow.getByLabel(CONTAINER_COMPANION_WINDOW_LABEL);
+}
+
+export async function openContainerCompanionWindow(
+  targetId: string,
+  title: string,
+): Promise<void> {
+  if (!isTauri()) {
+    return;
+  }
+
+  const existingWindow = await getContainerCompanionWindow();
+
+  if (existingWindow) {
+    await existingWindow.setTitle(`${title} · Ark Console`);
+    await existingWindow.emit(COMPANION_SET_TARGET_EVENT, { targetId });
+    await existingWindow.setFocus();
+    return;
+  }
+
+  new WebviewWindow(CONTAINER_COMPANION_WINDOW_LABEL, {
+    url: containerCompanionUrl(targetId),
+    title: `${title} · Ark Console`,
+    width: 1320,
+    height: 860,
+    minWidth: 960,
+    minHeight: 620,
+    focus: true,
+    resizable: true,
+    visible: true,
+  });
+}
+
+export async function syncContainerCompanionWindow(
+  targetId: string,
+  title: string,
+): Promise<void> {
+  const existingWindow = await getContainerCompanionWindow();
+
+  if (!existingWindow) {
+    return;
+  }
+
+  await existingWindow.setTitle(`${title} · Ark Console`);
+  await existingWindow.emit(COMPANION_SET_TARGET_EVENT, { targetId });
+}
+
+export async function closeContainerCompanionWindow(): Promise<void> {
+  const existingWindow = await getContainerCompanionWindow();
+
+  if (!existingWindow) {
+    return;
+  }
+
+  await existingWindow.close();
 }
 
 export async function listRemoteDirectory(

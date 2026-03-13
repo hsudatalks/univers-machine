@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default desktop capability for Ark Console.",
-  "windows": ["main"],
+  "windows": ["main", "container-companion"],
   "permissions": [
     "core:default",
     "core:webview:allow-set-webview-zoom"

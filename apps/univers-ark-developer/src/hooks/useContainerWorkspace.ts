@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useEffectEvent,
   useRef,
@@ -389,12 +390,23 @@ export function useContainerWorkspace({
     warmTargetTunnels(target, undefined, onTunnelStatus);
   }
 
-  function toggleTerminalCollapsed(targetId: string) {
+  const toggleTerminalCollapsed = useCallback((targetId: string) => {
     setContainerTerminalCollapsed((current) => ({
       ...current,
       [targetId]: !current[targetId],
     }));
-  }
+  }, []);
+
+  const setContainerTerminalCollapsedState = useCallback((targetId: string, collapsed: boolean) => {
+    setContainerTerminalCollapsed((current) =>
+      current[targetId] === collapsed
+        ? current
+        : {
+          ...current,
+          [targetId]: collapsed,
+        },
+    );
+  }, []);
 
   function startContainerResize(
     event: ReactPointerEvent<HTMLDivElement>,
@@ -441,6 +453,7 @@ export function useContainerWorkspace({
     prepareContainerView,
     reloadBrowserFrame,
     selectContainerTool,
+    setContainerTerminalCollapsedState,
     startContainerResize,
     toggleTerminalCollapsed,
   };
