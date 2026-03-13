@@ -1,4 +1,5 @@
 import { Boxes, LayoutDashboard, Server, Settings2, SquareTerminal } from "lucide-react";
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { visibleContainers } from "../lib/container-visibility";
 import { primaryBrowserSurface } from "../lib/target-services";
 import type {
@@ -36,6 +37,9 @@ function serviceKey(targetId: string, serviceId: string): string {
   return `${targetId}::${serviceId}`;
 }
 
+const MOBILE_DASHBOARD_BREAKPOINT = 720;
+const PROVIDER_PANEL_MAX_RATIO = 0.36;
+
 export function GlobalDashboardPage({
   onAddMachine,
   onEditWorkbench,
@@ -52,12 +56,115 @@ export function GlobalDashboardPage({
   const reachableContainerCount = overviewContainers.filter(
     (entry) => entry.container.sshReachable,
   ).length;
+  const gridRef = useRef<HTMLDivElement>(null);
+  const summaryCardRef = useRef<HTMLDivElement>(null);
+  const providersHeaderRef = useRef<HTMLDivElement>(null);
+  const providersContentRef = useRef<HTMLDivElement>(null);
+  const workbenchesHeaderRef = useRef<HTMLDivElement>(null);
+  const workbenchesContentRef = useRef<HTMLDivElement>(null);
+  const [dashboardGridRows, setDashboardGridRows] = useState<string | undefined>();
+
+  useLayoutEffect(() => {
+    const updateLayout = () => {
+      const grid = gridRef.current;
+      const summaryCard = summaryCardRef.current;
+      const providersHeader = providersHeaderRef.current;
+      const providersContent = providersContentRef.current;
+      const workbenchesHeader = workbenchesHeaderRef.current;
+      const workbenchesContent = workbenchesContentRef.current;
+
+      if (
+        !grid ||
+        !summaryCard ||
+        !providersHeader ||
+        !providersContent ||
+        !workbenchesHeader ||
+        !workbenchesContent
+      ) {
+        return;
+      }
+
+      if (window.innerWidth <= MOBILE_DASHBOARD_BREAKPOINT) {
+        setDashboardGridRows(undefined);
+        return;
+      }
+
+      const computedStyle = window.getComputedStyle(grid);
+      const rowGap = Number.parseFloat(computedStyle.rowGap || computedStyle.gap || "0") || 0;
+      const availableHeight = Math.max(
+        0,
+        grid.clientHeight - summaryCard.offsetHeight - rowGap * 2,
+      );
+
+      if (availableHeight <= 0) {
+        setDashboardGridRows(undefined);
+        return;
+      }
+
+      const providersNaturalHeight =
+        providersHeader.offsetHeight + providersContent.scrollHeight;
+      const workbenchesNaturalHeight =
+        workbenchesHeader.offsetHeight + workbenchesContent.scrollHeight;
+      const providerCap = Math.max(0, availableHeight * PROVIDER_PANEL_MAX_RATIO);
+
+      let providersHeight = 0;
+      let workbenchesHeight = 0;
+
+      if (providersNaturalHeight + workbenchesNaturalHeight <= availableHeight) {
+        providersHeight = providersNaturalHeight;
+        workbenchesHeight = workbenchesNaturalHeight;
+      } else {
+        providersHeight = Math.min(providersNaturalHeight, providerCap);
+        workbenchesHeight = Math.min(
+          workbenchesNaturalHeight,
+          Math.max(0, availableHeight - providersHeight),
+        );
+      }
+
+      setDashboardGridRows(
+        `auto minmax(0, ${Math.round(providersHeight)}px) minmax(0, ${Math.round(
+          workbenchesHeight,
+        )}px)`,
+      );
+    };
+
+    let frame = 0;
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(updateLayout);
+    };
+
+    scheduleUpdate();
+
+    const resizeObserver = new ResizeObserver(() => {
+      scheduleUpdate();
+    });
+
+    if (gridRef.current) {
+      resizeObserver.observe(gridRef.current);
+    }
+
+    window.addEventListener("resize", scheduleUpdate);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [machines, overviewContainers, standaloneTargets]);
+
+  const dashboardGridStyle = dashboardGridRows
+    ? ({ gridTemplateRows: dashboardGridRows } satisfies CSSProperties)
+    : undefined;
 
   return (
     <section className="page-section global-dashboard-page">
       <article className="panel tool-panel dashboard-panel global-dashboard-panel">
-        <div className="dashboard-grid">
-          <Card className="dashboard-card dashboard-card-hero border-border/80 bg-card/95">
+        <div className="dashboard-grid" ref={gridRef} style={dashboardGridStyle}>
+          <Card
+            className="dashboard-card dashboard-card-hero border-border/80 bg-card/95"
+            ref={summaryCardRef}
+          >
             <CardContent className="dashboard-summary-bar dashboard-card-content">
               <div className="dashboard-summary-copy">
                 <div className="dashboard-summary-item">
@@ -104,7 +211,7 @@ export function GlobalDashboardPage({
           </Card>
 
           <Card className="dashboard-card dashboard-card-wide dashboard-card-scroll-shell border-border/80 bg-card/95">
-            <CardHeader className="dashboard-card-header">
+            <CardHeader className="dashboard-card-header" ref={providersHeaderRef}>
               <div className="dashboard-card-header-row">
                 <CardTitle className="dashboard-section-title">
                   <Server size={16} />
@@ -116,7 +223,10 @@ export function GlobalDashboardPage({
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="server-dashboard-list dashboard-card-list dashboard-card-content dashboard-card-scroll">
+            <CardContent
+              className="server-dashboard-list dashboard-card-list dashboard-card-content dashboard-card-scroll"
+              ref={providersContentRef}
+            >
               {machines.map((machine) => {
                 const managedContainers = visibleContainers(machine.containers);
                 const reachable = managedContainers.filter((item) => item.sshReachable).length;
@@ -166,13 +276,16 @@ export function GlobalDashboardPage({
           </Card>
 
           <Card className="dashboard-card dashboard-card-wide dashboard-card-scroll-shell border-border/80 bg-card/95">
-            <CardHeader className="dashboard-card-header">
+            <CardHeader className="dashboard-card-header" ref={workbenchesHeaderRef}>
               <CardTitle className="dashboard-section-title">
                 <Boxes size={16} />
                 Workbenches
               </CardTitle>
             </CardHeader>
-            <CardContent className="server-dashboard-list dashboard-card-list dashboard-card-content dashboard-card-scroll">
+            <CardContent
+              className="server-dashboard-list dashboard-card-list dashboard-card-content dashboard-card-scroll"
+              ref={workbenchesContentRef}
+            >
               {overviewContainers.map(({ container, machine, target }) => {
                 const primary = target ? primaryBrowserSurface(target) : undefined;
                 const webState = primary && target

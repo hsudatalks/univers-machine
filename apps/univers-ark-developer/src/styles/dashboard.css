@@ -337,7 +337,7 @@
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(22rem, 24rem);
+  grid-auto-columns: minmax(26rem, 30rem);
   grid-auto-rows: minmax(0, 1fr);
   align-items: stretch;
   align-content: stretch;
@@ -345,14 +345,14 @@
 }
 
 .server-terminal-grid > .terminal-card {
-  min-width: 22rem;
+  min-width: 26rem;
   min-height: 22rem;
   height: 100%;
 }
 
 .server-empty-state {
   min-height: 14rem;
-  min-width: max(22rem, 100%);
+  min-width: max(26rem, 100%);
   display: grid;
   place-items: center;
   text-align: center;
