@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   Camera,
   Check,
@@ -8,7 +15,13 @@ import {
   RotateCw,
 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { releaseBrowserFrames, syncBrowserFrames } from "../lib/browser-cache";
+import {
+  getBrowserNavigationSnapshot,
+  releaseBrowserFrames,
+  subscribeBrowserNavigation,
+  syncBrowserFrames,
+} from "../lib/browser-cache";
+import { deriveBrowserPath } from "../lib/browser-navigation";
 import { captureBrowserScreenshot, clipboardWrite, openExternalLink } from "../lib/tauri";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -66,6 +79,11 @@ export function BrowserPane({
     : "Unavailable";
   const activeLocalUrl =
     activeFrame?.status.localUrl ?? activeFrame?.surface.localUrl ?? null;
+  const activeNavigation = useSyncExternalStore(
+    subscribeBrowserNavigation,
+    () => (activeFrame ? getBrowserNavigationSnapshot(activeFrame.cacheKey) : null),
+    () => null,
+  );
   const compactStatus =
     activeFrame?.status.state === "direct" || activeFrame?.status.state === "running";
   const showBrowserOverlay =
@@ -76,6 +94,19 @@ export function BrowserPane({
   const overlayMessage = activeFrame
     ? activeFrame.status.message
     : `The selected container does not currently expose a ${slotLabel.toLowerCase()} browser surface.`;
+  const displayLocation = activeNavigation?.currentPath
+    ?? (activeLocalUrl ? deriveBrowserPath(activeLocalUrl) : null);
+  const navigationModeLabel =
+    activeNavigation?.mode === "cooperative"
+      ? "Tracked"
+      : activeNavigation?.mode === "proxy-injected"
+        ? "Managed"
+        : "Entry only";
+  const browserLocationTitle = activeNavigation?.currentUrl
+    ? activeNavigation.currentUrl === activeNavigation.entryUrl
+      ? `Entry URL: ${activeNavigation.entryUrl}`
+      : `Current URL: ${activeNavigation.currentUrl}\nEntry URL: ${activeNavigation.entryUrl}`
+    : activeLocalUrl ?? "No local browser URL";
 
   useLayoutEffect(() => {
     const stageElement = stageRef.current;
@@ -167,12 +198,15 @@ export function BrowserPane({
             ))}
           </select>
 
-          <code className="browser-url browser-url-compact">
-            {activeLocalUrl ?? "No local browser URL"}
+          <code className="browser-url browser-url-compact" title={browserLocationTitle}>
+            {displayLocation ?? activeLocalUrl ?? "No local browser URL"}
           </code>
         </div>
 
         <div className="browser-bar">
+          <Badge variant={activeNavigation?.mode === "none" ? "neutral" : "success"}>
+            {navigationModeLabel}
+          </Badge>
           {compactStatus ? (
             <span
               aria-label={tunnelStatusLabel}

@@ -1,3 +1,9 @@
+import {
+  type BrowserNavigationSnapshot,
+  deriveBrowserPath,
+  isBrowserBridgeMessage,
+} from "./browser-navigation";
+
 interface BrowserFrameDescriptor {
   cacheKey: string;
   frameVersion: number;
@@ -31,9 +37,12 @@ export interface BrowserFrameSnapshot {
 }
 
 const browserFrames = new Map<string, CachedBrowserFrame>();
+const browserNavigationSnapshots = new Map<string, BrowserNavigationSnapshot>();
 const HOT_BROWSER_FRAME_LIMIT = 12;
+const browserNavigationListeners = new Set<() => void>();
 
 let parkingLotElement: HTMLDivElement | null = null;
+let bridgeListenerInstalled = false;
 
 function ensureParkingLotElement(): HTMLDivElement {
   if (parkingLotElement) {
@@ -69,6 +78,17 @@ function applyFrameDescriptor(
     frame.iframe.src = descriptor.src;
     frame.src = descriptor.src;
     frame.frameVersion = descriptor.frameVersion;
+    browserNavigationSnapshots.set(descriptor.cacheKey, {
+      cacheKey: descriptor.cacheKey,
+      currentPath: null,
+      currentUrl: null,
+      entryPath: deriveBrowserPath(descriptor.src),
+      entryUrl: descriptor.src,
+      mode: "none",
+      title: descriptor.title,
+      updatedAt: Date.now(),
+    });
+    notifyBrowserNavigationListeners();
   }
 }
 
@@ -80,6 +100,7 @@ function moveFrameToParkingLot(frame: CachedBrowserFrame) {
 function cachedBrowserFrame(
   descriptor: BrowserFrameDescriptor,
 ): CachedBrowserFrame {
+  ensureBrowserBridgeListener();
   const existingFrame = browserFrames.get(descriptor.cacheKey);
 
   if (existingFrame) {
@@ -107,6 +128,18 @@ function cachedBrowserFrame(
     nextFrame.sessionState = "loaded";
     nextFrame.lastLoadedAt = Date.now();
     nextFrame.lastError = null;
+    const existingSnapshot = browserNavigationSnapshots.get(descriptor.cacheKey);
+    browserNavigationSnapshots.set(descriptor.cacheKey, {
+      cacheKey: descriptor.cacheKey,
+      currentPath: existingSnapshot?.currentPath ?? null,
+      currentUrl: existingSnapshot?.currentUrl ?? null,
+      entryPath: deriveBrowserPath(nextFrame.src),
+      entryUrl: nextFrame.src,
+      mode: existingSnapshot?.mode ?? "none",
+      title: existingSnapshot?.title ?? descriptor.title,
+      updatedAt: Date.now(),
+    });
+    notifyBrowserNavigationListeners();
   });
 
   iframe.addEventListener("error", () => {
@@ -184,6 +217,7 @@ export function pruneBrowserFrames(retainedKeys: string[]) {
 
     frame.iframe.remove();
     browserFrames.delete(cacheKey);
+    browserNavigationSnapshots.delete(cacheKey);
   }
 }
 
@@ -205,8 +239,63 @@ function pruneBrowserFramesToLimit(limit: number) {
 
     frame.iframe.remove();
     browserFrames.delete(frame.cacheKey);
+    browserNavigationSnapshots.delete(frame.cacheKey);
     overflowCount -= 1;
   }
+}
+
+function notifyBrowserNavigationListeners() {
+  for (const listener of browserNavigationListeners) {
+    listener();
+  }
+}
+
+function ensureBrowserBridgeListener() {
+  if (bridgeListenerInstalled || typeof window === "undefined") {
+    return;
+  }
+
+  window.addEventListener("message", handleBrowserBridgeMessage);
+  bridgeListenerInstalled = true;
+}
+
+function handleBrowserBridgeMessage(event: MessageEvent) {
+  if (!event.source || !isBrowserBridgeMessage(event.data)) {
+    return;
+  }
+
+  for (const frame of browserFrames.values()) {
+    if (frame.iframe.contentWindow !== event.source) {
+      continue;
+    }
+
+    browserNavigationSnapshots.set(frame.cacheKey, {
+      cacheKey: frame.cacheKey,
+      currentPath:
+        event.data.payload.path?.trim() || deriveBrowserPath(event.data.payload.href),
+      currentUrl: event.data.payload.href,
+      entryPath: deriveBrowserPath(frame.src),
+      entryUrl: frame.src,
+      mode: event.data.mode ?? "cooperative",
+      title: event.data.payload.title?.trim() || frame.iframe.title,
+      updatedAt: Date.now(),
+    });
+    notifyBrowserNavigationListeners();
+    break;
+  }
+}
+
+export function getBrowserNavigationSnapshot(
+  cacheKey: string,
+): BrowserNavigationSnapshot | null {
+  return browserNavigationSnapshots.get(cacheKey) ?? null;
+}
+
+export function subscribeBrowserNavigation(listener: () => void): () => void {
+  browserNavigationListeners.add(listener);
+  return () => {
+    browserNavigationListeners.delete(listener);
+  };
 }
 
 export function listBrowserFrameSnapshots(): BrowserFrameSnapshot[] {

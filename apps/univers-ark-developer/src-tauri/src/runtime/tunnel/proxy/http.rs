@@ -7,6 +7,9 @@ use std::{
 
 use super::socket_addr_for_local_port;
 
+const ARK_BROWSER_BRIDGE_MARKER: &str = "ark-browser-bridge";
+const ARK_BROWSER_BRIDGE_SNIPPET: &str = r#"<script>(function(){const emit=(type)=>{try{window.parent.postMessage({source:"ark-browser-bridge",mode:"proxy-injected",type,payload:{href:window.location.href,path:window.location.pathname+window.location.search+window.location.hash,title:document.title||""}},"*");}catch(_error){}};const wrap=(name)=>{const original=history[name];if(typeof original!=="function"){return;}history[name]=function(){const result=original.apply(this,arguments);emit("navigation");return result;};};wrap("pushState");wrap("replaceState");window.addEventListener("popstate",()=>emit("navigation"));window.addEventListener("hashchange",()=>emit("navigation"));window.addEventListener("load",()=>emit("ready"));const titleObserver=new MutationObserver(()=>emit("navigation"));const titleElement=document.querySelector("title");if(titleElement){titleObserver.observe(titleElement,{childList:true,subtree:true,characterData:true});}emit("ready");})();</script>"#;
+
 fn find_header_terminator(bytes: &[u8]) -> Option<usize> {
     bytes.windows(4).position(|window| window == b"\r\n\r\n")
 }
@@ -253,16 +256,72 @@ fn build_rewritten_http_response(
     response_bytes
 }
 
-fn rewrite_vite_client_response(response: &[u8], public_port: u16) -> Result<Vec<u8>, String> {
-    let (status_line, headers, body_offset) = parse_http_response_head(response)?;
-    let body = if response_header_value(&headers, "transfer-encoding")
+fn decode_http_response_body(
+    headers: &[(String, String)],
+    response: &[u8],
+    body_offset: usize,
+) -> Result<Vec<u8>, String> {
+    if response_header_value(headers, "transfer-encoding")
         .map(|value| value.eq_ignore_ascii_case("chunked"))
         .unwrap_or(false)
     {
-        decode_chunked_body(&response[body_offset..])?
+        decode_chunked_body(&response[body_offset..])
     } else {
-        response[body_offset..].to_vec()
-    };
+        Ok(response[body_offset..].to_vec())
+    }
+}
+
+fn is_html_response(headers: &[(String, String)]) -> bool {
+    response_header_value(headers, "content-type")
+        .map(|value| value.to_ascii_lowercase().starts_with("text/html"))
+        .unwrap_or(false)
+}
+
+fn inject_browser_bridge_into_html(html: &str) -> String {
+    if html.contains(ARK_BROWSER_BRIDGE_MARKER) {
+        return html.to_string();
+    }
+
+    let lower = html.to_ascii_lowercase();
+
+    for needle in ["</head>", "</body>"] {
+        if let Some(index) = lower.rfind(needle) {
+            let mut updated = String::with_capacity(html.len() + ARK_BROWSER_BRIDGE_SNIPPET.len());
+            updated.push_str(&html[..index]);
+            updated.push_str(ARK_BROWSER_BRIDGE_SNIPPET);
+            updated.push_str(&html[index..]);
+            return updated;
+        }
+    }
+
+    let mut updated = String::with_capacity(html.len() + ARK_BROWSER_BRIDGE_SNIPPET.len());
+    updated.push_str(ARK_BROWSER_BRIDGE_SNIPPET);
+    updated.push_str(html);
+    updated
+}
+
+fn rewrite_html_navigation_response(response: &[u8]) -> Result<Vec<u8>, String> {
+    let (status_line, headers, body_offset) = parse_http_response_head(response)?;
+
+    if !is_html_response(&headers) {
+        return Ok(response.to_vec());
+    }
+
+    let body = decode_http_response_body(&headers, response, body_offset)?;
+    let html = String::from_utf8(body)
+        .map_err(|_| String::from("The HTML response body was not valid UTF-8."))?;
+    let rewritten = inject_browser_bridge_into_html(&html);
+
+    Ok(build_rewritten_http_response(
+        &status_line,
+        &headers,
+        rewritten.as_bytes(),
+    ))
+}
+
+fn rewrite_vite_client_response(response: &[u8], public_port: u16) -> Result<Vec<u8>, String> {
+    let (status_line, headers, body_offset) = parse_http_response_head(response)?;
+    let body = decode_http_response_body(&headers, response, body_offset)?;
 
     let script = String::from_utf8(body)
         .map_err(|_| String::from("The Vite client response body was not valid UTF-8."))?;
@@ -348,7 +407,7 @@ fn proxy_http_connection(
     let response_bytes = if path == "/@vite/client" {
         rewrite_vite_client_response(&response, public_port).unwrap_or(response)
     } else {
-        response
+        rewrite_html_navigation_response(&response).unwrap_or(response)
     };
 
     client_stream
