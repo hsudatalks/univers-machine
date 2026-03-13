@@ -54,10 +54,10 @@ export function GlobalDashboardPage({
   ).length;
 
   return (
-    <section className="page-section">
+    <section className="page-section global-dashboard-page">
       <article className="panel tool-panel dashboard-panel global-dashboard-panel">
         <div className="dashboard-grid">
-          <Card className="dashboard-card-hero border-border/80 bg-card/95">
+          <Card className="dashboard-card dashboard-card-hero border-border/80 bg-card/95">
             <CardContent className="dashboard-summary-bar dashboard-card-content">
               <div className="dashboard-summary-copy">
                 <div className="dashboard-summary-item">
@@ -103,7 +103,7 @@ export function GlobalDashboardPage({
             </CardContent>
           </Card>
 
-          <Card className="dashboard-card-wide border-border/80 bg-card/95">
+          <Card className="dashboard-card dashboard-card-wide dashboard-card-scroll-shell border-border/80 bg-card/95">
             <CardHeader className="dashboard-card-header">
               <div className="dashboard-card-header-row">
                 <CardTitle className="dashboard-section-title">
@@ -116,7 +116,7 @@ export function GlobalDashboardPage({
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="server-dashboard-list dashboard-card-list dashboard-card-content">
+            <CardContent className="server-dashboard-list dashboard-card-list dashboard-card-content dashboard-card-scroll">
               {machines.map((machine) => {
                 const managedContainers = visibleContainers(machine.containers);
                 const reachable = managedContainers.filter((item) => item.sshReachable).length;
@@ -165,14 +165,14 @@ export function GlobalDashboardPage({
             </CardContent>
           </Card>
 
-          <Card className="dashboard-card-wide border-border/80 bg-card/95">
+          <Card className="dashboard-card dashboard-card-wide dashboard-card-scroll-shell border-border/80 bg-card/95">
             <CardHeader className="dashboard-card-header">
               <CardTitle className="dashboard-section-title">
                 <Boxes size={16} />
                 Workbenches
               </CardTitle>
             </CardHeader>
-            <CardContent className="server-dashboard-list dashboard-card-list dashboard-card-content">
+            <CardContent className="server-dashboard-list dashboard-card-list dashboard-card-content dashboard-card-scroll">
               {overviewContainers.map(({ container, machine, target }) => {
                 const primary = target ? primaryBrowserSurface(target) : undefined;
                 const webState = primary && target
