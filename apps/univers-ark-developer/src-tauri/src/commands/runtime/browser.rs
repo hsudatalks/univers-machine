@@ -26,5 +26,5 @@ pub(crate) async fn capture_browser_screenshot(
         )
     })
     .await
-    .map_err(|error| format!("Failed to join browser screenshot task: {}", error))?
+    .map_err(|error| format!("Failed to join browser screenshot task: {error}"))?
 }

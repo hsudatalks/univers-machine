@@ -32,7 +32,7 @@ pub(crate) async fn load_bootstrap(
         })
     })
     .await
-    .map_err(|error| format!("Failed to join bootstrap task: {}", error))?
+    .map_err(|error| format!("Failed to join bootstrap task: {error}"))?
 }
 
 #[tauri::command]
@@ -58,7 +58,7 @@ pub(crate) async fn refresh_bootstrap(
         })
     })
     .await
-    .map_err(|error| format!("Failed to join refresh bootstrap task: {}", error))?
+    .map_err(|error| format!("Failed to join refresh bootstrap task: {error}"))?
 }
 
 #[tauri::command]
@@ -73,7 +73,7 @@ pub(crate) async fn load_machine_inventory(
         Ok(servers)
     })
     .await
-    .map_err(|error| format!("Failed to join machine inventory task: {}", error))?
+    .map_err(|error| format!("Failed to join machine inventory task: {error}"))?
 }
 
 #[tauri::command]
@@ -88,7 +88,7 @@ pub(crate) async fn refresh_machine_inventory(
         Ok(servers)
     })
     .await
-    .map_err(|error| format!("Failed to join refresh machine inventory task: {}", error))?
+    .map_err(|error| format!("Failed to join refresh machine inventory task: {error}"))?
 }
 
 #[tauri::command]
@@ -106,5 +106,5 @@ pub(crate) async fn scan_machine_inventory(
         Ok(server)
     })
     .await
-    .map_err(|error| format!("Failed to join machine scan task: {}", error))?
+    .map_err(|error| format!("Failed to join machine scan task: {error}"))?
 }

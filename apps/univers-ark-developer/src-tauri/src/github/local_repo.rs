@@ -23,12 +23,12 @@ pub(super) fn local_branch(repo_path: &Path) -> Result<Option<String>, String> {
         .arg("branch")
         .arg("--show-current")
         .output()
-        .map_err(|error| format!("Failed to inspect {} branch: {}", REPO_NAME, error))?;
+        .map_err(|error| format!("Failed to inspect {REPO_NAME} branch: {error}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(if stderr.is_empty() {
-            format!("Failed to inspect {} branch", REPO_NAME)
+            format!("Failed to inspect {REPO_NAME} branch")
         } else {
             stderr
         });
@@ -46,12 +46,12 @@ pub(super) fn local_status_summary(repo_path: &Path) -> Result<Option<String>, S
         .arg("--short")
         .arg("--branch")
         .output()
-        .map_err(|error| format!("Failed to inspect {} status: {}", REPO_NAME, error))?;
+        .map_err(|error| format!("Failed to inspect {REPO_NAME} status: {error}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(if stderr.is_empty() {
-            format!("Failed to inspect {} status", REPO_NAME)
+            format!("Failed to inspect {REPO_NAME} status")
         } else {
             stderr
         });

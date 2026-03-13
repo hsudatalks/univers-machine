@@ -13,7 +13,7 @@ where
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .map_err(|error| format!("Failed to build russh runtime: {}", error))?;
+        .map_err(|error| format!("Failed to build russh runtime: {error}"))?;
 
     runtime.block_on(future).map_err(|error| error.to_string())
 }

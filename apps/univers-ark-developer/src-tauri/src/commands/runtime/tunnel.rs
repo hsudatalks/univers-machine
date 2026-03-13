@@ -91,7 +91,7 @@ pub(crate) async fn ensure_tunnel(
         reconcile_registered_tunnel(&app_clone, &tunnel_inner, &target_id, &service_id, false)
     })
     .await
-    .map_err(|error| format!("Failed to join ensure tunnel task: {}", error))?
+    .map_err(|error| format!("Failed to join ensure tunnel task: {error}"))?
 }
 
 #[tauri::command]
@@ -122,7 +122,7 @@ pub(crate) async fn sync_tunnel_registrations(
         Ok(statuses)
     })
     .await
-    .map_err(|error| format!("Failed to join sync tunnel registrations task: {}", error))?
+    .map_err(|error| format!("Failed to join sync tunnel registrations task: {error}"))?
 }
 
 #[tauri::command]
@@ -139,7 +139,7 @@ pub(crate) async fn restart_tunnel(
         restart_tunnel_inner(&app_clone, &tunnel_inner, &target_id, &service_id)
     })
     .await
-    .map_err(|error| format!("Failed to join restart tunnel task: {}", error))?
+    .map_err(|error| format!("Failed to join restart tunnel task: {error}"))?
 }
 
 #[tauri::command]
@@ -170,7 +170,7 @@ pub(crate) async fn restart_all_tunnels(
         statuses.push(
             handle
                 .await
-                .map_err(|error| format!("Failed to join restart tunnel task: {}", error))??,
+                .map_err(|error| format!("Failed to join restart tunnel task: {error}"))??,
         );
     }
 

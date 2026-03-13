@@ -67,7 +67,7 @@ pub(crate) fn dashboard_probe_command(
     project_path: &str,
 ) -> Result<String, String> {
     let declared_services = serde_json::to_string(&declared_dashboard_services(target))
-        .map_err(|error| format!("Failed to serialize declared services: {}", error))?;
+        .map_err(|error| format!("Failed to serialize declared services: {error}"))?;
 
     Ok(format!(
         r##"UNIVERS_ARK_PROJECT_PATH={} UNIVERS_ARK_DECLARED_SERVICES={} python3 - <<'PY'

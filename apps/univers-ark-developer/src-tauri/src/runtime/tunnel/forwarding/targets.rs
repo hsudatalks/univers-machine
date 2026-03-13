@@ -19,7 +19,7 @@ pub(super) fn parse_forward_target(command_line: &str) -> Result<(String, u16), 
             continue;
         };
         let remote_port = remote_port.parse::<u16>().map_err(|error| {
-            format!("Invalid remote forward port in {}: {}", forward_spec, error)
+            format!("Invalid remote forward port in {forward_spec}: {error}")
         })?;
         let Some(remote_host) = before_port.rsplit(':').next() else {
             continue;
@@ -29,8 +29,7 @@ pub(super) fn parse_forward_target(command_line: &str) -> Result<(String, u16), 
     }
 
     Err(format!(
-        "Failed to parse -L forward target from tunnel command: {}",
-        command_line
+        "Failed to parse -L forward target from tunnel command: {command_line}"
     ))
 }
 

@@ -10,7 +10,7 @@ use std::net::TcpListener;
 use url::Url;
 
 fn tunnel_port_key(target_id: &str, surface_id: &str, suffix: &str) -> String {
-    format!("{}::{}::{}", target_id, surface_id, suffix)
+    format!("{target_id}::{surface_id}::{suffix}")
 }
 
 fn port_span(start: u16, end: u16) -> usize {
@@ -74,8 +74,7 @@ fn allocate_stable_port(
     }
 
     Err(format!(
-        "No free browser surface ports available in {}-{}.",
-        start, end
+        "No free browser surface ports available in {start}-{end}."
     ))
 }
 
@@ -123,5 +122,5 @@ pub(crate) fn surface_local_port(surface: &BrowserSurface) -> Result<u16, String
 }
 
 pub(crate) fn internal_probe_url(port: u16) -> String {
-    format!("http://{}:{}/", SURFACE_HOST, port)
+    format!("http://{SURFACE_HOST}:{port}/")
 }

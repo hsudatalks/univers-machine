@@ -13,8 +13,7 @@ pub(crate) fn execute_command_service_action<R: Runtime>(
     let target = resolve_raw_target(target_id)?;
     let service = command_service(&target, service_id).ok_or_else(|| {
         format!(
-            "Unknown command service {} for target {}",
-            service_id, target_id
+            "Unknown command service {service_id} for target {target_id}"
         )
     })?;
 
@@ -26,14 +25,12 @@ pub(crate) fn execute_command_service_action<R: Runtime>(
             .filter(|command| !command.is_empty())
             .ok_or_else(|| {
                 format!(
-                    "Command service {} does not define a restart action",
-                    service_id
+                    "Command service {service_id} does not define a restart action"
                 )
             })?,
         other => {
             return Err(format!(
-                "Unsupported command service action {} for {}",
-                other, service_id
+                "Unsupported command service action {other} for {service_id}"
             ));
         }
     };
@@ -44,7 +41,7 @@ pub(crate) fn execute_command_service_action<R: Runtime>(
             target_id,
             service_id,
             "running",
-            format!("Executing {} action.", action),
+            format!("Executing {action} action."),
         );
     }
 
@@ -58,7 +55,7 @@ pub(crate) fn execute_command_service_action<R: Runtime>(
                 target_id,
                 service_id,
                 "ready",
-                format!("{} action finished successfully.", action),
+                format!("{action} action finished successfully."),
             );
         }
         return Ok(());
@@ -72,7 +69,7 @@ pub(crate) fn execute_command_service_action<R: Runtime>(
     } else if !stdout.is_empty() {
         stdout
     } else {
-        format!("Failed to execute {} action for {}", action, service_id)
+        format!("Failed to execute {action} action for {service_id}")
     };
 
     if let Some(app) = app {

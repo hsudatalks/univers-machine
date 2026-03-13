@@ -24,7 +24,7 @@ fn browser_probe_host_header(url: &Url) -> Option<String> {
     let host = url.host_str()?;
 
     match url.port() {
-        Some(port) => Some(format!("{}:{}", host, port)),
+        Some(port) => Some(format!("{host}:{port}")),
         None => Some(host.to_string()),
     }
 }

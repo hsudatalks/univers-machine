@@ -22,7 +22,7 @@ pub(crate) fn execute_target_command_via_russh(
 ) -> Result<RusshExecOutput, String> {
     let chain = resolve_target_ssh_chain(target_id)?;
     execute_chain_blocking(&chain, command, &RusshClientOptions::default())
-        .map_err(|error| format!("russh exec failed for {}: {}", target_id, error))
+        .map_err(|error| format!("russh exec failed for {target_id}: {error}"))
 }
 
 pub(crate) fn run_target_shell_command(
@@ -36,7 +36,7 @@ pub(crate) fn run_target_shell_command(
         .machines
         .iter()
         .find(|server| server.id == target.machine_id)
-        .ok_or_else(|| format!("Unknown machine for {}", target_id))?;
+        .ok_or_else(|| format!("Unknown machine for {target_id}"))?;
 
     if matches!(target.container_kind, ManagedContainerKind::Host) {
         let quoted_remote_command = shell_single_quote(remote_command);

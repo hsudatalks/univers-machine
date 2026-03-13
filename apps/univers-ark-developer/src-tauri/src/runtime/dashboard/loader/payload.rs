@@ -13,7 +13,7 @@ pub(super) fn parse_dashboard_payload(
     stdout: &[u8],
 ) -> Result<DashboardPayload, String> {
     serde_json::from_slice::<DashboardPayload>(stdout)
-        .map_err(|error| format!("Failed to parse dashboard for {}: {}", target_id, error))
+        .map_err(|error| format!("Failed to parse dashboard for {target_id}: {error}"))
 }
 
 pub(super) fn project_info(payload: DashboardProjectPayload) -> ContainerProjectInfo {

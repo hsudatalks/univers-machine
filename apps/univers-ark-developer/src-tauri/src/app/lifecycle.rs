@@ -39,13 +39,12 @@ pub(super) fn setup_app<R: Runtime>(app: &mut App<R>) -> Result<(), Box<dyn std:
     std::thread::spawn(|| match cleanup_stale_ssh_tunnels() {
         Ok(cleaned) if cleaned > 0 => {
             eprintln!(
-                "Reaped {} stale managed SSH tunnel process(es) before startup.",
-                cleaned
+                "Reaped {cleaned} stale managed SSH tunnel process(es) before startup."
             );
         }
         Ok(_) => {}
         Err(error) => {
-            eprintln!("Failed to reap stale managed SSH tunnels: {}", error);
+            eprintln!("Failed to reap stale managed SSH tunnels: {error}");
         }
     });
 

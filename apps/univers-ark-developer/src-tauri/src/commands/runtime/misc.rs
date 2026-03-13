@@ -19,7 +19,7 @@ pub(crate) async fn restart_tmux(app: AppHandle, target_id: String) -> Result<()
         execute_command_service_action(Some(&app), &target_id, &service_id, "restart")
     })
     .await
-    .map_err(|error| format!("Failed to join restart tmux task: {}", error))?
+    .map_err(|error| format!("Failed to join restart tmux task: {error}"))?
 }
 
 #[tauri::command]
@@ -31,7 +31,7 @@ pub(crate) async fn execute_command_service(
         execute_command_service_action(Some(&app), &spec.target_id, &spec.service_id, &spec.action)
     })
     .await
-    .map_err(|error| format!("Failed to join command service task: {}", error))?
+    .map_err(|error| format!("Failed to join command service task: {error}"))?
 }
 
 #[tauri::command]
@@ -39,10 +39,10 @@ pub(crate) async fn clipboard_write(app: AppHandle, text: String) -> Result<(), 
     async_runtime::spawn_blocking(move || {
         app.clipboard()
             .write_text(text)
-            .map_err(|error| format!("Failed to write to clipboard: {}", error))
+            .map_err(|error| format!("Failed to write to clipboard: {error}"))
     })
     .await
-    .map_err(|error| format!("Failed to join clipboard write task: {}", error))?
+    .map_err(|error| format!("Failed to join clipboard write task: {error}"))?
 }
 
 #[tauri::command]
@@ -50,10 +50,10 @@ pub(crate) async fn clipboard_read(app: AppHandle) -> Result<String, String> {
     async_runtime::spawn_blocking(move || {
         app.clipboard()
             .read_text()
-            .map_err(|error| format!("Failed to read clipboard: {}", error))
+            .map_err(|error| format!("Failed to read clipboard: {error}"))
     })
     .await
-    .map_err(|error| format!("Failed to join clipboard read task: {}", error))?
+    .map_err(|error| format!("Failed to join clipboard read task: {error}"))?
 }
 
 #[tauri::command]

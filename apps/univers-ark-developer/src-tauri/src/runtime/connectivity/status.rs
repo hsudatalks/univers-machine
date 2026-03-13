@@ -76,8 +76,7 @@ pub(super) fn aggregate_machine_snapshot(
 
     if ready_count == container_snapshots.len() {
         return ready_snapshot(format!(
-            "Machine host and {} managed container(s) are ready.",
-            ready_count
+            "Machine host and {ready_count} managed container(s) are ready."
         ));
     }
 

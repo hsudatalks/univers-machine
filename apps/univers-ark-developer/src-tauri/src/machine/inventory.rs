@@ -210,7 +210,7 @@ pub(crate) fn scan_and_store_server_inventory(server_id: &str) -> Result<Managed
         .iter()
         .position(|server| server.id == server_id)
     else {
-        return Err(format!("Unknown server: {}", server_id));
+        return Err(format!("Unknown server: {server_id}"));
     };
 
     let server = raw_targets_file.machines[server_index].clone();
@@ -235,12 +235,12 @@ pub(crate) fn scan_and_store_server_inventory(server_id: &str) -> Result<Managed
         .iter_mut()
         .find(|server_json| server_json.get("id").and_then(Value::as_str) == Some(server_id))
     else {
-        return Err(format!("Unknown server: {}", server_id));
+        return Err(format!("Unknown server: {server_id}"));
     };
 
     server_json["containers"] = Value::Array(manual_values);
     let next_content = serde_json::to_string_pretty(&raw_json)
-        .map_err(|error| format!("Failed to serialize updated config: {}", error))?;
+        .map_err(|error| format!("Failed to serialize updated config: {error}"))?;
     save_targets_config(&next_content)?;
 
     Ok(inventory.server)
@@ -264,7 +264,7 @@ pub(crate) fn resolve_raw_target(target_id: &str) -> Result<DeveloperTarget, Str
     {
         return Ok(target);
     }
-    Err(format!("Unknown target: {}", target_id))
+    Err(format!("Unknown target: {target_id}"))
 }
 
 pub(crate) fn read_bootstrap_data(

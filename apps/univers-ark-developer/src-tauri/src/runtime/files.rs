@@ -18,8 +18,7 @@ fn list_remote_directory_via_russh(
     let listing = list_directory_chain_blocking(&chain, path, &RusshClientOptions::default())
         .map_err(|error| {
             format!(
-                "russh directory listing failed for {}: {}",
-                target_id, error
+                "russh directory listing failed for {target_id}: {error}"
             )
         })?;
 
@@ -32,7 +31,7 @@ fn read_remote_file_preview_via_russh(
 ) -> Result<RemoteFilePreview, String> {
     let chain = resolve_target_ssh_chain(target_id)?;
     let preview = read_file_preview_chain_blocking(&chain, path, &RusshClientOptions::default())
-        .map_err(|error| format!("russh file preview failed for {}: {}", target_id, error))?;
+        .map_err(|error| format!("russh file preview failed for {target_id}: {error}"))?;
 
     Ok(map_russh_file_preview(target_id, preview))
 }
@@ -85,5 +84,5 @@ pub(crate) fn read_remote_file_preview(
 pub(crate) fn write_remote_file(target_id: &str, path: &str, data: &[u8]) -> Result<(), String> {
     let chain = resolve_target_ssh_chain(target_id)?;
     write_file_chain_blocking(&chain, path, data, &RusshClientOptions::default())
-        .map_err(|error| format!("russh file write failed for {}: {}", target_id, error))
+        .map_err(|error| format!("russh file write failed for {target_id}: {error}"))
 }

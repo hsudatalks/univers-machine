@@ -106,7 +106,7 @@ fn list_processes() -> Result<Vec<(u32, String)>, String> {
     let output = Command::new("/bin/ps")
         .args(["-axo", "pid=,command="])
         .output()
-        .map_err(|error| format!("Failed to inspect running processes: {}", error))?;
+        .map_err(|error| format!("Failed to inspect running processes: {error}"))?;
 
     if !output.status.success() {
         return Err(format!(

@@ -17,8 +17,7 @@ pub(super) fn run_target_shell_command_internal(
 ) -> Result<std::process::Output, String> {
     shell::shell_command(command).output().map_err(|error| {
         format!(
-            "Failed to execute shell command for {}: {}",
-            target_id, error
+            "Failed to execute shell command for {target_id}: {error}"
         )
     })
 }

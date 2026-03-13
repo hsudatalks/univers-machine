@@ -23,13 +23,12 @@ pub(crate) fn start_vite_proxy(
 ) -> Result<LocalProxyHandle, String> {
     let listener = TcpListener::bind(socket_addr_for_local_port(public_port)).map_err(|error| {
         format!(
-            "Failed to bind the local development proxy on {}: {}",
-            public_port, error
+            "Failed to bind the local development proxy on {public_port}: {error}"
         )
     })?;
     listener
         .set_nonblocking(true)
-        .map_err(|error| format!("Failed to configure the local development proxy: {}", error))?;
+        .map_err(|error| format!("Failed to configure the local development proxy: {error}"))?;
 
     let stop_requested = Arc::new(AtomicBool::new(false));
     let running = Arc::new(AtomicBool::new(true));
@@ -61,7 +60,7 @@ pub(crate) fn start_vite_proxy(
                 Err(error) => {
                     if let Ok(mut last_error) = error_state.lock() {
                         *last_error =
-                            Some(format!("The local development proxy stopped: {}", error));
+                            Some(format!("The local development proxy stopped: {error}"));
                     }
                     break;
                 }

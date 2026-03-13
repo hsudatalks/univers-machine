@@ -42,7 +42,7 @@ impl SqliteStore {
                  PRAGMA busy_timeout=5000;
                  PRAGMA foreign_keys=ON;",
             )
-            .map_err(|error| format!("Failed to initialize SQLite pragmas: {}", error))?;
+            .map_err(|error| format!("Failed to initialize SQLite pragmas: {error}"))?;
 
         Ok(connection)
     }
@@ -50,6 +50,6 @@ impl SqliteStore {
     pub(crate) fn migrate(&self, schema: &str) -> Result<(), String> {
         self.connect()?
             .execute_batch(schema)
-            .map_err(|error| format!("Failed to migrate SQLite schema: {}", error))
+            .map_err(|error| format!("Failed to migrate SQLite schema: {error}"))
     }
 }

@@ -33,23 +33,20 @@ fn host_container_users_command(
     let query = shell_single_quote(CONTAINER_LOGIN_USERS_QUERY);
     let exec_command = match manager_type {
         ContainerManagerType::Lxd => {
-            format!("lxc exec {} -- sh -lc {}", container_name, query)
+            format!("lxc exec {container_name} -- sh -lc {query}")
         }
         ContainerManagerType::Docker => {
-            format!("docker exec {} sh -lc {}", container_name, query)
+            format!("docker exec {container_name} sh -lc {query}")
         }
         ContainerManagerType::Orbstack => {
             format!(
-                "/opt/homebrew/bin/orb run -m {} sh -lc {}",
-                container_name, query
+                "/opt/homebrew/bin/orb run -m {container_name} sh -lc {query}"
             )
         }
         ContainerManagerType::None => return None,
     };
     let remote_command = format!(
-        "if command -v timeout >/dev/null 2>&1; then timeout {seconds} {command}; elif command -v gtimeout >/dev/null 2>&1; then gtimeout {seconds} {command}; else {command}; fi",
-        seconds = CONTAINER_USER_DISCOVERY_TIMEOUT_SECONDS,
-        command = exec_command,
+        "if command -v timeout >/dev/null 2>&1; then timeout {CONTAINER_USER_DISCOVERY_TIMEOUT_SECONDS} {exec_command}; elif command -v gtimeout >/dev/null 2>&1; then gtimeout {CONTAINER_USER_DISCOVERY_TIMEOUT_SECONDS} {exec_command}; else {exec_command}; fi",
     );
 
     let _ = server;

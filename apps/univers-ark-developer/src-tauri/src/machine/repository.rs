@@ -283,7 +283,7 @@ fn sync_local_machine_config() -> Result<(), String> {
     }
 
     let next_content = serde_json::to_string_pretty(&raw_json)
-        .map_err(|error| format!("Failed to serialize updated config: {}", error))?;
+        .map_err(|error| format!("Failed to serialize updated config: {error}"))?;
     write_targets_file_content(&next_content)?;
     clear_targets_cache();
     Ok(())
@@ -321,7 +321,7 @@ impl MachineRepository for FsMachineRepository {
     fn save_targets_config(&self, content: &str) -> Result<(), String> {
         let sanitized_content = sanitize_targets_json_content(content)?;
         serde_json::from_str::<RawTargetsFile>(&sanitized_content)
-            .map_err(|error| format!("Invalid config JSON: {}", error))?;
+            .map_err(|error| format!("Invalid config JSON: {error}"))?;
 
         write_targets_file_content(&sanitized_content)?;
         clear_targets_cache();

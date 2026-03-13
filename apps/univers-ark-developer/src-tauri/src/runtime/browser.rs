@@ -30,7 +30,7 @@ pub(crate) fn capture_browser_screenshot(
     let remote_path = build_remote_screenshot_path(&target.label, service_id);
     let temp_path = capture_local_screenshot(rect)?;
     let screenshot_bytes = fs::read(&temp_path)
-        .map_err(|error| format!("Failed to read captured screenshot: {}", error))?;
+        .map_err(|error| format!("Failed to read captured screenshot: {error}"))?;
     let _ = fs::remove_file(&temp_path);
 
     write_remote_file(target_id, &remote_path, &screenshot_bytes)?;
@@ -101,7 +101,7 @@ fn capture_local_screenshot(rect: &BrowserScreenshotRect) -> Result<PathBuf, Str
         .arg(region)
         .arg(&temp_path)
         .output()
-        .map_err(|error| format!("Failed to start screencapture: {}", error))?;
+        .map_err(|error| format!("Failed to start screencapture: {error}"))?;
 
     if !output.status.success() {
         return Err(format!(

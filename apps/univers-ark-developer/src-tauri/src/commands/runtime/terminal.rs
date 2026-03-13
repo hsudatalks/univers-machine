@@ -38,7 +38,7 @@ pub(crate) async fn attach_terminal(
         Ok(snapshot)
     })
     .await
-    .map_err(|error| format!("Failed to join attach terminal task: {}", error))?
+    .map_err(|error| format!("Failed to join attach terminal task: {error}"))?
 }
 
 #[tauri::command]
@@ -73,7 +73,7 @@ pub(crate) async fn restart_terminal(
         Ok(snapshot)
     })
     .await
-    .map_err(|error| format!("Failed to join restart terminal task: {}", error))?
+    .map_err(|error| format!("Failed to join restart terminal task: {error}"))?
 }
 
 #[tauri::command]
@@ -88,7 +88,7 @@ pub(crate) fn write_terminal(
         .map_err(|_| String::from("Terminal session state is unavailable"))?
         .get(&target_id)
         .cloned()
-        .ok_or_else(|| format!("No active terminal session for {}", target_id))?;
+        .ok_or_else(|| format!("No active terminal session for {target_id}"))?;
 
     write_to_terminal_session(&target_id, &session, &data)
 }
@@ -106,7 +106,7 @@ pub(crate) fn resize_terminal(
         .map_err(|_| String::from("Terminal session state is unavailable"))?
         .get(&target_id)
         .cloned()
-        .ok_or_else(|| format!("No active terminal session for {}", target_id))?;
+        .ok_or_else(|| format!("No active terminal session for {target_id}"))?;
 
     resize_terminal_session(&target_id, &session, cols, rows)
 }
@@ -118,7 +118,7 @@ pub(crate) async fn list_remote_directory(
 ) -> Result<RemoteDirectoryListing, String> {
     async_runtime::spawn_blocking(move || load_remote_directory(&target_id, path))
         .await
-        .map_err(|error| format!("Failed to join remote directory task: {}", error))?
+        .map_err(|error| format!("Failed to join remote directory task: {error}"))?
 }
 
 #[tauri::command]
@@ -128,5 +128,5 @@ pub(crate) async fn read_remote_file_preview(
 ) -> Result<RemoteFilePreview, String> {
     async_runtime::spawn_blocking(move || load_remote_file_preview(&target_id, &path))
         .await
-        .map_err(|error| format!("Failed to join remote file preview task: {}", error))?
+        .map_err(|error| format!("Failed to join remote file preview task: {error}"))?
 }

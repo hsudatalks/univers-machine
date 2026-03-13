@@ -126,7 +126,7 @@ pub(super) fn run_gh(args: &[&str], current_dir: Option<&Path>) -> Result<Vec<u8
 
     let output = command
         .output()
-        .map_err(|error| format!("Failed to launch gh: {}", error))?;
+        .map_err(|error| format!("Failed to launch gh: {error}"))?;
 
     if output.status.success() {
         return Ok(output.stdout);
@@ -150,7 +150,7 @@ pub(super) fn parse_gh_json<T: for<'de> Deserialize<'de>>(
     context: &str,
 ) -> Result<T, String> {
     serde_json::from_slice(bytes)
-        .map_err(|error| format!("Failed to parse {} from gh output: {}", context, error))
+        .map_err(|error| format!("Failed to parse {context} from gh output: {error}"))
 }
 
 pub(super) fn viewer_login() -> Result<String, String> {
@@ -201,7 +201,7 @@ pub(super) fn merge_pull_request(number: u64, method: &str) -> Result<(), String
         "merge" => "--merge",
         "squash" => "--squash",
         "rebase" => "--rebase",
-        _ => return Err(format!("Unsupported merge method: {}", method)),
+        _ => return Err(format!("Unsupported merge method: {method}")),
     };
 
     let _ = run_gh(

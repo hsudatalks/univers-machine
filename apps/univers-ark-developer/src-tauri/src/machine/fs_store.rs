@@ -96,10 +96,10 @@ fn sanitize_workspace_aliases(value: &mut Value) {
 
 pub(super) fn sanitize_targets_json_content(content: &str) -> Result<String, String> {
     let mut value: Value =
-        serde_json::from_str(content).map_err(|error| format!("Invalid config JSON: {}", error))?;
+        serde_json::from_str(content).map_err(|error| format!("Invalid config JSON: {error}"))?;
     sanitize_workspace_aliases(&mut value);
     serde_json::to_string_pretty(&value)
-        .map_err(|error| format!("Failed to serialize sanitized config JSON: {}", error))
+        .map_err(|error| format!("Failed to serialize sanitized config JSON: {error}"))
 }
 
 pub(super) fn read_targets_file_content() -> Result<String, String> {

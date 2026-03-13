@@ -71,7 +71,7 @@ pub(crate) fn write_to_terminal_session(
         .russh
         .session
         .write(data.as_bytes().to_vec())
-        .map_err(|error| format!("Failed to write to {}: {}", target_id, error))
+        .map_err(|error| format!("Failed to write to {target_id}: {error}"))
 }
 
 pub(crate) fn resize_terminal_session(
@@ -87,7 +87,7 @@ pub(crate) fn resize_terminal_session(
         .russh
         .session
         .resize(cols, rows)
-        .map_err(|error| format!("Failed to resize {}: {}", target_id, error))
+        .map_err(|error| format!("Failed to resize {target_id}: {error}"))
 }
 
 fn spawn_russh_terminal_session(

@@ -76,7 +76,7 @@ pub(crate) fn load_app_settings<R: Runtime>(
         } else {
             let defaults = AppSettings::default();
             let content = serde_json::to_string_pretty(&defaults)
-                .map_err(|error| format!("Failed to serialize default app settings: {}", error))?;
+                .map_err(|error| format!("Failed to serialize default app settings: {error}"))?;
             fs::write(&path, content)
                 .map_err(|error| format!("Failed to write {}: {}", path.display(), error))?;
             return Ok(defaults);
@@ -99,7 +99,7 @@ pub(crate) fn save_app_settings<R: Runtime>(
     let path = settings_file_path(app_handle)?;
     let sanitized = sanitize_settings(settings);
     let content = serde_json::to_string_pretty(&sanitized)
-        .map_err(|error| format!("Failed to serialize app settings: {}", error))?;
+        .map_err(|error| format!("Failed to serialize app settings: {error}"))?;
 
     fs::write(&path, content)
         .map_err(|error| format!("Failed to write {}: {}", path.display(), error))?;

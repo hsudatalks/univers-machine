@@ -64,8 +64,7 @@ pub(super) fn load_inventory(
             }
             Err(error) => {
                 eprintln!(
-                    "Failed to load machine inventory for connectivity monitor: {}",
-                    error
+                    "Failed to load machine inventory for connectivity monitor: {error}"
                 );
             }
         }

@@ -12,7 +12,7 @@ pub(crate) fn restart_container(server_id: &str, container_name: &str) -> Result
         .machines
         .iter()
         .find(|server| server.id == server_id)
-        .ok_or_else(|| format!("Unknown machine: {}", server_id))?;
+        .ok_or_else(|| format!("Unknown machine: {server_id}"))?;
     if matches!(server.transport, MachineTransport::Local) {
         return Err(String::from(
             "Local host container cannot be restarted from machine inventory.",
@@ -27,24 +27,21 @@ pub(crate) fn restart_container(server_id: &str, container_name: &str) -> Result
                 server,
                 &[],
                 Some(&shell_single_quote(&format!(
-                    "/opt/homebrew/bin/orb restart {}",
-                    container_name
+                    "/opt/homebrew/bin/orb restart {container_name}"
                 ))),
             ),
             ContainerManagerType::Docker => build_host_ssh_command(
                 server,
                 &[],
                 Some(&shell_single_quote(&format!(
-                    "docker restart {}",
-                    container_name
+                    "docker restart {container_name}"
                 ))),
             ),
             ContainerManagerType::Lxd => build_host_ssh_command(
                 server,
                 &[],
                 Some(&shell_single_quote(&format!(
-                    "lxc restart {} --force",
-                    container_name
+                    "lxc restart {container_name} --force"
                 ))),
             ),
             ContainerManagerType::None => continue,

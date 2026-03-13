@@ -64,7 +64,7 @@ pub(super) fn parse_target_kind(value: &str) -> rusqlite::Result<SecretAssignmen
             rusqlite::types::Type::Text,
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Unknown assignment target kind {}", other),
+                format!("Unknown assignment target kind {other}"),
             )),
         )),
     }

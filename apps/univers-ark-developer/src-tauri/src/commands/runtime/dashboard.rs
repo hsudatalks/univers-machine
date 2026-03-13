@@ -20,7 +20,7 @@ pub(crate) async fn load_container_dashboard(
         Ok(dashboard)
     })
     .await
-    .map_err(|error| format!("Failed to join container dashboard task: {}", error))?
+    .map_err(|error| format!("Failed to join container dashboard task: {error}"))?
 }
 
 #[tauri::command]

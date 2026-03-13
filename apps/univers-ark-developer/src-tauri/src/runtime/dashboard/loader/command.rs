@@ -44,7 +44,7 @@ pub(super) fn load_container_dashboard_stdout(target_id: &str) -> Result<Vec<u8>
         } else if !stdout.is_empty() {
             stdout
         } else {
-            format!("Dashboard command failed for {}", target_id)
+            format!("Dashboard command failed for {target_id}")
         });
     }
 
@@ -54,7 +54,7 @@ pub(super) fn load_container_dashboard_stdout(target_id: &str) -> Result<Vec<u8>
 fn load_container_dashboard_via_russh(target_id: &str, command: &str) -> Result<Vec<u8>, String> {
     let chain = resolve_target_ssh_chain(target_id)?;
     let output = execute_chain_blocking(&chain, command, &RusshClientOptions::default())
-        .map_err(|error| format!("russh dashboard exec failed for {}: {}", target_id, error))?;
+        .map_err(|error| format!("russh dashboard exec failed for {target_id}: {error}"))?;
 
     if output.exit_status != 0 {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -64,7 +64,7 @@ fn load_container_dashboard_via_russh(target_id: &str, command: &str) -> Result<
         } else if !stdout.is_empty() {
             stdout
         } else {
-            format!("russh dashboard command failed for {}", target_id)
+            format!("russh dashboard command failed for {target_id}")
         });
     }
 

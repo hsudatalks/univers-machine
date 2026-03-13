@@ -34,7 +34,7 @@ pub(crate) fn replace_known_tunnel_placeholders(
 
 fn rewrite_forward_spec_local_port(forward_spec: &str, local_port: u16) -> String {
     match forward_spec.split_once(':') {
-        Some((_, rest)) => format!("{}:{}", local_port, rest),
+        Some((_, rest)) => format!("{local_port}:{rest}"),
         None => forward_spec.to_string(),
     }
 }
@@ -113,7 +113,7 @@ fn resolve_runtime_local_url(local_url: &str, remote_url: &str, local_port: u16)
         return remote_url.to_string();
     }
 
-    format!("http://{}:{}/", SURFACE_HOST, local_port)
+    format!("http://{SURFACE_HOST}:{local_port}/")
 }
 
 fn hydrate_surface(
@@ -231,8 +231,7 @@ pub(crate) fn resolve_runtime_web_surface(
         .and_then(|service| service.web)
         .ok_or_else(|| {
             format!(
-                "Unknown web service {} for target {}",
-                service_id, target_id
+                "Unknown web service {service_id} for target {target_id}"
             )
         })
 }

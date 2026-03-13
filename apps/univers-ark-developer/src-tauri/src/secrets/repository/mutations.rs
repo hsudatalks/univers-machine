@@ -59,7 +59,7 @@ impl SqliteSecretRepository {
                     now,
                 ],
             )
-            .map_err(|error| format!("Failed to save secret provider: {}", error))?;
+            .map_err(|error| format!("Failed to save secret provider: {error}"))?;
 
         self.insert_audit_event(
             &connection,
@@ -83,13 +83,12 @@ impl SqliteSecretRepository {
             .execute("DELETE FROM secret_providers WHERE id = ?1", [provider_id])
             .map_err(|error| {
                 format!(
-                    "Failed to delete secret provider {}: {}",
-                    provider_id, error
+                    "Failed to delete secret provider {provider_id}: {error}"
                 )
             })?;
 
         if deleted == 0 {
-            return Err(format!("Secret provider {} does not exist.", provider_id));
+            return Err(format!("Secret provider {provider_id} does not exist."));
         }
 
         self.insert_audit_event(&connection, "providerDeleted", "provider", provider_id, "")?;
@@ -110,7 +109,7 @@ impl SqliteSecretRepository {
             ));
         }
         if self.get_provider(&connection, &provider_id)?.is_none() {
-            return Err(format!("Secret provider {} does not exist.", provider_id));
+            return Err(format!("Secret provider {provider_id} does not exist."));
         }
 
         let id = generated_id("credential", &input.label, &input.id);
@@ -200,7 +199,7 @@ impl SqliteSecretRepository {
                     last_rotated_at_ms,
                 ],
             )
-            .map_err(|error| format!("Failed to save secret credential: {}", error))?;
+            .map_err(|error| format!("Failed to save secret credential: {error}"))?;
 
         self.insert_audit_event(
             &connection,
@@ -227,7 +226,7 @@ impl SqliteSecretRepository {
         let connection = self.connect()?;
         let existing = self
             .get_credential(&connection, credential_id)?
-            .ok_or_else(|| format!("Secret credential {} does not exist.", credential_id))?;
+            .ok_or_else(|| format!("Secret credential {credential_id} does not exist."))?;
 
         if existing.has_secret && !existing.secret_account.is_empty() {
             let _ = store.delete_secret(&existing.secret_account);
@@ -240,8 +239,7 @@ impl SqliteSecretRepository {
             )
             .map_err(|error| {
                 format!(
-                    "Failed to delete secret credential {}: {}",
-                    credential_id, error
+                    "Failed to delete secret credential {credential_id}: {error}"
                 )
             })?;
 
@@ -263,12 +261,11 @@ impl SqliteSecretRepository {
         let connection = self.connect()?;
         let existing = self
             .get_credential(&connection, credential_id)?
-            .ok_or_else(|| format!("Secret credential {} does not exist.", credential_id))?;
+            .ok_or_else(|| format!("Secret credential {credential_id} does not exist."))?;
 
         if !existing.has_secret || existing.secret_account.trim().is_empty() {
             return Err(format!(
-                "Secret credential {} does not have a stored secret.",
-                credential_id
+                "Secret credential {credential_id} does not have a stored secret."
             ));
         }
 
@@ -289,8 +286,7 @@ impl SqliteSecretRepository {
         }
         if self.get_credential(&connection, &credential_id)?.is_none() {
             return Err(format!(
-                "Secret credential {} does not exist.",
-                credential_id
+                "Secret credential {credential_id} does not exist."
             ));
         }
 
@@ -317,7 +313,7 @@ impl SqliteSecretRepository {
                 |row| row.get::<_, u64>(0),
             )
             .optional()
-            .map_err(|error| format!("Failed to inspect secret assignment {}: {}", id, error))?;
+            .map_err(|error| format!("Failed to inspect secret assignment {id}: {error}"))?;
         let now = now_ms();
         let created_at_ms = existing.unwrap_or(now);
 
@@ -347,7 +343,7 @@ impl SqliteSecretRepository {
                     now,
                 ],
             )
-            .map_err(|error| format!("Failed to save secret assignment: {}", error))?;
+            .map_err(|error| format!("Failed to save secret assignment: {error}"))?;
 
         self.insert_audit_event(
             &connection,
@@ -376,15 +372,13 @@ impl SqliteSecretRepository {
             )
             .map_err(|error| {
                 format!(
-                    "Failed to delete secret assignment {}: {}",
-                    assignment_id, error
+                    "Failed to delete secret assignment {assignment_id}: {error}"
                 )
             })?;
 
         if deleted == 0 {
             return Err(format!(
-                "Secret assignment {} does not exist.",
-                assignment_id
+                "Secret assignment {assignment_id} does not exist."
             ));
         }
 
@@ -412,7 +406,7 @@ impl SqliteSecretRepository {
                  VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![event_kind, entity_kind, entity_id, detail, now_ms()],
             )
-            .map_err(|error| format!("Failed to write secret audit event: {}", error))?;
+            .map_err(|error| format!("Failed to write secret audit event: {error}"))?;
         Ok(())
     }
 }

@@ -77,7 +77,7 @@ pub(crate) fn load_github_project_state() -> Result<GithubProjectState, String> 
         "--state",
         "open",
         "--search",
-        &format!("author:{}", viewer_login),
+        &format!("author:{viewer_login}"),
         "--limit",
         "8",
         "--json",
@@ -226,7 +226,7 @@ pub(crate) fn open_external_url(url: &str) -> Result<(), String> {
     Command::new(program)
         .args(args)
         .spawn()
-        .map_err(|error| format!("Failed to open {}: {}", url, error))?;
+        .map_err(|error| format!("Failed to open {url}: {error}"))?;
 
     Ok(())
 }

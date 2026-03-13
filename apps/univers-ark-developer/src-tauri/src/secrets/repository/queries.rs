@@ -51,11 +51,11 @@ impl SqliteSecretRepository {
     }
 
     fn scalar_count(&self, connection: &Connection, table_name: &str) -> Result<usize, String> {
-        let sql = format!("SELECT COUNT(*) FROM {}", table_name);
+        let sql = format!("SELECT COUNT(*) FROM {table_name}");
         connection
             .query_row(&sql, [], |row| row.get::<_, i64>(0))
             .map(|value| value.max(0) as usize)
-            .map_err(|error| format!("Failed to inspect {}: {}", table_name, error))
+            .map_err(|error| format!("Failed to inspect {table_name}: {error}"))
     }
 
     pub(super) fn list_providers(
@@ -68,7 +68,7 @@ impl SqliteSecretRepository {
                  FROM secret_providers
                  ORDER BY label COLLATE NOCASE, id",
             )
-            .map_err(|error| format!("Failed to query secret providers: {}", error))?;
+            .map_err(|error| format!("Failed to query secret providers: {error}"))?;
 
         let rows = statement
             .query_map([], |row| {
@@ -82,10 +82,10 @@ impl SqliteSecretRepository {
                     updated_at_ms: row.get(6)?,
                 })
             })
-            .map_err(|error| format!("Failed to map secret providers: {}", error))?;
+            .map_err(|error| format!("Failed to map secret providers: {error}"))?;
 
         rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|error| format!("Failed to read secret providers: {}", error))
+            .map_err(|error| format!("Failed to read secret providers: {error}"))
     }
 
     pub(super) fn list_credentials(
@@ -99,7 +99,7 @@ impl SqliteSecretRepository {
                  FROM secret_credentials
                  ORDER BY label COLLATE NOCASE, id",
             )
-            .map_err(|error| format!("Failed to query secret credentials: {}", error))?;
+            .map_err(|error| format!("Failed to query secret credentials: {error}"))?;
 
         let rows = statement
             .query_map([], |row| {
@@ -117,10 +117,10 @@ impl SqliteSecretRepository {
                     last_rotated_at_ms: row.get(9)?,
                 })
             })
-            .map_err(|error| format!("Failed to map secret credentials: {}", error))?;
+            .map_err(|error| format!("Failed to map secret credentials: {error}"))?;
 
         rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|error| format!("Failed to read secret credentials: {}", error))
+            .map_err(|error| format!("Failed to read secret credentials: {error}"))
     }
 
     pub(super) fn list_assignments(
@@ -134,7 +134,7 @@ impl SqliteSecretRepository {
                  FROM secret_assignments
                  ORDER BY target_kind, target_id, id",
             )
-            .map_err(|error| format!("Failed to query secret assignments: {}", error))?;
+            .map_err(|error| format!("Failed to query secret assignments: {error}"))?;
 
         let rows = statement
             .query_map([], |row| {
@@ -152,10 +152,10 @@ impl SqliteSecretRepository {
                     updated_at_ms: row.get(8)?,
                 })
             })
-            .map_err(|error| format!("Failed to map secret assignments: {}", error))?;
+            .map_err(|error| format!("Failed to map secret assignments: {error}"))?;
 
         rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|error| format!("Failed to read secret assignments: {}", error))
+            .map_err(|error| format!("Failed to read secret assignments: {error}"))
     }
 
     pub(super) fn list_audit_events(
@@ -169,7 +169,7 @@ impl SqliteSecretRepository {
                  ORDER BY created_at_ms DESC, id DESC
                  LIMIT 20",
             )
-            .map_err(|error| format!("Failed to query secret audit events: {}", error))?;
+            .map_err(|error| format!("Failed to query secret audit events: {error}"))?;
 
         let rows = statement
             .query_map([], |row| {
@@ -182,10 +182,10 @@ impl SqliteSecretRepository {
                     created_at_ms: row.get(5)?,
                 })
             })
-            .map_err(|error| format!("Failed to map secret audit events: {}", error))?;
+            .map_err(|error| format!("Failed to map secret audit events: {error}"))?;
 
         rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|error| format!("Failed to read secret audit events: {}", error))
+            .map_err(|error| format!("Failed to read secret audit events: {error}"))
     }
 
     pub(super) fn get_provider(
@@ -212,7 +212,7 @@ impl SqliteSecretRepository {
                 },
             )
             .optional()
-            .map_err(|error| format!("Failed to inspect secret provider {}: {}", provider_id, error))
+            .map_err(|error| format!("Failed to inspect secret provider {provider_id}: {error}"))
     }
 
     pub(super) fn get_credential(
@@ -246,8 +246,7 @@ impl SqliteSecretRepository {
             .optional()
             .map_err(|error| {
                 format!(
-                    "Failed to inspect secret credential {}: {}",
-                    credential_id, error
+                    "Failed to inspect secret credential {credential_id}: {error}"
                 )
             })
     }

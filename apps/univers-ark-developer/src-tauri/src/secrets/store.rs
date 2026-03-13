@@ -24,7 +24,7 @@ impl KeyringSecretStore {
 
     fn entry(&self, account: &str) -> Result<Entry, String> {
         Entry::new(&self.service_name, account)
-            .map_err(|error| format!("Failed to access OS credential store: {}", error))
+            .map_err(|error| format!("Failed to access OS credential store: {error}"))
     }
 }
 
@@ -36,20 +36,19 @@ impl SecretStore for KeyringSecretStore {
     fn set_secret(&self, account: &str, value: &str) -> Result<(), String> {
         self.entry(account)?
             .set_password(value)
-            .map_err(|error| format!("Failed to write secret to OS credential store: {}", error))
+            .map_err(|error| format!("Failed to write secret to OS credential store: {error}"))
     }
 
     fn get_secret(&self, account: &str) -> Result<String, String> {
         self.entry(account)?
             .get_password()
-            .map_err(|error| format!("Failed to read secret from OS credential store: {}", error))
+            .map_err(|error| format!("Failed to read secret from OS credential store: {error}"))
     }
 
     fn delete_secret(&self, account: &str) -> Result<(), String> {
         self.entry(account)?.delete_credential().map_err(|error| {
             format!(
-                "Failed to delete secret from OS credential store: {}",
-                error
+                "Failed to delete secret from OS credential store: {error}"
             )
         })
     }

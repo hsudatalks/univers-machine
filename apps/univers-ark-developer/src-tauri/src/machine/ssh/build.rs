@@ -24,7 +24,7 @@ pub(crate) fn managed_known_hosts_file() -> String {
             } else {
                 home
             };
-            format!("{}/.ssh/univers-ark-developer-known_hosts", normalized)
+            format!("{normalized}/.ssh/univers-ark-developer-known_hosts")
         }
         _ => String::from("~/.ssh/univers-ark-developer-known_hosts"),
     }
@@ -71,8 +71,8 @@ fn base_ssh_flags(server: &RemoteContainerServer, host_key_alias: &str) -> Vec<S
         .to_string_lossy()
         .to_string();
 
-    flags.push(format!("-o UserKnownHostsFile={}", known_hosts_file));
-    flags.push(format!("-o HostKeyAlias={}", host_key_alias));
+    flags.push(format!("-o UserKnownHostsFile={known_hosts_file}"));
+    flags.push(format!("-o HostKeyAlias={host_key_alias}"));
     flags.push(format!(
         "-o StrictHostKeyChecking={}",
         if server.strict_host_key_checking {
@@ -146,7 +146,7 @@ pub(crate) fn shell_single_quote(value: &str) -> String {
 }
 
 pub(crate) fn ssh_destination(container_ip: &str, ssh_user: &str) -> String {
-    format!("{}@{}", ssh_user, container_ip)
+    format!("{ssh_user}@{container_ip}")
 }
 
 pub(crate) fn default_terminal_startup_command() -> String {
