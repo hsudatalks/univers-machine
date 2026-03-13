@@ -1406,6 +1406,7 @@ function App() {
       {!isCompanionWindow ? (
         <StatusBar
           activeMachineId={activeView.kind === "machine" ? activeView.machineId : undefined}
+          activeTargetId={activeView.kind === "container" ? activeView.targetId : undefined}
           activeStatusLabel={activeStatusLabel}
           containerCount={overviewContainers.length}
           homeViewModes={isCompactHomeLayout ? ["dashboard"] : HOME_VIEW_MODES}
@@ -1413,6 +1414,7 @@ function App() {
           isSidebarHidden={isCompactWorkspaceLayout ? !isMobileSidebarOpen : isSidebarHidden}
           machineEntries={bootstrap.machines.map((machine) => ({ id: machine.id, label: machine.label }))}
           onNavigateMachine={openMachineView}
+          onNavigateTarget={setContainerView}
           onSetHomeViewMode={setHomeViewMode}
           onOpenSettings={() => {
             setActiveView((current) =>
@@ -1425,6 +1427,10 @@ function App() {
           homeViewMode={homeViewMode}
           reachableContainerCount={reachableContainerCount}
           serverCount={bootstrap.machines.length}
+          targetEntries={overviewTerminalTargets.map((target) => ({
+            id: target.id,
+            label: target.label,
+          }))}
         />
       ) : null}
 

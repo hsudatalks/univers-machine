@@ -188,6 +188,17 @@
   text-overflow: ellipsis;
 }
 
+.status-bar-nav-neighbor {
+  min-width: 0;
+  max-width: 8rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .status-bar-mobile-top,
 .status-bar-mobile-leading,
 .status-bar-mobile-actions,
@@ -873,6 +884,10 @@
     max-width: none;
     padding-inline: 0.25rem;
     text-align: center;
+  }
+
+  .status-bar-mobile .status-bar-nav-neighbor {
+    display: none;
   }
 
   .content-header,

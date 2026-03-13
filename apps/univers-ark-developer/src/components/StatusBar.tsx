@@ -10,15 +10,23 @@ type MachineNavEntry = {
   label: string;
 };
 
+type TargetNavEntry = {
+  id: string;
+  label: string;
+};
+
 type StatusBarProps = {
   activeMachineId?: string;
+  activeTargetId?: string;
   activeStatusLabel: string;
   containerCount: number;
   homeViewModes: readonly HomeViewMode[];
   isHomeActive: boolean;
   isSidebarHidden: boolean;
   machineEntries: MachineNavEntry[];
+  targetEntries: TargetNavEntry[];
   onNavigateMachine?: (machineId: string) => void;
+  onNavigateTarget?: (targetId: string) => void;
   onSetHomeViewMode: (viewMode: HomeViewMode) => void;
   onOpenSettings: () => void;
   onToggleSidebar: () => void;
@@ -53,7 +61,15 @@ function MachineNavigation({
           <path d="M10 3L5.5 8l4.5 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
         </svg>
       </Button>
-      <span className="status-bar-machine-label">{activeMachineLabel}</span>
+      <span className="status-bar-nav-neighbor" title={prevMachine?.label}>
+        {prevMachine?.label}
+      </span>
+      <span className="status-bar-machine-label" title={activeMachineLabel}>
+        {activeMachineLabel}
+      </span>
+      <span className="status-bar-nav-neighbor" title={nextMachine?.label}>
+        {nextMachine?.label}
+      </span>
       <Button
         aria-label={nextMachine ? `Go to ${nextMachine.label}` : "No next provider"}
         className="status-bar-button"
@@ -61,6 +77,58 @@ function MachineNavigation({
         onClick={() => nextMachine && onNavigateMachine?.(nextMachine.id)}
         size="sm"
         title={nextMachine ? nextMachine.label : "No next provider"}
+        variant="ghost"
+      >
+        <svg aria-hidden="true" className="panel-button-icon-svg" fill="none" viewBox="0 0 16 16">
+          <path d="M6 3l4.5 5L6 13" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
+        </svg>
+      </Button>
+    </div>
+  );
+}
+
+function TargetNavigation({
+  activeTargetLabel,
+  nextTarget,
+  onNavigateTarget,
+  prevTarget,
+}: {
+  activeTargetLabel?: string;
+  nextTarget?: TargetNavEntry;
+  onNavigateTarget?: (targetId: string) => void;
+  prevTarget?: TargetNavEntry;
+}) {
+  return (
+    <div className="status-bar-machine-nav" aria-label="Workbench navigation">
+      <Button
+        aria-label={prevTarget ? `Go to ${prevTarget.label}` : "No previous workbench"}
+        className="status-bar-button"
+        disabled={!prevTarget}
+        onClick={() => prevTarget && onNavigateTarget?.(prevTarget.id)}
+        size="sm"
+        title={prevTarget ? prevTarget.label : "No previous workbench"}
+        variant="ghost"
+      >
+        <svg aria-hidden="true" className="panel-button-icon-svg" fill="none" viewBox="0 0 16 16">
+          <path d="M10 3L5.5 8l4.5 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
+        </svg>
+      </Button>
+      <span className="status-bar-nav-neighbor" title={prevTarget?.label}>
+        {prevTarget?.label}
+      </span>
+      <span className="status-bar-machine-label" title={activeTargetLabel}>
+        {activeTargetLabel}
+      </span>
+      <span className="status-bar-nav-neighbor" title={nextTarget?.label}>
+        {nextTarget?.label}
+      </span>
+      <Button
+        aria-label={nextTarget ? `Go to ${nextTarget.label}` : "No next workbench"}
+        className="status-bar-button"
+        disabled={!nextTarget}
+        onClick={() => nextTarget && onNavigateTarget?.(nextTarget.id)}
+        size="sm"
+        title={nextTarget ? nextTarget.label : "No next workbench"}
         variant="ghost"
       >
         <svg aria-hidden="true" className="panel-button-icon-svg" fill="none" viewBox="0 0 16 16">
@@ -119,13 +187,16 @@ function HomeViewSwitcher({
 
 export function StatusBar({
   activeMachineId,
+  activeTargetId,
   activeStatusLabel,
   containerCount,
   homeViewModes,
   isHomeActive,
   isSidebarHidden,
   machineEntries,
+  targetEntries,
   onNavigateMachine,
+  onNavigateTarget,
   onSetHomeViewMode,
   onOpenSettings,
   onToggleSidebar,
@@ -140,10 +211,10 @@ export function StatusBar({
   const hasMachineNav =
     activeMachineIndex >= 0 && machineEntries.length > 1 && onNavigateMachine;
   const prevMachine = hasMachineNav
-    ? machineEntries[activeMachineIndex - 1]
+    ? machineEntries[(activeMachineIndex - 1 + machineEntries.length) % machineEntries.length]
     : undefined;
   const nextMachine = hasMachineNav
-    ? machineEntries[activeMachineIndex + 1]
+    ? machineEntries[(activeMachineIndex + 1) % machineEntries.length]
     : undefined;
   const activeMachineLabel = hasMachineNav
     ? machineEntries[activeMachineIndex].label
@@ -158,6 +229,30 @@ export function StatusBar({
     />
   ) : null;
 
+  const activeTargetIndex = activeTargetId
+    ? targetEntries.findIndex((entry) => entry.id === activeTargetId)
+    : -1;
+  const hasTargetNav =
+    activeTargetIndex >= 0 && targetEntries.length > 1 && onNavigateTarget;
+  const prevTarget = hasTargetNav
+    ? targetEntries[(activeTargetIndex - 1 + targetEntries.length) % targetEntries.length]
+    : undefined;
+  const nextTarget = hasTargetNav
+    ? targetEntries[(activeTargetIndex + 1) % targetEntries.length]
+    : undefined;
+  const activeTargetLabel = hasTargetNav
+    ? targetEntries[activeTargetIndex].label
+    : undefined;
+
+  const targetNavigation = hasTargetNav ? (
+    <TargetNavigation
+      activeTargetLabel={activeTargetLabel}
+      nextTarget={nextTarget}
+      onNavigateTarget={onNavigateTarget}
+      prevTarget={prevTarget}
+    />
+  ) : null;
+
   const homeViewSwitcher = isHomeActive ? (
     <HomeViewSwitcher
       homeViewMode={homeViewMode}
@@ -168,6 +263,7 @@ export function StatusBar({
 
   if (isCompactStatusBar) {
     const compactFooterContent = machineNavigation
+      ?? targetNavigation
       ?? homeViewSwitcher
       ?? (activeStatusLabel !== "Settings" ? (
         <div className="status-bar-mobile-summary" aria-label="Workspace summary">
@@ -330,7 +426,7 @@ export function StatusBar({
       </div>
 
       <div className="status-bar-section status-bar-section-center">
-        {machineNavigation ?? homeViewSwitcher}
+        {machineNavigation ?? targetNavigation ?? homeViewSwitcher}
       </div>
 
       <div className="status-bar-section status-bar-section-secondary">
