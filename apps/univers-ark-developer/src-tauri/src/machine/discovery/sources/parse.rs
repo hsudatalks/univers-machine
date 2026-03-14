@@ -183,6 +183,63 @@ fn parse_csv_discovered_containers(
     Ok(containers)
 }
 
+const WSL_SYSTEM_DISTROS: &[&str] = &[
+    "docker-desktop",
+    "docker-desktop-data",
+];
+
+fn parse_wsl_containers(
+    server: &RemoteContainerServer,
+    discovery_output: &str,
+) -> Result<Vec<DiscoveredContainer>, String> {
+    // WSL output from Windows SSH may contain UTF-16 null bytes — strip them
+    let cleaned: String = discovery_output.chars().filter(|c| *c != '\0').collect();
+    let mut containers = Vec::new();
+
+    for line in cleaned.lines().skip(1) {
+        // Each line: "* Ubuntu   Running   2" or "  docker-desktop   Running   2"
+        let trimmed = line.trim().trim_start_matches('*').trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.len() < 2 {
+            continue;
+        }
+
+        let name = parts[0];
+        let status = parts[1];
+
+        // Skip system distros
+        if WSL_SYSTEM_DISTROS.iter().any(|s| name.eq_ignore_ascii_case(s)) {
+            continue;
+        }
+
+        if !server.include_stopped && !status.eq_ignore_ascii_case("running") {
+            continue;
+        }
+
+        containers.push(DiscoveredContainer {
+            id: name.to_string(),
+            kind: ManagedContainerKind::Managed,
+            name: name.to_string(),
+            source: String::from("wsl"),
+            ssh_user: String::new(),
+            ssh_user_candidates: vec![],
+            status: status.to_uppercase(),
+            ipv4: String::new(), // WSL uses wsl -d, not SSH to IP
+            label: None,
+            description: None,
+            workspace: None,
+            services: vec![],
+            surfaces: vec![],
+        });
+    }
+
+    Ok(containers)
+}
+
 pub(super) fn parse_discovered_containers_for_manager(
     server: &RemoteContainerServer,
     manager_type: ContainerManagerType,
@@ -192,11 +249,16 @@ pub(super) fn parse_discovered_containers_for_manager(
         return parse_orbstack_containers(server, discovery_output);
     }
 
+    if matches!(manager_type, ContainerManagerType::Wsl) {
+        return parse_wsl_containers(server, discovery_output);
+    }
+
     let mut containers = parse_csv_discovered_containers(server, discovery_output)?;
     let source = match manager_type {
         ContainerManagerType::Docker => "docker",
         ContainerManagerType::Lxd => "lxd",
         ContainerManagerType::Orbstack => "orbstack",
+        ContainerManagerType::Wsl => "wsl",
         ContainerManagerType::None => "unknown",
     };
     containers.iter_mut().for_each(|container| {

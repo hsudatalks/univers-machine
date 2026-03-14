@@ -136,12 +136,25 @@ pub(crate) fn build_target_from_container(
     });
     let workspace_source = container.workspace.as_ref().unwrap_or(&server.workspace);
     let workspace = render_workspace(workspace_source, &context);
+    let is_wsl = container.source == "wsl";
     let terminal_startup_command = if matches!(container.kind, ManagedContainerKind::Managed) {
         profile_terminal_startup_command(&workspace.profile)
     } else {
         host_terminal_startup_command(server)
     };
-    let terminal_command = if matches!(server.transport, MachineTransport::Local) {
+    let terminal_command = if is_wsl {
+        // WSL: run wsl -d <name> via host SSH (or locally)
+        let wsl_command = format!("wsl -d {}", container.name);
+        if matches!(server.transport, MachineTransport::Local) {
+            wsl_command
+        } else {
+            build_host_ssh_command(
+                server,
+                &["-tt"],
+                Some(&shell_single_quote(&wsl_command)),
+            )
+        }
+    } else if matches!(server.transport, MachineTransport::Local) {
         terminal_startup_command.clone()
     } else if matches!(container.kind, ManagedContainerKind::Host) {
         build_host_ssh_command(

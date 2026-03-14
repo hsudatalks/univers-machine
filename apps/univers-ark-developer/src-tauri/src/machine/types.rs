@@ -26,6 +26,7 @@ pub(super) enum ContainerManagerType {
     Lxd,
     Docker,
     Orbstack,
+    Wsl,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]

@@ -51,7 +51,7 @@ fn deploy_key_managers(server: &RemoteContainerServer) -> Vec<ContainerManagerTy
     match server.manager_type {
         ContainerManagerType::Orbstack => vec![ContainerManagerType::Orbstack],
         ContainerManagerType::Lxd => vec![ContainerManagerType::Lxd],
-        ContainerManagerType::Docker => vec![],
+        ContainerManagerType::Docker | ContainerManagerType::Wsl => vec![],
         ContainerManagerType::None => {
             vec![ContainerManagerType::Orbstack, ContainerManagerType::Lxd]
         }

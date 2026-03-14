@@ -44,7 +44,7 @@ pub(crate) fn restart_container(server_id: &str, container_name: &str) -> Result
                     "lxc restart {container_name} --force"
                 ))),
             ),
-            ContainerManagerType::None => continue,
+            ContainerManagerType::None | ContainerManagerType::Wsl => continue,
         };
 
         let output = crate::infra::shell::shell_command(&restart_command)

@@ -43,6 +43,9 @@ fn host_container_users_command(
                 "/opt/homebrew/bin/orb run -m {container_name} sh -lc {query}"
             )
         }
+        ContainerManagerType::Wsl => {
+            format!("wsl -d {container_name} -- sh -lc {query}")
+        }
         ContainerManagerType::None => return None,
     };
     let remote_command = format!(

@@ -21,6 +21,7 @@ fn default_discovery_command_for_manager(manager_type: ContainerManagerType) -> 
             "docker ps --format \"{{.Names}}\" | while read -r name; do [ -z \"$name\" ] && continue; ip=$(docker inspect -f \"{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}\" \"$name\" 2>/dev/null); printf \"%s,RUNNING,%s\\n\" \"$name\" \"$ip\"; done",
         ),
         ContainerManagerType::Orbstack => String::from("/opt/homebrew/bin/orb list --format json"),
+        ContainerManagerType::Wsl => String::from("wsl -l -v"),
     }
 }
 
@@ -39,6 +40,10 @@ fn discovery_managers(server: &RemoteContainerServer) -> Vec<ContainerManagerTyp
             // LXD is Linux-only
             if matches!(server.os, MachineOs::Linux | MachineOs::Auto) {
                 managers.push(ContainerManagerType::Lxd);
+            }
+            // WSL is Windows-only
+            if matches!(server.os, MachineOs::Windows) {
+                managers.push(ContainerManagerType::Wsl);
             }
             managers
         }
@@ -124,6 +129,7 @@ fn manager_type_label(manager_type: ContainerManagerType) -> &'static str {
         ContainerManagerType::Orbstack => "orbstack",
         ContainerManagerType::Docker => "docker",
         ContainerManagerType::Lxd => "lxd",
+        ContainerManagerType::Wsl => "wsl",
     }
 }
 
