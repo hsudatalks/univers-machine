@@ -541,45 +541,6 @@ impl MachineRepository for SqliteMachineRepository {
     }
 }
 
-impl SqliteMachineRepository {
-    fn prune_inventory_snapshots(&self, targets_file: &RawTargetsFile) -> Result<(), String> {
-        let keep_machine_ids = targets_file
-            .machines
-            .iter()
-            .map(|machine| machine.id.as_str())
-            .collect::<std::collections::HashSet<_>>();
-        let connection = self.sqlite.connect()?;
-        let mut statement = connection
-            .prepare("SELECT machine_id FROM machine_inventory_snapshots")
-            .map_err(|error| format!("Failed to prepare machine snapshot prune query: {}", error))?;
-        let machine_ids = statement
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(|error| format!("Failed to load machine snapshot ids: {}", error))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| format!("Failed to decode machine snapshot ids: {}", error))?;
-
-        for machine_id in machine_ids {
-            if keep_machine_ids.contains(machine_id.as_str()) {
-                continue;
-            }
-
-            connection
-                .execute(
-                    "DELETE FROM machine_inventory_snapshots WHERE machine_id = ?1",
-                    [&machine_id],
-                )
-                .map_err(|error| {
-                    format!(
-                        "Failed to prune stale machine inventory snapshot {}: {}",
-                        machine_id, error
-                    )
-                })?;
-        }
-
-        Ok(())
-    }
-}
-
 pub(crate) fn initialize_targets_file_path<R: Runtime>(
     app_handle: &AppHandle<R>,
 ) -> Result<std::path::PathBuf, String> {
