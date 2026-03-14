@@ -278,7 +278,7 @@ fn containers_from_scan(
                 kind: container.kind,
                 enabled: existing_entry
                     .map(|entry| entry.enabled)
-                    .unwrap_or(true),
+                    .unwrap_or(false),
                 source: container.source.clone(),
                 ssh_user: existing_entry
                     .filter(|entry| !entry.ssh_user.trim().is_empty())
