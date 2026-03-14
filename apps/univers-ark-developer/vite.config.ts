@@ -20,10 +20,10 @@ export default defineConfig(() => {
       strictPort: true,
       hmr: tauriDevHost
         ? {
-            host: tauriDevHost,
-            port: 1537,
-            protocol: "ws",
-          }
+          host: tauriDevHost,
+          port: 1537,
+          protocol: "ws",
+        }
         : undefined,
     },
     preview: {

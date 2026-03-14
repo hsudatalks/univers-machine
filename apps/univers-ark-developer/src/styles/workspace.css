@@ -13,9 +13,7 @@
   min-height: 0;
   display: grid;
   grid-template-columns:
-    minmax(var(--container-terminal-min-width), var(--container-terminal-width))
-    0.4rem
-    minmax(0, 1fr);
+    minmax(var(--container-terminal-min-width), var(--container-terminal-width)) 0.4rem minmax(0, 1fr);
   gap: 0;
   overflow: hidden;
 }
@@ -101,9 +99,9 @@
   grid-column: 3;
 }
 
-.container-workspace > .files-pane-slot,
-.container-workspace > .services-pane-slot,
-.container-workspace > .browser-panel {
+.container-workspace>.files-pane-slot,
+.container-workspace>.services-pane-slot,
+.container-workspace>.browser-panel {
   grid-column: 3;
   min-height: 0;
 }
@@ -160,7 +158,7 @@
   scroll-snap-align: start;
 }
 
-.mobile-panel-slide > * {
+.mobile-panel-slide>* {
   min-width: 0;
   min-height: 0;
 }
@@ -221,4 +219,102 @@
   .container-resizer {
     display: none;
   }
+}
+
+/* Desktop Pane (VNC) */
+.desktop-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel-muted);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.desktop-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.65rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 80%, transparent);
+  gap: 0.5rem;
+}
+
+.desktop-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--foreground);
+  opacity: 0.8;
+}
+
+.desktop-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.desktop-panel-content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.desktop-panel-content canvas {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+}
+
+.desktop-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: desktop-spin 800ms linear infinite;
+}
+
+@keyframes desktop-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.state-icon-error {
+  color: var(--destructive);
+}
+
+/* VNC Credentials */
+.desktop-credentials {
+  z-index: 10;
+}
+
+.desktop-credentials-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.desktop-credentials-input {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.82rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+  outline: none;
+  min-width: 180px;
+}
+
+.desktop-credentials-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent);
 }
