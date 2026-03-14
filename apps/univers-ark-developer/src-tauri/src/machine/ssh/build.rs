@@ -154,11 +154,8 @@ pub(crate) fn default_terminal_startup_command() -> String {
 }
 
 fn windows_terminal_startup_command() -> String {
-    // Windows OpenSSH sessions have limited environment. Read full PATH from registry
-    // to include user-installed tools (Scoop, npm global, etc.)
-    String::from(
-        "powershell -NoLogo -NoExit -Command \"$env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')\""
-    )
+    // Ensures user profile is loaded (PATH from Scoop etc.) and suppresses banner
+    String::from("powershell -NoLogo")
 }
 
 pub(crate) fn host_terminal_startup_command(server: &RemoteContainerServer) -> String {
