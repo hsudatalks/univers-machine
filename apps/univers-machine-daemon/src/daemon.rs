@@ -7,12 +7,21 @@ use axum::routing::get;
 use axum::Router;
 use std::sync::Arc;
 use tracing::info;
-use univers_daemon_core::agent::state::AgentState;
-use univers_daemon_core::api::response::ApiResponse;
-use univers_daemon_core::api::routes::{shared_routes, DaemonState};
-use univers_daemon_core::installer::InstallerRegistry;
-use univers_daemon_core::tmux::service::TmuxServiceManager;
+use univers_daemon_shared::agent::repository::SessionRepository;
+use univers_daemon_shared::agents::AgentCatalog;
+use univers_daemon_shared::api::response::ApiResponse;
+use univers_daemon_shared::api::routes::{shared_routes, DaemonState};
+use univers_daemon_shared::app::AppCatalog;
+use univers_daemon_shared::application::agent::AgentApplicationService;
+use univers_daemon_shared::application::agent_session::AgentSessionApplicationService;
+use univers_daemon_shared::application::catalog::CatalogQueryService;
+use univers_daemon_shared::application::installer::InstallerApplicationService;
+use univers_daemon_shared::application::workspace::WorkspaceApplicationService;
+use univers_daemon_shared::installer::InstallerRegistry;
+use univers_daemon_shared::tmux::workspace::WorkspaceManager;
+use univers_infra_sqlite::SqliteSessionRepository;
 
+use crate::application::machine::MachineApplicationService;
 use crate::machine::{MachineInfo, NetworkInterface};
 
 /// Extended state for machine-daemon (includes auth token).
@@ -23,14 +32,31 @@ pub struct MachineDaemonState {
 }
 
 pub async fn run_daemon(port: u16, auth_token: Option<String>) -> anyhow::Result<()> {
-    let agent_state = AgentState::new();
-    let tmux_manager = Arc::new(TmuxServiceManager::new());
+    let session_repository: Arc<dyn SessionRepository> = Arc::new(SqliteSessionRepository::new());
+    let agent_sessions = Arc::new(AgentSessionApplicationService::new(session_repository));
+    let workspace_manager = Arc::new(WorkspaceManager::for_machine());
+    let app_catalog = Arc::new(AppCatalog::new());
+    let agent_catalog = Arc::new(AgentCatalog::new());
     let installer_registry = Arc::new(InstallerRegistry::with_defaults());
+    let workspace_service = Arc::new(WorkspaceApplicationService::new(workspace_manager));
+    let catalog_service = Arc::new(CatalogQueryService::new(
+        app_catalog,
+        agent_catalog,
+        installer_registry.clone(),
+        agent_sessions.clone(),
+    ));
+    let agent_service = Arc::new(AgentApplicationService::new(
+        catalog_service.clone(),
+        workspace_service.clone(),
+    ));
+    let installer_service = Arc::new(InstallerApplicationService::new(installer_registry.clone()));
 
     let daemon_state = Arc::new(DaemonState {
-        agent_state,
-        tmux_manager,
-        installer_registry,
+        agent_sessions,
+        workspace_service,
+        catalog_service,
+        agent_service,
+        installer_service,
     });
 
     let machine_state = Arc::new(MachineDaemonState {
@@ -67,11 +93,7 @@ pub async fn run_daemon(port: u16, auth_token: Option<String>) -> anyhow::Result
     Ok(())
 }
 
-async fn auth_middleware(
-    req: Request<Body>,
-    next: Next,
-    expected_token: Arc<String>,
-) -> Response {
+async fn auth_middleware(req: Request<Body>, next: Next, expected_token: Arc<String>) -> Response {
     // Allow health checks without auth
     if req.uri().path() == "/health" {
         return next.run(req).await;
@@ -88,8 +110,8 @@ async fn auth_middleware(
             if token == expected_token.as_str() {
                 return next.run(req).await;
             }
-            let body = serde_json::to_string(&ApiResponse::<()>::err("Invalid token"))
-                .unwrap_or_default();
+            let body =
+                serde_json::to_string(&ApiResponse::<()>::err("Invalid token")).unwrap_or_default();
             Response::builder()
                 .status(StatusCode::UNAUTHORIZED)
                 .header(header::CONTENT_TYPE, "application/json")
@@ -113,11 +135,13 @@ async fn auth_middleware(
 async fn get_machine_info(
     State(_state): State<Arc<MachineDaemonState>>,
 ) -> Json<ApiResponse<MachineInfo>> {
-    Json(ApiResponse::ok(MachineInfo::collect()))
+    let service = MachineApplicationService::new();
+    Json(ApiResponse::ok(service.info()))
 }
 
 async fn get_network_interfaces(
     State(_state): State<Arc<MachineDaemonState>>,
 ) -> Json<ApiResponse<Vec<NetworkInterface>>> {
-    Json(ApiResponse::ok(NetworkInterface::list()))
+    let service = MachineApplicationService::new();
+    Json(ApiResponse::ok(service.network_interfaces()))
 }

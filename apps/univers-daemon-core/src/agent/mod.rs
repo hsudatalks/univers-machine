@@ -1,3 +1,3 @@
-pub mod db;
-pub mod event;
 pub mod state;
+
+pub use univers_ark_kernel::agent::{event, projector, repository};

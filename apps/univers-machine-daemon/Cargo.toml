@@ -5,7 +5,8 @@ edition = "2021"
 description = "Machine daemon for remote management: system info, agent monitoring, tmux services, software installation"
 
 [dependencies]
-univers-daemon-core = { path = "../univers-daemon-core" }
+univers-daemon-shared = { path = "../univers-daemon-core" }
+univers-infra-sqlite = { path = "../../crates/univers-infra-sqlite" }
 axum = "0.7"
 clap = { version = "4", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }

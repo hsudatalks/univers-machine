@@ -1,15 +1,15 @@
+use crate::application::container_runtime::ContainerRuntimeApplicationService;
+use crate::application::daemon_service::DaemonServiceApplicationService;
+use crate::application::dashboard::ContainerDashboardApplicationService;
 use crate::container::{
-    collect_ports, ContainerInfo, ContainerProcessesInfo, ContainerRuntimeInfo,
+    ContainerInfo, ContainerPortInfo, ContainerProcessesInfo, ContainerRuntimeInfo,
 };
 use crate::dashboard::{
-    collect_agent, collect_dashboard, collect_project, collect_services, collect_tmux,
     ContainerDashboard, DashboardAgentInfo, DashboardProjectInfo, DashboardRequest,
     DashboardServiceInfo, DashboardTmuxInfo,
 };
 use crate::self_daemon::{
-    collect_daemon_info, collect_service_logs, collect_service_status, collect_service_unit_file,
-    install_service, record_process_start, restart_service, start_service, stop_service,
-    uninstall_service, update_service, DaemonInfo, DaemonServiceLogs, DaemonServiceLogsQuery,
+    record_process_start, DaemonInfo, DaemonServiceLogs, DaemonServiceLogsQuery,
     DaemonServiceMutationResult, DaemonServiceStatus, DaemonServiceUnitFile,
     InstallDaemonServiceRequest, UpdateDaemonServiceRequest,
 };
@@ -21,23 +21,48 @@ use axum::{
 };
 use std::sync::Arc;
 use tracing::info;
-use univers_daemon_core::agent::state::AgentState;
-use univers_daemon_core::api::response::ApiResponse;
-use univers_daemon_core::api::routes::{legacy_compat_routes, shared_routes, DaemonState};
-use univers_daemon_core::installer::InstallerRegistry;
-use univers_daemon_core::tmux::service::TmuxServiceManager;
+use univers_daemon_shared::agent::repository::SessionRepository;
+use univers_daemon_shared::agents::AgentCatalog;
+use univers_daemon_shared::api::response::ApiResponse;
+use univers_daemon_shared::api::routes::{legacy_compat_routes, shared_routes, DaemonState};
+use univers_daemon_shared::app::AppCatalog;
+use univers_daemon_shared::application::agent::AgentApplicationService;
+use univers_daemon_shared::application::agent_session::AgentSessionApplicationService;
+use univers_daemon_shared::application::catalog::CatalogQueryService;
+use univers_daemon_shared::application::installer::InstallerApplicationService;
+use univers_daemon_shared::application::workspace::WorkspaceApplicationService;
+use univers_daemon_shared::installer::InstallerRegistry;
+use univers_daemon_shared::tmux::workspace::WorkspaceManager;
+use univers_infra_sqlite::SqliteSessionRepository;
 
 pub async fn run_daemon(port: u16) -> anyhow::Result<()> {
     record_process_start(port);
 
-    let agent_state = AgentState::new();
-    let tmux_manager = Arc::new(TmuxServiceManager::for_container());
+    let session_repository: Arc<dyn SessionRepository> = Arc::new(SqliteSessionRepository::new());
+    let agent_sessions = Arc::new(AgentSessionApplicationService::new(session_repository));
+    let workspace_manager = Arc::new(WorkspaceManager::for_container());
+    let app_catalog = Arc::new(AppCatalog::new());
+    let agent_catalog = Arc::new(AgentCatalog::new());
     let installer_registry = Arc::new(InstallerRegistry::with_defaults());
+    let workspace_service = Arc::new(WorkspaceApplicationService::new(workspace_manager));
+    let catalog_service = Arc::new(CatalogQueryService::new(
+        app_catalog,
+        agent_catalog,
+        installer_registry.clone(),
+        agent_sessions.clone(),
+    ));
+    let agent_service = Arc::new(AgentApplicationService::new(
+        catalog_service.clone(),
+        workspace_service.clone(),
+    ));
+    let installer_service = Arc::new(InstallerApplicationService::new(installer_registry.clone()));
 
     let daemon_state = Arc::new(DaemonState {
-        agent_state,
-        tmux_manager,
-        installer_registry,
+        agent_sessions,
+        workspace_service,
+        catalog_service,
+        agent_service,
+        installer_service,
     });
 
     let app = Router::new()
@@ -54,7 +79,10 @@ pub async fn run_daemon(port: u16) -> anyhow::Result<()> {
         .route("/api/daemon", get(get_daemon_info))
         .route("/api/daemon/service", get(get_daemon_service_status))
         .route("/api/daemon/service/logs", get(get_daemon_service_logs))
-        .route("/api/daemon/service/unit", get(get_daemon_service_unit_file))
+        .route(
+            "/api/daemon/service/unit",
+            get(get_daemon_service_unit_file),
+        )
         .route("/api/daemon/service/install", post(install_daemon_service))
         .route("/api/daemon/service/update", post(update_daemon_service))
         .route("/api/daemon/service/start", post(start_daemon_service))
@@ -82,52 +110,68 @@ pub async fn run_daemon(port: u16) -> anyhow::Result<()> {
 async fn get_container_info(
     State(_state): State<Arc<DaemonState>>,
 ) -> Json<ApiResponse<ContainerInfo>> {
-    Json(ApiResponse::ok(ContainerInfo::collect()))
+    let service = ContainerRuntimeApplicationService::new();
+    Json(ApiResponse::ok(service.info()))
 }
 
 async fn get_container_runtime(
     State(_state): State<Arc<DaemonState>>,
 ) -> Json<ApiResponse<ContainerRuntimeInfo>> {
-    Json(ApiResponse::ok(ContainerRuntimeInfo::collect()))
+    let service = ContainerRuntimeApplicationService::new();
+    Json(ApiResponse::ok(service.runtime()))
 }
 
 async fn get_container_processes(
     State(_state): State<Arc<DaemonState>>,
 ) -> Json<ApiResponse<ContainerProcessesInfo>> {
-    Json(ApiResponse::ok(ContainerProcessesInfo::collect()))
+    let service = ContainerRuntimeApplicationService::new();
+    Json(ApiResponse::ok(service.processes()))
 }
 
 async fn get_container_ports(
     State(_state): State<Arc<DaemonState>>,
-) -> Json<ApiResponse<Vec<crate::container::ContainerPortInfo>>> {
-    Json(ApiResponse::ok(collect_ports()))
+) -> Json<ApiResponse<Vec<ContainerPortInfo>>> {
+    let service = ContainerRuntimeApplicationService::new();
+    Json(ApiResponse::ok(service.ports()))
 }
 
 async fn get_container_dashboard(
     State(state): State<Arc<DaemonState>>,
     Json(request): Json<DashboardRequest>,
 ) -> Json<ApiResponse<ContainerDashboard>> {
-    match collect_dashboard(request, state.agent_state.clone()).await {
+    let service = ContainerDashboardApplicationService::new(
+        state.agent_sessions.clone(),
+        state.workspace_service.clone(),
+    );
+    match service.dashboard(request).await {
         Ok(dashboard) => Json(ApiResponse::ok(dashboard)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
 }
 
 async fn get_container_project(
-    State(_state): State<Arc<DaemonState>>,
+    State(state): State<Arc<DaemonState>>,
     Json(request): Json<DashboardRequest>,
 ) -> Json<ApiResponse<DashboardProjectInfo>> {
-    match collect_project(request).await {
+    let service = ContainerDashboardApplicationService::new(
+        state.agent_sessions.clone(),
+        state.workspace_service.clone(),
+    );
+    match service.project(request).await {
         Ok(project) => Json(ApiResponse::ok(project)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
 }
 
 async fn get_container_services(
-    State(_state): State<Arc<DaemonState>>,
+    State(state): State<Arc<DaemonState>>,
     Json(request): Json<DashboardRequest>,
 ) -> Json<ApiResponse<Vec<DashboardServiceInfo>>> {
-    match collect_services(request).await {
+    let service = ContainerDashboardApplicationService::new(
+        state.agent_sessions.clone(),
+        state.workspace_service.clone(),
+    );
+    match service.services(request).await {
         Ok(services) => Json(ApiResponse::ok(services)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
@@ -137,30 +181,40 @@ async fn get_container_agent(
     State(state): State<Arc<DaemonState>>,
     Json(request): Json<DashboardRequest>,
 ) -> Json<ApiResponse<DashboardAgentInfo>> {
-    match collect_agent(request, state.agent_state.clone()).await {
+    let service = ContainerDashboardApplicationService::new(
+        state.agent_sessions.clone(),
+        state.workspace_service.clone(),
+    );
+    match service.agent(request).await {
         Ok(agent) => Json(ApiResponse::ok(agent)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
 }
 
 async fn get_container_tmux(
-    State(_state): State<Arc<DaemonState>>,
+    State(state): State<Arc<DaemonState>>,
     Json(request): Json<DashboardRequest>,
 ) -> Json<ApiResponse<DashboardTmuxInfo>> {
-    match collect_tmux(request).await {
+    let service = ContainerDashboardApplicationService::new(
+        state.agent_sessions.clone(),
+        state.workspace_service.clone(),
+    );
+    match service.tmux(request).await {
         Ok(tmux) => Json(ApiResponse::ok(tmux)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
 }
 
 async fn get_daemon_info(State(_state): State<Arc<DaemonState>>) -> Json<ApiResponse<DaemonInfo>> {
-    Json(ApiResponse::ok(collect_daemon_info()))
+    let service = DaemonServiceApplicationService::new();
+    Json(ApiResponse::ok(service.info()))
 }
 
 async fn get_daemon_service_status(
     State(_state): State<Arc<DaemonState>>,
 ) -> Json<ApiResponse<DaemonServiceStatus>> {
-    Json(ApiResponse::ok(collect_service_status()))
+    let service = DaemonServiceApplicationService::new();
+    Json(ApiResponse::ok(service.service_status()))
 }
 
 async fn get_daemon_service_logs(
@@ -168,7 +222,8 @@ async fn get_daemon_service_logs(
     Query(query): Query<DaemonServiceLogsQuery>,
 ) -> Json<ApiResponse<DaemonServiceLogs>> {
     let lines = query.lines.unwrap_or(100);
-    match collect_service_logs(lines).await {
+    let service = DaemonServiceApplicationService::new();
+    match service.service_logs(lines).await {
         Ok(logs) => Json(ApiResponse::ok(logs)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
@@ -177,7 +232,8 @@ async fn get_daemon_service_logs(
 async fn get_daemon_service_unit_file(
     State(_state): State<Arc<DaemonState>>,
 ) -> Json<ApiResponse<DaemonServiceUnitFile>> {
-    match collect_service_unit_file().await {
+    let service = DaemonServiceApplicationService::new();
+    match service.service_unit_file().await {
         Ok(unit) => Json(ApiResponse::ok(unit)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
@@ -187,7 +243,8 @@ async fn install_daemon_service(
     State(_state): State<Arc<DaemonState>>,
     Json(request): Json<InstallDaemonServiceRequest>,
 ) -> Json<ApiResponse<DaemonServiceMutationResult>> {
-    match install_service(request).await {
+    let service = DaemonServiceApplicationService::new();
+    match service.install_service(request).await {
         Ok(result) => Json(ApiResponse::ok(result)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
@@ -197,7 +254,8 @@ async fn update_daemon_service(
     State(_state): State<Arc<DaemonState>>,
     Json(request): Json<UpdateDaemonServiceRequest>,
 ) -> Json<ApiResponse<DaemonServiceMutationResult>> {
-    match update_service(request).await {
+    let service = DaemonServiceApplicationService::new();
+    match service.update_service(request).await {
         Ok(result) => Json(ApiResponse::ok(result)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
@@ -206,7 +264,8 @@ async fn update_daemon_service(
 async fn start_daemon_service(
     State(_state): State<Arc<DaemonState>>,
 ) -> Json<ApiResponse<DaemonServiceMutationResult>> {
-    match start_service().await {
+    let service = DaemonServiceApplicationService::new();
+    match service.start_service().await {
         Ok(result) => Json(ApiResponse::ok(result)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
@@ -215,7 +274,8 @@ async fn start_daemon_service(
 async fn stop_daemon_service(
     State(_state): State<Arc<DaemonState>>,
 ) -> Json<ApiResponse<DaemonServiceMutationResult>> {
-    match stop_service().await {
+    let service = DaemonServiceApplicationService::new();
+    match service.stop_service().await {
         Ok(result) => Json(ApiResponse::ok(result)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
@@ -224,7 +284,8 @@ async fn stop_daemon_service(
 async fn restart_daemon_service(
     State(_state): State<Arc<DaemonState>>,
 ) -> Json<ApiResponse<DaemonServiceMutationResult>> {
-    match restart_service().await {
+    let service = DaemonServiceApplicationService::new();
+    match service.restart_service().await {
         Ok(result) => Json(ApiResponse::ok(result)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }
@@ -233,7 +294,8 @@ async fn restart_daemon_service(
 async fn uninstall_daemon_service(
     State(_state): State<Arc<DaemonState>>,
 ) -> Json<ApiResponse<DaemonServiceMutationResult>> {
-    match uninstall_service().await {
+    let service = DaemonServiceApplicationService::new();
+    match service.uninstall_service().await {
         Ok(result) => Json(ApiResponse::ok(result)),
         Err(error) => Json(ApiResponse::err(error.to_string())),
     }

@@ -5,4 +5,9 @@ members = [
     "apps/univers-container-daemon",
     "apps/univers-daemon-core",
     "apps/univers-machine-daemon",
+    "crates/univers-ark-kernel",
+    "crates/univers-infra-sqlite",
+    "crates/univers-infra-systemd",
+    "crates/univers-infra-tmux",
+    "crates/univers-infra-workspace",
 ]

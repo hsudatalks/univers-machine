@@ -1,19 +1,22 @@
+mod application;
 mod container;
 mod daemon;
 mod dashboard;
 mod self_daemon;
 mod status;
 
+use application::daemon_service::DaemonServiceApplicationService;
 use clap::{Parser, Subcommand};
 use self_daemon::{
-    collect_daemon_info, collect_service_logs, collect_service_status, collect_service_unit_file,
-    install_service, restart_service, start_service, stop_service, uninstall_service,
-    update_service, DaemonServiceLogs, DaemonServiceMutationResult, DaemonServiceStatus,
-    DaemonServiceUnitFile, InstallDaemonServiceRequest, UpdateDaemonServiceRequest,
+    DaemonServiceLogs, DaemonServiceMutationResult, DaemonServiceStatus, DaemonServiceUnitFile,
+    InstallDaemonServiceRequest, UpdateDaemonServiceRequest,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use univers_daemon_core::agent::db::Db;
-use univers_daemon_core::agent::event::HookEvent;
+use univers_daemon_shared::agent::event::HookEvent;
+use univers_daemon_shared::agent::repository::SessionRepository;
+use univers_daemon_shared::application::installer::InstallerApplicationService;
+use univers_daemon_shared::installer::InstallerRegistry;
+use univers_infra_sqlite::SqliteSessionRepository;
 
 const DEFAULT_DAEMON_PORT: u16 = 3100;
 
@@ -230,13 +233,8 @@ async fn main() {
             }
         }
         Commands::Clean { hours } => {
-            let result = tokio::task::spawn_blocking(move || {
-                let db = Db::open().map_err(|e| anyhow::anyhow!("{e}"))?;
-                let n = db.clean_old(hours).map_err(|e| anyhow::anyhow!("{e}"))?;
-                Ok::<_, anyhow::Error>(n)
-            })
-            .await;
-            match result {
+            let repository = SqliteSessionRepository::new();
+            match tokio::task::spawn_blocking(move || repository.clean_old(hours)).await {
                 Ok(Ok(n)) => println!("Cleaned {n} ended session(s) older than {hours}h."),
                 Ok(Err(e)) => {
                     eprintln!("Error: {e}");
@@ -293,43 +291,19 @@ async fn handle_event_cmd(port: u16) -> anyhow::Result<()> {
     }
 
     // Fallback: write directly to SQLite
-    let cwd = ev.cwd.as_deref().unwrap_or("unknown").to_owned();
-    let event_name = ev.event_name().to_owned();
-    let status_val = ev.status().to_owned();
-    let tool_name = ev.tool_name.clone();
-    let tool_input = ev.tool_input_summary();
-    let session_id = ev.session_id.clone();
-
-    tokio::task::spawn_blocking(move || {
-        let db = Db::open().map_err(|e| anyhow::anyhow!("{e}"))?;
-        db.upsert_session(
-            &session_id,
-            &cwd,
-            &status_val,
-            &event_name,
-            tool_name.as_deref(),
-        )
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-        db.insert_event(
-            &session_id,
-            &event_name,
-            tool_name.as_deref(),
-            tool_input.as_deref(),
-        )
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-        Ok::<_, anyhow::Error>(())
-    })
-    .await??;
+    let repository = SqliteSessionRepository::new();
+    tokio::task::spawn_blocking(move || repository.persist_event(&ev)).await??;
 
     Ok(())
 }
 
 async fn handle_install_cmd(name: &str, run: bool) -> anyhow::Result<()> {
-    let registry = univers_daemon_core::installer::InstallerRegistry::with_defaults();
+    let registry = std::sync::Arc::new(InstallerRegistry::with_defaults());
+    let service = InstallerApplicationService::new(registry);
 
     if run {
         println!("Installing {name}...");
-        let result = registry.install(name).await?;
+        let result = service.install(name).await?;
         if result.success {
             println!(
                 "Success: {}{}",
@@ -344,7 +318,7 @@ async fn handle_install_cmd(name: &str, run: bool) -> anyhow::Result<()> {
             std::process::exit(1);
         }
     } else {
-        let status = registry.check_status(name).await?;
+        let status = service.installer_status(name).await?;
         if status.installed {
             println!(
                 "{name}: installed{}",
@@ -362,7 +336,8 @@ async fn handle_install_cmd(name: &str, run: bool) -> anyhow::Result<()> {
 }
 
 fn handle_info_cmd(json: bool) -> anyhow::Result<()> {
-    let info = collect_daemon_info();
+    let service = DaemonServiceApplicationService::new();
+    let info = service.info();
     if json {
         println!("{}", serde_json::to_string_pretty(&info)?);
     } else {
@@ -383,9 +358,10 @@ fn handle_info_cmd(json: bool) -> anyhow::Result<()> {
 }
 
 async fn handle_service_cmd(command: ServiceCommands) -> anyhow::Result<()> {
+    let service = DaemonServiceApplicationService::new();
     match command {
         ServiceCommands::Status { json } => {
-            let status = collect_service_status();
+            let status = service.service_status();
             if json {
                 println!("{}", serde_json::to_string_pretty(&status)?);
             } else {
@@ -393,11 +369,11 @@ async fn handle_service_cmd(command: ServiceCommands) -> anyhow::Result<()> {
             }
         }
         ServiceCommands::Logs { lines, json } => {
-            let logs = collect_service_logs(lines).await?;
+            let logs = service.service_logs(lines).await?;
             print_service_logs(&logs, json)?;
         }
         ServiceCommands::Cat { json } => {
-            let unit = collect_service_unit_file().await?;
+            let unit = service.service_unit_file().await?;
             print_service_unit_file(&unit, json)?;
         }
         ServiceCommands::Install {
@@ -409,15 +385,16 @@ async fn handle_service_cmd(command: ServiceCommands) -> anyhow::Result<()> {
             no_start,
             json,
         } => {
-            let result = install_service(InstallDaemonServiceRequest {
-                binary_path,
-                working_directory,
-                port: Some(port),
-                log_level,
-                enable: Some(!no_enable),
-                start: Some(!no_start),
-            })
-            .await?;
+            let result = service
+                .install_service(InstallDaemonServiceRequest {
+                    binary_path,
+                    working_directory,
+                    port: Some(port),
+                    log_level,
+                    enable: Some(!no_enable),
+                    start: Some(!no_start),
+                })
+                .await?;
             print_service_mutation_result(&result, json)?;
         }
         ServiceCommands::Update {
@@ -431,31 +408,32 @@ async fn handle_service_cmd(command: ServiceCommands) -> anyhow::Result<()> {
             no_restart,
             json,
         } => {
-            let result = update_service(UpdateDaemonServiceRequest {
-                binary_path,
-                working_directory,
-                port,
-                log_level,
-                enable: select_optional_bool(enable, disable),
-                restart: select_optional_bool(restart, no_restart),
-            })
-            .await?;
+            let result = service
+                .update_service(UpdateDaemonServiceRequest {
+                    binary_path,
+                    working_directory,
+                    port,
+                    log_level,
+                    enable: select_optional_bool(enable, disable),
+                    restart: select_optional_bool(restart, no_restart),
+                })
+                .await?;
             print_service_mutation_result(&result, json)?;
         }
         ServiceCommands::Start { json } => {
-            let result = start_service().await?;
+            let result = service.start_service().await?;
             print_service_mutation_result(&result, json)?;
         }
         ServiceCommands::Stop { json } => {
-            let result = stop_service().await?;
+            let result = service.stop_service().await?;
             print_service_mutation_result(&result, json)?;
         }
         ServiceCommands::Restart { json } => {
-            let result = restart_service().await?;
+            let result = service.restart_service().await?;
             print_service_mutation_result(&result, json)?;
         }
         ServiceCommands::Uninstall { json } => {
-            let result = uninstall_service().await?;
+            let result = service.uninstall_service().await?;
             print_service_mutation_result(&result, json)?;
         }
     }

@@ -5,7 +5,9 @@ edition = "2021"
 description = "Container daemon for monitoring active Claude Code sessions and managing services"
 
 [dependencies]
-univers-daemon-core = { path = "../univers-daemon-core" }
+univers-daemon-shared = { path = "../univers-daemon-core" }
+univers-infra-sqlite = { path = "../../crates/univers-infra-sqlite" }
+univers-infra-systemd = { path = "../../crates/univers-infra-systemd" }
 axum = "0.7"
 clap = { version = "4", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }

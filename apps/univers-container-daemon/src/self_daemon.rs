@@ -1,9 +1,11 @@
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::OnceLock;
+use univers_infra_systemd::{
+    SystemdUserServiceManager, UserServiceLogs, UserServiceMutationResult, UserServiceStatus,
+    UserServiceUnitFile,
+};
 
 static STARTED_AT: OnceLock<String> = OnceLock::new();
 static LISTEN_PORT: OnceLock<u16> = OnceLock::new();
@@ -22,19 +24,7 @@ pub(crate) struct DaemonInfo {
     pub service: DaemonServiceStatus,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct DaemonServiceStatus {
-    pub manager: &'static str,
-    pub manager_available: bool,
-    pub user_session_available: bool,
-    pub unit_name: String,
-    pub unit_path: String,
-    pub installed: bool,
-    pub active: bool,
-    pub enabled: bool,
-    pub last_error: Option<String>,
-}
+pub(crate) type DaemonServiceStatus = UserServiceStatus;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,13 +48,7 @@ pub(crate) struct UpdateDaemonServiceRequest {
     pub restart: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct DaemonServiceMutationResult {
-    pub action: &'static str,
-    pub message: String,
-    pub service: DaemonServiceStatus,
-}
+pub(crate) type DaemonServiceMutationResult = UserServiceMutationResult;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -72,25 +56,9 @@ pub(crate) struct DaemonServiceLogsQuery {
     pub lines: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct DaemonServiceLogs {
-    pub unit_name: String,
-    pub lines: usize,
-    pub manager_available: bool,
-    pub user_session_available: bool,
-    pub logs_available: bool,
-    pub entries: Vec<String>,
-}
+pub(crate) type DaemonServiceLogs = UserServiceLogs;
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct DaemonServiceUnitFile {
-    pub unit_name: String,
-    pub unit_path: String,
-    pub installed: bool,
-    pub content: Option<String>,
-}
+pub(crate) type DaemonServiceUnitFile = UserServiceUnitFile;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ServiceUnitConfig {
@@ -126,46 +94,7 @@ pub(crate) fn collect_daemon_info() -> DaemonInfo {
 }
 
 pub(crate) fn collect_service_status() -> DaemonServiceStatus {
-    let unit_path = service_unit_path();
-    let installed = unit_path.exists();
-    let manager_available = systemctl_exists();
-    let user_session_available = if manager_available {
-        systemctl_user_available()
-    } else {
-        false
-    };
-
-    let mut active = false;
-    let mut enabled = false;
-    let mut last_error = None;
-
-    if installed && manager_available && user_session_available {
-        match systemctl_bool(["is-active", UNIT_NAME]) {
-            Ok(value) => active = value,
-            Err(error) => last_error = Some(error.to_string()),
-        }
-
-        match systemctl_bool(["is-enabled", UNIT_NAME]) {
-            Ok(value) => enabled = value,
-            Err(error) if last_error.is_none() => last_error = Some(error.to_string()),
-            Err(_) => {}
-        }
-    } else if installed && manager_available && !user_session_available {
-        last_error =
-            Some("systemctl --user is installed but no user service manager is available".into());
-    }
-
-    DaemonServiceStatus {
-        manager: "systemd-user",
-        manager_available,
-        user_session_available,
-        unit_name: UNIT_NAME.into(),
-        unit_path: unit_path.display().to_string(),
-        installed,
-        active,
-        enabled,
-        last_error,
-    }
+    systemd().status(UNIT_NAME)
 }
 
 pub(crate) async fn install_service(
@@ -207,8 +136,7 @@ pub(crate) async fn collect_service_unit_file() -> Result<DaemonServiceUnitFile>
 fn install_service_blocking(
     request: InstallDaemonServiceRequest,
 ) -> Result<DaemonServiceMutationResult> {
-    ensure_user_systemd()?;
-    let unit_path = service_unit_path();
+    systemd().ensure_available()?;
     let config = ServiceUnitConfig {
         binary_path: resolve_binary_path(request.binary_path.as_deref())?,
         working_directory: resolve_working_directory(request.working_directory.as_deref())?,
@@ -218,17 +146,20 @@ fn install_service_blocking(
             .unwrap_or(3100),
         log_level: request.log_level.unwrap_or_else(|| "info".into()),
     };
-    write_service_unit(&config)?;
-
     let enable = request.enable.unwrap_or(true);
     let start = request.start.unwrap_or(true);
-
+    let unit = render_unit_file(
+        &config.binary_path,
+        &config.working_directory,
+        config.port,
+        &config.log_level,
+    );
+    let unit_path = systemd().write_unit_file(UNIT_NAME, &unit)?;
     if enable {
-        run_systemctl(["enable", UNIT_NAME])?;
+        systemd().set_enabled(UNIT_NAME, true)?;
     }
-
     if start {
-        run_systemctl(["start", UNIT_NAME])?;
+        systemd().run_action(UNIT_NAME, "start")?;
     }
 
     Ok(DaemonServiceMutationResult {
@@ -241,17 +172,17 @@ fn install_service_blocking(
 fn update_service_blocking(
     request: UpdateDaemonServiceRequest,
 ) -> Result<DaemonServiceMutationResult> {
-    ensure_user_systemd()?;
+    systemd().ensure_available()?;
 
     let unit = collect_service_unit_file_blocking()?;
     if !unit.installed {
-        return Err(anyhow!("{UNIT_NAME} is not installed"));
+        return Err(anyhow!("{} is not installed", UNIT_NAME));
     }
 
     let current_config = parse_unit_config(
         unit.content
             .as_deref()
-            .ok_or_else(|| anyhow!("{UNIT_NAME} is missing content"))?,
+            .ok_or_else(|| anyhow!("{} is missing content", UNIT_NAME))?,
     )?;
     let current_status = collect_service_status();
     let binary_path = request
@@ -268,160 +199,50 @@ fn update_service_blocking(
         log_level: request.log_level.unwrap_or(current_config.log_level),
     };
 
-    write_service_unit(&config)?;
+    let unit_content = render_unit_file(
+        &config.binary_path,
+        &config.working_directory,
+        config.port,
+        &config.log_level,
+    );
+    let unit_file = systemd().write_unit_file(UNIT_NAME, &unit_content)?;
 
     match request.enable {
-        Some(true) => run_systemctl(["enable", UNIT_NAME])?,
-        Some(false) if current_status.enabled => run_systemctl(["disable", UNIT_NAME])?,
+        Some(true) => systemd().set_enabled(UNIT_NAME, true)?,
+        Some(false) if current_status.enabled => systemd().set_enabled(UNIT_NAME, false)?,
         _ => {}
     }
 
     let should_restart = request.restart.unwrap_or(current_status.active);
     if should_restart {
         if current_status.active {
-            run_systemctl(["restart", UNIT_NAME])?;
+            systemd().run_action(UNIT_NAME, "restart")?;
         } else {
-            run_systemctl(["start", UNIT_NAME])?;
+            systemd().run_action(UNIT_NAME, "start")?;
         }
     }
 
     Ok(DaemonServiceMutationResult {
         action: "update",
-        message: format!("Updated {}", unit.unit_path),
+        message: format!("Updated {}", unit_file.display()),
         service: collect_service_status(),
     })
 }
 
 fn uninstall_service_blocking() -> Result<DaemonServiceMutationResult> {
-    ensure_user_systemd()?;
-
-    let unit_path = service_unit_path();
-    if unit_path.exists() {
-        let _ = run_systemctl(["disable", "--now", UNIT_NAME]);
-        std::fs::remove_file(&unit_path)
-            .with_context(|| format!("Failed to remove {}", unit_path.display()))?;
-        run_systemctl(["daemon-reload"])?;
-    }
-
-    Ok(DaemonServiceMutationResult {
-        action: "uninstall",
-        message: format!("Removed {}", unit_path.display()),
-        service: collect_service_status(),
-    })
+    systemd().uninstall(UNIT_NAME)
 }
 
 fn collect_service_logs_blocking(lines: usize) -> Result<DaemonServiceLogs> {
-    let lines = lines.clamp(1, 500);
-    let manager_available = journalctl_exists();
-    let user_session_available = if manager_available {
-        systemctl_user_available()
-    } else {
-        false
-    };
-
-    if !manager_available {
-        return Ok(DaemonServiceLogs {
-            unit_name: UNIT_NAME.into(),
-            lines,
-            manager_available,
-            user_session_available,
-            logs_available: false,
-            entries: vec![],
-        });
-    }
-
-    if !user_session_available {
-        return Err(anyhow!(
-            "journalctl is installed but no user service manager is available"
-        ));
-    }
-
-    let output = Command::new("journalctl")
-        .arg("--user")
-        .arg("-u")
-        .arg(UNIT_NAME)
-        .arg("-n")
-        .arg(lines.to_string())
-        .arg("--no-pager")
-        .arg("-o")
-        .arg("short-iso")
-        .output()
-        .context("Failed to execute journalctl")?;
-
-    if !output.status.success() {
-        return Err(anyhow!(stderr_string(&output)));
-    }
-
-    let entries = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(str::trim_end)
-        .filter(|line| !line.is_empty() && *line != "-- No entries --")
-        .map(ToOwned::to_owned)
-        .collect();
-
-    Ok(DaemonServiceLogs {
-        unit_name: UNIT_NAME.into(),
-        lines,
-        manager_available,
-        user_session_available,
-        logs_available: true,
-        entries,
-    })
+    systemd().logs(UNIT_NAME, lines)
 }
 
 fn collect_service_unit_file_blocking() -> Result<DaemonServiceUnitFile> {
-    let unit_path = service_unit_path();
-    let installed = unit_path.exists();
-    let content = if installed {
-        Some(
-            std::fs::read_to_string(&unit_path)
-                .with_context(|| format!("Failed to read {}", unit_path.display()))?,
-        )
-    } else {
-        None
-    };
-
-    Ok(DaemonServiceUnitFile {
-        unit_name: UNIT_NAME.into(),
-        unit_path: unit_path.display().to_string(),
-        installed,
-        content,
-    })
-}
-
-fn write_service_unit(config: &ServiceUnitConfig) -> Result<()> {
-    let unit_path = service_unit_path();
-    let unit_dir = unit_path
-        .parent()
-        .ok_or_else(|| anyhow!("Invalid unit file path"))?;
-    std::fs::create_dir_all(unit_dir)
-        .with_context(|| format!("Failed to create {}", unit_dir.display()))?;
-
-    let unit = render_unit_file(
-        &config.binary_path,
-        &config.working_directory,
-        config.port,
-        &config.log_level,
-    );
-    std::fs::write(&unit_path, unit)
-        .with_context(|| format!("Failed to write {}", unit_path.display()))?;
-    run_systemctl(["daemon-reload"])?;
-    Ok(())
+    systemd().unit_file(UNIT_NAME)
 }
 
 fn run_service_action(action: &'static str) -> Result<DaemonServiceMutationResult> {
-    ensure_user_systemd()?;
-
-    if !service_unit_path().exists() {
-        return Err(anyhow!("{UNIT_NAME} is not installed"));
-    }
-
-    run_systemctl([action, UNIT_NAME])?;
-    Ok(DaemonServiceMutationResult {
-        action,
-        message: format!("{action} {UNIT_NAME}"),
-        service: collect_service_status(),
-    })
+    systemd().run_action(UNIT_NAME, action)
 }
 
 fn resolve_binary_path(requested: Option<&str>) -> Result<PathBuf> {
@@ -520,100 +341,8 @@ fn unquote_systemd_value(value: &str) -> String {
     }
 }
 
-fn service_unit_path() -> PathBuf {
-    let base = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-        PathBuf::from(xdg)
-    } else {
-        home_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join(".config")
-    };
-    base.join("systemd/user").join(UNIT_NAME)
-}
-
-fn ensure_user_systemd() -> Result<()> {
-    if !systemctl_exists() {
-        return Err(anyhow!("systemctl is not installed"));
-    }
-    if !systemctl_user_available() {
-        return Err(anyhow!(
-            "systemctl --user is installed but no user service manager is available"
-        ));
-    }
-    Ok(())
-}
-
-fn systemctl_exists() -> bool {
-    Command::new("systemctl")
-        .arg("--version")
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-}
-
-fn journalctl_exists() -> bool {
-    Command::new("journalctl")
-        .arg("--version")
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-}
-
-fn systemctl_user_available() -> bool {
-    Command::new("systemctl")
-        .arg("--user")
-        .arg("show-environment")
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-}
-
-fn systemctl_bool<I, S>(args: I) -> Result<bool>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-{
-    let output = Command::new("systemctl")
-        .arg("--user")
-        .args(args)
-        .output()
-        .context("Failed to execute systemctl")?;
-
-    if output.status.success() {
-        return Ok(true);
-    }
-
-    match output.status.code() {
-        Some(1..=4) => Ok(false),
-        _ => Err(anyhow!(stderr_string(&output))),
-    }
-}
-
-fn run_systemctl<I, S>(args: I) -> Result<()>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-{
-    let output = Command::new("systemctl")
-        .arg("--user")
-        .args(args)
-        .output()
-        .context("Failed to execute systemctl")?;
-
-    if output.status.success() {
-        return Ok(());
-    }
-
-    Err(anyhow!(stderr_string(&output)))
-}
-
-fn stderr_string(output: &std::process::Output) -> String {
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if stderr.is_empty() {
-        "systemctl command failed".into()
-    } else {
-        stderr
-    }
+fn systemd() -> SystemdUserServiceManager {
+    SystemdUserServiceManager::new()
 }
 
 fn home_dir() -> Option<PathBuf> {

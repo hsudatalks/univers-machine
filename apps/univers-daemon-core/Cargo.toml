@@ -1,14 +1,14 @@
 [package]
-name = "univers-daemon-core"
+name = "univers-daemon-shared"
 version = "0.1.0"
 edition = "2021"
-description = "Shared library for univers daemon agents (system info, agent monitoring, tmux management, installer framework)"
+description = "Shared domain and application library for univers machine and container daemons"
 
 [dependencies]
 axum = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rusqlite = { version = "0.34", features = ["bundled"] }
+univers-ark-kernel = { path = "../../crates/univers-ark-kernel" }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 tokio = { version = "1", features = ["full"] }
@@ -16,3 +16,5 @@ tracing = "0.1"
 sysinfo = "0.30"
 async-trait = "0.1"
 serde_yaml = "0.9"
+univers-infra-tmux = { path = "../../crates/univers-infra-tmux" }
+univers-infra-workspace = { path = "../../crates/univers-infra-workspace" }

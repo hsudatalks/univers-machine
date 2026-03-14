@@ -4,7 +4,7 @@ use std::{
     process::Command,
 };
 use sysinfo::System;
-use univers_daemon_core::sysdetect::EnvironmentKind;
+use univers_daemon_shared::sysdetect::EnvironmentKind;
 
 const PROCESS_LIMIT: usize = 50;
 

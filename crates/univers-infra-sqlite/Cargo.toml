@@ -1,0 +1,11 @@
+[package]
+name = "univers-infra-sqlite"
+version = "0.1.0"
+edition = "2021"
+description = "SQLite infrastructure adapters for Univers"
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+rusqlite = { version = "0.34", features = ["bundled"] }
+univers-ark-kernel = { path = "../univers-ark-kernel" }

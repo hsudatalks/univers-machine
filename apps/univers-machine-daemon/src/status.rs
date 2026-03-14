@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use comfy_table::{presets::UTF8_FULL_CONDENSED, Cell, Color, Table};
-use univers_daemon_core::agent::event::SessionSnapshot;
+use univers_daemon_shared::agent::event::SessionSnapshot;
+use univers_daemon_shared::agent::repository::SessionRepository;
+use univers_infra_sqlite::SqliteSessionRepository;
 
 pub async fn show_status(
     all: bool,
@@ -56,14 +58,8 @@ async fn fetch_sessions(
 
     // Fallback to direct SQLite read
     let include_ended = all;
-    let rows = tokio::task::spawn_blocking(move || {
-        let db = univers_daemon_core::agent::db::Db::open().map_err(|e| anyhow::anyhow!("{e}"))?;
-        db.list_sessions(include_ended)
-            .map_err(|e| anyhow::anyhow!("{e}"))
-    })
-    .await??;
-
-    Ok(rows.into_iter().map(SessionSnapshot::from).collect())
+    let repository = SqliteSessionRepository::new();
+    tokio::task::spawn_blocking(move || repository.list_sessions(include_ended)).await?
 }
 
 fn print_table(sessions: &[SessionSnapshot]) {

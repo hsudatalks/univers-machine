@@ -1,11 +1,15 @@
+mod application;
 mod daemon;
 mod machine;
 mod status;
 
 use clap::{Parser, Subcommand};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use univers_daemon_core::agent::db::Db;
-use univers_daemon_core::agent::event::HookEvent;
+use univers_daemon_shared::agent::event::HookEvent;
+use univers_daemon_shared::agent::repository::SessionRepository;
+use univers_daemon_shared::application::installer::InstallerApplicationService;
+use univers_daemon_shared::installer::InstallerRegistry;
+use univers_infra_sqlite::SqliteSessionRepository;
 
 const DEFAULT_DAEMON_PORT: u16 = 3200;
 
@@ -121,13 +125,8 @@ async fn main() {
             }
         }
         Commands::Clean { hours } => {
-            let result = tokio::task::spawn_blocking(move || {
-                let db = Db::open().map_err(|e| anyhow::anyhow!("{e}"))?;
-                let n = db.clean_old(hours).map_err(|e| anyhow::anyhow!("{e}"))?;
-                Ok::<_, anyhow::Error>(n)
-            })
-            .await;
-            match result {
+            let repository = SqliteSessionRepository::new();
+            match tokio::task::spawn_blocking(move || repository.clean_old(hours)).await {
                 Ok(Ok(n)) => println!("Cleaned {n} ended session(s) older than {hours}h."),
                 Ok(Err(e)) => {
                     eprintln!("Error: {e}");
@@ -173,43 +172,19 @@ async fn handle_event_cmd(port: u16, auth_token: Option<&str>) -> anyhow::Result
     }
 
     // Fallback: write directly to SQLite
-    let cwd = ev.cwd.as_deref().unwrap_or("unknown").to_owned();
-    let event_name = ev.event_name().to_owned();
-    let status_val = ev.status().to_owned();
-    let tool_name = ev.tool_name.clone();
-    let tool_input = ev.tool_input_summary();
-    let session_id = ev.session_id.clone();
-
-    tokio::task::spawn_blocking(move || {
-        let db = Db::open().map_err(|e| anyhow::anyhow!("{e}"))?;
-        db.upsert_session(
-            &session_id,
-            &cwd,
-            &status_val,
-            &event_name,
-            tool_name.as_deref(),
-        )
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-        db.insert_event(
-            &session_id,
-            &event_name,
-            tool_name.as_deref(),
-            tool_input.as_deref(),
-        )
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-        Ok::<_, anyhow::Error>(())
-    })
-    .await??;
+    let repository = SqliteSessionRepository::new();
+    tokio::task::spawn_blocking(move || repository.persist_event(&ev)).await??;
 
     Ok(())
 }
 
 async fn handle_install_cmd(name: &str, run: bool) -> anyhow::Result<()> {
-    let registry = univers_daemon_core::installer::InstallerRegistry::with_defaults();
+    let registry = std::sync::Arc::new(InstallerRegistry::with_defaults());
+    let service = InstallerApplicationService::new(registry);
 
     if run {
         println!("Installing {name}...");
-        let result = registry.install(name).await?;
+        let result = service.install(name).await?;
         if result.success {
             println!(
                 "Success: {}{}",
@@ -224,7 +199,7 @@ async fn handle_install_cmd(name: &str, run: bool) -> anyhow::Result<()> {
             std::process::exit(1);
         }
     } else {
-        let status = registry.check_status(name).await?;
+        let status = service.installer_status(name).await?;
         if status.installed {
             println!(
                 "{name}: installed{}",

@@ -1,0 +1,9 @@
+[package]
+name = "univers-infra-systemd"
+version = "0.1.0"
+edition = "2021"
+description = "systemd user-service infrastructure adapters for Univers"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }

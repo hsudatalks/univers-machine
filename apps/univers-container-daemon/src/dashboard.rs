@@ -3,8 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    fs,
-    io,
+    fs, io,
     net::{TcpStream, ToSocketAddrs},
     path::{Path, PathBuf},
     process::Command,
@@ -12,7 +11,13 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tokio::task;
-use univers_daemon_core::agent::{event::SessionSnapshot, state::AgentState};
+use univers_daemon_shared::{
+    agent::event::SessionSnapshot,
+    application::{
+        agent_session::AgentSessionApplicationService, workspace::WorkspaceApplicationService,
+    },
+    tmux::workspace::WorkspaceStatus,
+};
 
 const DEFAULT_PROJECT_PATH: &str = "~/repos";
 const DEFAULT_HTTP_PROBE_TIMEOUT_SECS: u64 = 1;
@@ -125,25 +130,26 @@ struct AgentWorkspaceHints {
 
 pub(crate) async fn collect_dashboard(
     request: DashboardRequest,
-    agent_state: Arc<AgentState>,
+    agent_sessions: Arc<AgentSessionApplicationService>,
+    workspace_service: Arc<WorkspaceApplicationService>,
 ) -> anyhow::Result<ContainerDashboard> {
     let project_path = resolve_project_path(request.project_path.as_deref());
     let project_path_for_project = project_path.clone();
-    let project_path_for_tmux = project_path.clone();
     let project_path_for_agent = project_path.clone();
     let declared_services = request.declared_services;
 
-    let project_task = task::spawn_blocking(move || collect_project_info(&project_path_for_project));
+    let project_task =
+        task::spawn_blocking(move || collect_project_info(&project_path_for_project));
     let runtime_task = task::spawn_blocking(ContainerRuntimeInfo::collect);
-    let tmux_task = task::spawn_blocking(move || collect_tmux_info(&project_path_for_tmux));
     let hints_task =
         task::spawn_blocking(move || collect_agent_workspace_hints(&project_path_for_agent));
 
-    let sessions = agent_state.list_sessions(true).await;
+    let sessions = agent_sessions.list_sessions(true).await;
+    let workspaces = workspace_service.list_workspaces().await;
 
     let project = project_task.await??;
     let runtime = runtime_task.await?;
-    let tmux = tmux_task.await??;
+    let tmux = collect_tmux_info(workspaces);
     let hints = hints_task.await??;
     let services = collect_service_info(&project.project_path, declared_services).await;
     let agent = collect_agent_info(&project.project_path, &tmux, &sessions, hints);
@@ -176,24 +182,26 @@ pub(crate) async fn collect_services(
 }
 
 pub(crate) async fn collect_tmux(
-    request: DashboardRequest,
+    _request: DashboardRequest,
+    workspace_service: Arc<WorkspaceApplicationService>,
 ) -> anyhow::Result<DashboardTmuxInfo> {
-    let project_path = resolve_project_path(request.project_path.as_deref());
-    task::spawn_blocking(move || collect_tmux_info(&project_path)).await?
+    let workspaces = workspace_service.list_workspaces().await;
+    Ok(collect_tmux_info(workspaces))
 }
 
 pub(crate) async fn collect_agent(
     request: DashboardRequest,
-    agent_state: Arc<AgentState>,
+    agent_sessions: Arc<AgentSessionApplicationService>,
+    workspace_service: Arc<WorkspaceApplicationService>,
 ) -> anyhow::Result<DashboardAgentInfo> {
     let project_path = resolve_project_path(request.project_path.as_deref());
-    let project_path_for_tmux = project_path.clone();
     let project_path_for_agent = project_path.clone();
 
-    let tmux_task = task::spawn_blocking(move || collect_tmux_info(&project_path_for_tmux));
-    let hints_task = task::spawn_blocking(move || collect_agent_workspace_hints(&project_path_for_agent));
-    let sessions = agent_state.list_sessions(true).await;
-    let tmux = tmux_task.await??;
+    let hints_task =
+        task::spawn_blocking(move || collect_agent_workspace_hints(&project_path_for_agent));
+    let sessions = agent_sessions.list_sessions(true).await;
+    let workspaces = workspace_service.list_workspaces().await;
+    let tmux = collect_tmux_info(workspaces);
     let hints = hints_task.await??;
 
     Ok(collect_agent_info(
@@ -255,7 +263,10 @@ fn git_dirty_state(project_path: &Path) -> (bool, u64) {
     let Some(stdout) = run_git(project_path, &["status", "--porcelain"]) else {
         return (false, 0);
     };
-    let changed_files = stdout.lines().filter(|line| !line.trim().is_empty()).count() as u64;
+    let changed_files = stdout
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .count() as u64;
     (changed_files > 0, changed_files)
 }
 
@@ -398,7 +409,11 @@ fn read_env_file(path: &Path) -> HashMap<String, String> {
             let (key, value) = trimmed.split_once('=')?;
             Some((
                 key.trim().to_string(),
-                value.trim().trim_matches('"').trim_matches('\'').to_string(),
+                value
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_string(),
             ))
         })
         .collect()
@@ -423,7 +438,11 @@ async fn probe_service(
     } else {
         service.host.clone()
     };
-    let tcp_ready = tcp_reachable(&host, service.port, Duration::from_secs(DEFAULT_TCP_PROBE_TIMEOUT_SECS));
+    let tcp_ready = tcp_reachable(
+        &host,
+        service.port,
+        Duration::from_secs(DEFAULT_TCP_PROBE_TIMEOUT_SECS),
+    );
     let status = if tcp_ready { "running" } else { "down" }.to_string();
     let path_suffix = if service.path.is_empty() {
         String::new()
@@ -501,9 +520,9 @@ fn tcp_reachable(host: &str, port: u16, timeout: Duration) -> bool {
         .any(|address| TcpStream::connect_timeout(&address, timeout).is_ok())
 }
 
-fn collect_tmux_info(project_path: &Path) -> anyhow::Result<DashboardTmuxInfo> {
+fn collect_tmux_info(workspaces: Vec<WorkspaceStatus>) -> DashboardTmuxInfo {
     if !command_exists("tmux") {
-        return Ok(DashboardTmuxInfo {
+        return DashboardTmuxInfo {
             installed: false,
             server_running: false,
             session_count: 0,
@@ -511,23 +530,24 @@ fn collect_tmux_info(project_path: &Path) -> anyhow::Result<DashboardTmuxInfo> {
             active_session: None,
             active_command: None,
             sessions: Vec::new(),
-        });
+        };
     }
 
-    let default_sessions = collect_tmux_sessions(project_path, "default", &[])?;
-    let container_sessions = collect_tmux_sessions(project_path, "container", &["-L", "container"])?;
-    let mut sessions = default_sessions;
-    sessions.extend(container_sessions);
+    let sessions = workspaces
+        .into_iter()
+        .filter(|workspace| workspace.running)
+        .map(workspace_to_tmux_session)
+        .collect::<Vec<_>>();
 
     let attached_count = sessions.iter().filter(|session| session.attached).count() as u64;
     let preferred_session = sessions
         .iter()
-        .find(|session| session.attached && session.server == "default")
+        .find(|session| session.attached)
         .or_else(|| sessions.iter().find(|session| session.attached))
         .or_else(|| sessions.first())
         .cloned();
 
-    Ok(DashboardTmuxInfo {
+    DashboardTmuxInfo {
         installed: true,
         server_running: !sessions.is_empty(),
         session_count: sessions.len() as u64,
@@ -537,100 +557,23 @@ fn collect_tmux_info(project_path: &Path) -> anyhow::Result<DashboardTmuxInfo> {
             .map(|session| format!("{} · {}", session.server, session.name)),
         active_command: preferred_session.and_then(|session| session.active_command),
         sessions,
-    })
+    }
 }
 
-fn collect_tmux_sessions(
-    project_path: &Path,
-    server_label: &str,
-    extra_args: &[&str],
-) -> anyhow::Result<Vec<DashboardTmuxSessionInfo>> {
-    let current_dir = if project_path.is_dir() {
-        project_path
-    } else {
-        Path::new("/")
-    };
-    let session_output = Command::new("tmux")
-        .args(extra_args)
-        .args([
-            "list-sessions",
-            "-F",
-            "#{session_name}\t#{session_windows}\t#{?session_attached,1,0}",
-        ])
-        .current_dir(current_dir)
-        .output()?;
-    if !session_output.status.success() {
-        return Ok(Vec::new());
+fn workspace_to_tmux_session(workspace: WorkspaceStatus) -> DashboardTmuxSessionInfo {
+    DashboardTmuxSessionInfo {
+        server: workspace
+            .tmux_server
+            .unwrap_or_else(|| String::from("default")),
+        name: workspace.id,
+        windows: workspace
+            .windows
+            .iter()
+            .filter(|window| window.running)
+            .count() as u64,
+        attached: workspace.attached,
+        active_command: workspace.active_command,
     }
-
-    let pane_output = Command::new("tmux")
-        .args(extra_args)
-        .args([
-            "list-panes",
-            "-a",
-            "-F",
-            "#{session_name}\t#{?pane_active,1,0}\t#{pane_current_command}",
-        ])
-        .current_dir(current_dir)
-        .output()?;
-
-    let pane_commands = if pane_output.status.success() {
-        parse_tmux_pane_commands(&String::from_utf8_lossy(&pane_output.stdout))
-    } else {
-        HashMap::new()
-    };
-
-    Ok(String::from_utf8_lossy(&session_output.stdout)
-        .lines()
-        .filter_map(|line| parse_tmux_session_line(server_label, line, &pane_commands))
-        .collect())
-}
-
-fn parse_tmux_pane_commands(output: &str) -> HashMap<String, String> {
-    let mut pane_by_session = HashMap::new();
-    for line in output.lines() {
-        let parts: Vec<&str> = line.split('\t').collect();
-        if parts.len() < 3 {
-            continue;
-        }
-
-        let session_name = parts[0].trim();
-        let is_active = parts[1].trim() == "1";
-        let current_command = parts[2].trim();
-        if session_name.is_empty() || current_command.is_empty() {
-            continue;
-        }
-
-        if is_active || !pane_by_session.contains_key(session_name) {
-            pane_by_session.insert(session_name.to_string(), current_command.to_string());
-        }
-    }
-
-    pane_by_session
-}
-
-fn parse_tmux_session_line(
-    server_label: &str,
-    line: &str,
-    pane_commands: &HashMap<String, String>,
-) -> Option<DashboardTmuxSessionInfo> {
-    let parts: Vec<&str> = line.split('\t').collect();
-    if parts.len() < 3 {
-        return None;
-    }
-
-    let name = parts[0].trim();
-    if name.is_empty() {
-        return None;
-    }
-
-    Some(DashboardTmuxSessionInfo {
-        server: server_label.to_string(),
-        name: name.to_string(),
-        windows: parts[1].trim().parse::<u64>().ok().unwrap_or(0),
-        attached: parts[2].trim() == "1",
-        active_command: pane_commands.get(name).cloned(),
-    })
 }
 
 fn command_exists(command: &str) -> bool {
@@ -675,7 +618,11 @@ fn collect_latest_agent_marker(
             .map(|(_, _, current)| modified_at > *current)
             .unwrap_or(true);
         if should_replace {
-            latest = Some((relative_path.to_string(), agent_name.to_string(), modified_at));
+            latest = Some((
+                relative_path.to_string(),
+                agent_name.to_string(),
+                modified_at,
+            ));
         }
     }
 
@@ -771,7 +718,10 @@ fn collect_agent_info(
         .unwrap_or_default()
         .to_ascii_lowercase();
 
-    let latest_report = hints.latest_report.as_ref().map(|entry| entry.relative_path.clone());
+    let latest_report = hints
+        .latest_report
+        .as_ref()
+        .map(|entry| entry.relative_path.clone());
     let latest_report_updated_at = hints
         .latest_report
         .as_ref()
@@ -861,7 +811,10 @@ fn collect_agent_info(
     }
 }
 
-fn select_scoped_sessions(project_path: &str, sessions: &[SessionSnapshot]) -> Vec<SessionSnapshot> {
+fn select_scoped_sessions(
+    project_path: &str,
+    sessions: &[SessionSnapshot],
+) -> Vec<SessionSnapshot> {
     let normalized_project = project_path.trim_end_matches('/').to_string();
     let matching_sessions: Vec<SessionSnapshot> = sessions
         .iter()
@@ -890,7 +843,7 @@ mod tests {
         build_http_probe_url, expand_home_path, parse_tmux_pane_commands, parse_tmux_session_line,
         select_scoped_sessions, DashboardTmuxSessionInfo,
     };
-    use univers_daemon_core::agent::event::SessionSnapshot;
+    use univers_daemon_shared::agent::event::SessionSnapshot;
 
     #[test]
     fn expands_home_paths() {
@@ -917,8 +870,8 @@ mod tests {
     #[test]
     fn parses_tmux_sessions() {
         let panes = parse_tmux_pane_commands("dev\t0\tbash\ndev\t1\tclaude\n");
-        let session = parse_tmux_session_line("default", "dev\t3\t1", &panes)
-            .expect("expected session");
+        let session =
+            parse_tmux_session_line("default", "dev\t3\t1", &panes).expect("expected session");
         assert_eq!(
             session,
             DashboardTmuxSessionInfo {

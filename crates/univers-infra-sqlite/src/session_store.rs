@@ -1,20 +1,74 @@
-use crate::agent::event::SessionSnapshot;
+use anyhow::Result;
 use chrono::Utc;
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection};
 use std::path::PathBuf;
+use univers_ark_kernel::agent::{
+    event::{HookEvent, SessionSnapshot},
+    repository::SessionRepository,
+};
 
-pub struct Db {
+pub struct SqliteSessionRepository;
+
+struct SqliteSessionStore {
     conn: Connection,
 }
 
-pub struct SessionRow {
-    pub session_id: String,
-    pub cwd: String,
-    pub status: String,
-    pub last_event: Option<String>,
-    pub last_tool: Option<String>,
-    pub started_at: String,
-    pub updated_at: String,
+struct SessionRow {
+    session_id: String,
+    cwd: String,
+    status: String,
+    last_event: Option<String>,
+    last_tool: Option<String>,
+    started_at: String,
+    updated_at: String,
+}
+
+impl SqliteSessionRepository {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for SqliteSessionRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SessionRepository for SqliteSessionRepository {
+    fn list_sessions(&self, include_ended: bool) -> Result<Vec<SessionSnapshot>> {
+        let db = SqliteSessionStore::open().map_err(|e| anyhow::anyhow!("{e}"))?;
+        let rows = db
+            .list_sessions(include_ended)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(rows.into_iter().map(SessionSnapshot::from).collect())
+    }
+
+    fn persist_event(&self, event: &HookEvent) -> Result<()> {
+        let db = SqliteSessionStore::open().map_err(|e| anyhow::anyhow!("{e}"))?;
+        let cwd = event.cwd.as_deref().unwrap_or("unknown").to_owned();
+        let event_name = event.event_name().to_owned();
+        let status = event.status().to_owned();
+        let tool_name = event.tool_name.as_deref();
+        let tool_input = event.tool_input_summary();
+
+        db.upsert_session(&event.session_id, &cwd, &status, &event_name, tool_name)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        db.insert_event(
+            &event.session_id,
+            &event_name,
+            tool_name,
+            tool_input.as_deref(),
+        )
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+        Ok(())
+    }
+
+    fn clean_old(&self, hours: u32) -> Result<usize> {
+        let db = SqliteSessionStore::open().map_err(|e| anyhow::anyhow!("{e}"))?;
+        db.clean_old(hours).map_err(|e| anyhow::anyhow!("{e}"))
+    }
 }
 
 impl From<SessionRow> for SessionSnapshot {
@@ -31,8 +85,8 @@ impl From<SessionRow> for SessionSnapshot {
     }
 }
 
-impl Db {
-    pub fn open() -> Result<Self> {
+impl SqliteSessionStore {
+    fn open() -> rusqlite::Result<Self> {
         let path = db_path();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).ok();
@@ -61,14 +115,14 @@ impl Db {
         Ok(Self { conn })
     }
 
-    pub fn upsert_session(
+    fn upsert_session(
         &self,
         session_id: &str,
         cwd: &str,
         status: &str,
         event_name: &str,
         tool_name: Option<&str>,
-    ) -> Result<()> {
+    ) -> rusqlite::Result<()> {
         let now = Utc::now().to_rfc3339();
         self.conn.execute(
             "INSERT INTO sessions (session_id, cwd, status, last_event, last_tool, started_at, updated_at)
@@ -83,13 +137,13 @@ impl Db {
         Ok(())
     }
 
-    pub fn insert_event(
+    fn insert_event(
         &self,
         session_id: &str,
         event_name: &str,
         tool_name: Option<&str>,
         tool_input: Option<&str>,
-    ) -> Result<()> {
+    ) -> rusqlite::Result<()> {
         let now = Utc::now().to_rfc3339();
         self.conn.execute(
             "INSERT INTO events (session_id, event_name, tool_name, tool_input, created_at)
@@ -99,7 +153,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn list_sessions(&self, include_ended: bool) -> Result<Vec<SessionRow>> {
+    fn list_sessions(&self, include_ended: bool) -> rusqlite::Result<Vec<SessionRow>> {
         let sql = if include_ended {
             "SELECT session_id, cwd, status, last_event, last_tool, started_at, updated_at
              FROM sessions ORDER BY updated_at DESC"
@@ -122,7 +176,7 @@ impl Db {
         rows.collect()
     }
 
-    pub fn clean_old(&self, hours: u32) -> Result<usize> {
+    fn clean_old(&self, hours: u32) -> rusqlite::Result<usize> {
         let cutoff = (Utc::now() - chrono::Duration::hours(i64::from(hours))).to_rfc3339();
         self.conn.execute(
             "DELETE FROM events WHERE session_id IN
