@@ -119,7 +119,9 @@ pub struct SshConfigResolver {
 
 impl SshConfigResolver {
     pub fn from_default_path() -> Result<Self, ResolveError> {
-        let home = env::var("HOME").unwrap_or_else(|_| String::from("~"));
+        let home = env::var("HOME")
+            .or_else(|_| env::var("USERPROFILE"))
+            .unwrap_or_else(|_| String::from("~"));
         Self::from_path(PathBuf::from(home).join(".ssh/config"))
     }
 
@@ -242,7 +244,11 @@ impl ResolvedConfigEntry {
             host: self.hostname.unwrap_or_else(|| alias.to_string()),
             user: self
                 .user
-                .unwrap_or_else(|| env::var("USER").unwrap_or_else(|_| String::from("root"))),
+                .unwrap_or_else(|| {
+                    env::var("USER")
+                        .or_else(|_| env::var("USERNAME"))
+                        .unwrap_or_else(|_| String::from("root"))
+                }),
             port: self.port.unwrap_or(22),
             identity_files: self.identity_files,
             inline_identities: Vec::new(),
@@ -312,7 +318,7 @@ fn parse_config(content: &str) -> Vec<ConfigSection> {
 
 fn expand_tilde(value: &str) -> PathBuf {
     if let Some(stripped) = value.strip_prefix("~/") {
-        if let Ok(home) = env::var("HOME") {
+        if let Ok(home) = env::var("HOME").or_else(|_| env::var("USERPROFILE")) {
             return PathBuf::from(home).join(stripped);
         }
     }
