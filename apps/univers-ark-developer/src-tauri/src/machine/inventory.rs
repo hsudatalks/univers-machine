@@ -6,6 +6,7 @@ use super::{
     profiles::{apply_profile_defaults_to_remote_server, ContainerProfiles},
     repository::{
         read_machine_inventory_snapshot, read_raw_targets_file, save_machine_inventory_snapshot,
+        save_raw_targets_file,
     },
     CachedResolvedInventory, DiscoveredContainer, MachineContainerConfig,
     RemoteContainerServer, ResolvedInventory,
@@ -253,6 +254,63 @@ fn load_cached_server_inventory(server: &RemoteContainerServer) -> crate::machin
     cached_remote_server_inventory(server)
 }
 
+fn containers_from_scan(
+    existing: &[MachineContainerConfig],
+    discovered: &[DiscoveredContainer],
+) -> Vec<MachineContainerConfig> {
+    discovered
+        .iter()
+        .filter(|container| !matches!(container.kind, ManagedContainerKind::Host))
+        .map(|container| {
+            let existing_entry = existing
+                .iter()
+                .find(|entry| entry.name == container.name);
+
+            MachineContainerConfig {
+                id: if !container.id.trim().is_empty() {
+                    container.id.clone()
+                } else {
+                    existing_entry
+                        .map(|entry| entry.id.clone())
+                        .unwrap_or_else(|| container.name.clone())
+                },
+                name: container.name.clone(),
+                kind: container.kind,
+                enabled: existing_entry
+                    .map(|entry| entry.enabled)
+                    .unwrap_or(true),
+                source: container.source.clone(),
+                ssh_user: existing_entry
+                    .filter(|entry| !entry.ssh_user.trim().is_empty())
+                    .map(|entry| entry.ssh_user.clone())
+                    .unwrap_or_else(|| container.ssh_user.clone()),
+                ssh_user_candidates: container.ssh_user_candidates.clone(),
+                label: existing_entry
+                    .filter(|entry| !entry.label.trim().is_empty())
+                    .map(|entry| entry.label.clone())
+                    .unwrap_or_else(|| container.label.clone().unwrap_or_default()),
+                description: existing_entry
+                    .filter(|entry| !entry.description.trim().is_empty())
+                    .map(|entry| entry.description.clone())
+                    .unwrap_or_else(|| container.description.clone().unwrap_or_default()),
+                ipv4: container.ipv4.clone(),
+                status: container.status.clone(),
+                workspace: existing_entry
+                    .map(|entry| entry.workspace.clone())
+                    .unwrap_or_else(|| container.workspace.clone().unwrap_or_default()),
+                services: existing_entry
+                    .filter(|entry| !entry.services.is_empty())
+                    .map(|entry| entry.services.clone())
+                    .unwrap_or_else(|| container.services.clone()),
+                surfaces: existing_entry
+                    .filter(|entry| !entry.surfaces.is_empty())
+                    .map(|entry| entry.surfaces.clone())
+                    .unwrap_or_else(|| container.surfaces.clone()),
+            }
+        })
+        .collect()
+}
+
 pub(crate) fn scan_and_store_server_inventory(server_id: &str) -> Result<ManagedServer, String> {
     let mut raw_targets_file = read_raw_targets_file()?;
     let profiles: ContainerProfiles = raw_targets_file.profiles.clone();
@@ -269,9 +327,24 @@ pub(crate) fn scan_and_store_server_inventory(server_id: &str) -> Result<Managed
         return Err(format!("Unknown server: {}", server_id));
     };
 
-    let server = raw_targets_file.machines[server_index].clone();
-    let discovered = scan_server_containers(&server)?;
+    let server = &raw_targets_file.machines[server_index];
+    let discovered = scan_server_containers(server)?;
     save_machine_inventory_snapshot(server_id, &discovered)?;
+
+    let updated_containers = containers_from_scan(&server.containers, &discovered);
+    let server = raw_targets_file.machines[server_index].clone();
+
+    // Write discovered containers back to machine config
+    let mut persist_targets = read_raw_targets_file()?;
+    if let Some(persist_index) = persist_targets
+        .machines
+        .iter()
+        .position(|m| m.id == server_id)
+    {
+        persist_targets.machines[persist_index].containers = updated_containers;
+        let _ = save_raw_targets_file(&persist_targets);
+    }
+
     let inventory = inventory_from_discovered_containers(
         &server,
         effective_discovered_containers(&server, &discovered),
