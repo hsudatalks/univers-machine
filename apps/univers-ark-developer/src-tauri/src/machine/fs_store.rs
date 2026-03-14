@@ -1,4 +1,5 @@
 use super::targets_file_name;
+use crate::infra::storage_paths::{app_root, univers_config_dir};
 use serde_json::Value;
 use std::{fs, path::PathBuf, sync::OnceLock};
 use tauri::{path::BaseDirectory, AppHandle, Manager, Runtime};
@@ -8,18 +9,6 @@ const BUNDLED_TARGETS_TEMPLATE_NAME: &str = "developer-targets.json";
 fn configured_targets_path() -> &'static OnceLock<PathBuf> {
     static CONFIGURED_TARGETS_PATH: OnceLock<PathBuf> = OnceLock::new();
     &CONFIGURED_TARGETS_PATH
-}
-
-pub(crate) fn univers_config_dir() -> Result<PathBuf, String> {
-    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-        .map(PathBuf::from)
-        .ok_or_else(|| String::from("Failed to resolve user home directory"))?;
-
-    Ok(home.join(".univers"))
-}
-
-pub(super) fn app_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
 pub(crate) fn targets_file_path() -> PathBuf {

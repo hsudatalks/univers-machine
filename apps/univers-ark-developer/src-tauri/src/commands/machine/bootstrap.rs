@@ -1,11 +1,8 @@
 use crate::{
     machine::{
-        read_bootstrap_data, read_server_inventory, scan_and_store_server_inventory,
-        targets_file_path,
+        load_bootstrap_view, load_machine_inventory_view, scan_machine_inventory_view,
     },
     models::{AppBootstrap, ConnectivityState, ManagedServer},
-    runtime::connectivity::apply_connectivity_snapshots,
-    services::runtime::read_runtime_targets_file,
 };
 use tauri::{async_runtime, State};
 
@@ -18,18 +15,7 @@ pub(crate) async fn load_bootstrap(
     let connectivity_state_inner = connectivity_state.inner().clone();
 
     async_runtime::spawn_blocking(move || {
-        let (targets_file, mut servers) = read_bootstrap_data(false)?;
-        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
-        let hydrated_targets_file = read_runtime_targets_file(&tunnel_state_inner)?;
-        let config_path = targets_file_path();
-
-        Ok(AppBootstrap {
-            app_name: "Ark Console".into(),
-            config_path: config_path.display().to_string(),
-            selected_target_id: targets_file.selected_target_id,
-            targets: hydrated_targets_file.targets,
-            machines: servers,
-        })
+        load_bootstrap_view(&tunnel_state_inner, &connectivity_state_inner, false)
     })
     .await
     .map_err(|error| format!("Failed to join bootstrap task: {error}"))?
@@ -44,18 +30,7 @@ pub(crate) async fn refresh_bootstrap(
     let connectivity_state_inner = connectivity_state.inner().clone();
 
     async_runtime::spawn_blocking(move || {
-        let (targets_file, mut servers) = read_bootstrap_data(false)?;
-        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
-        let hydrated_targets_file = read_runtime_targets_file(&tunnel_state_inner)?;
-        let config_path = targets_file_path();
-
-        Ok(AppBootstrap {
-            app_name: "Ark Console".into(),
-            config_path: config_path.display().to_string(),
-            selected_target_id: targets_file.selected_target_id,
-            targets: hydrated_targets_file.targets,
-            machines: servers,
-        })
+        load_bootstrap_view(&tunnel_state_inner, &connectivity_state_inner, false)
     })
     .await
     .map_err(|error| format!("Failed to join refresh bootstrap task: {error}"))?
@@ -68,9 +43,7 @@ pub(crate) async fn load_machine_inventory(
     let connectivity_state_inner = connectivity_state.inner().clone();
 
     async_runtime::spawn_blocking(move || {
-        let mut servers = read_server_inventory(false)?;
-        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
-        Ok(servers)
+        load_machine_inventory_view(&connectivity_state_inner, false)
     })
     .await
     .map_err(|error| format!("Failed to join machine inventory task: {error}"))?
@@ -83,9 +56,7 @@ pub(crate) async fn refresh_machine_inventory(
     let connectivity_state_inner = connectivity_state.inner().clone();
 
     async_runtime::spawn_blocking(move || {
-        let mut servers = read_server_inventory(false)?;
-        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
-        Ok(servers)
+        load_machine_inventory_view(&connectivity_state_inner, false)
     })
     .await
     .map_err(|error| format!("Failed to join refresh machine inventory task: {error}"))?
@@ -99,11 +70,7 @@ pub(crate) async fn scan_machine_inventory(
     let connectivity_state_inner = connectivity_state.inner().clone();
 
     async_runtime::spawn_blocking(move || {
-        let mut server = scan_and_store_server_inventory(&machine_id)?;
-        let mut servers = vec![server.clone()];
-        apply_connectivity_snapshots(&mut servers, &connectivity_state_inner);
-        server = servers.into_iter().next().unwrap_or(server);
-        Ok(server)
+        scan_machine_inventory_view(&machine_id, &connectivity_state_inner)
     })
     .await
     .map_err(|error| format!("Failed to join machine scan task: {error}"))?

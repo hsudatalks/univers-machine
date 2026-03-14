@@ -5,7 +5,7 @@ mod queries;
 use super::store::SecretStore;
 use crate::{
     infra::sqlite::SqliteStore,
-    machine::univers_config_dir,
+    infra::storage_paths::univers_config_dir,
     models::{
         SecretAssignmentInput, SecretAssignmentRecord, SecretCredentialInput,
         SecretCredentialRecord, SecretInventory, SecretManagementDiagnostics, SecretProviderInput,
