@@ -1,10 +1,10 @@
 use crate::models::{BrowserSurface, ContainerWorkspace, DeveloperService};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::RemoteContainerServer;
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct ContainerProfileConfig {
     #[serde(default)]

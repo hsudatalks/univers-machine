@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use super::profiles::ContainerProfileConfig;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct RawTargetsFile {
     pub(super) selected_target_id: Option<String>,
@@ -18,7 +18,7 @@ pub(super) struct RawTargetsFile {
     pub(super) machines: Vec<RemoteContainerServer>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub(super) enum ContainerManagerType {
     #[default]
@@ -29,7 +29,7 @@ pub(super) enum ContainerManagerType {
     Wsl,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub(super) enum ContainerDiscoveryMode {
     #[serde(rename = "host-only", alias = "hostOnly")]
@@ -50,7 +50,7 @@ pub(super) enum MachineOs {
     Windows,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct MachineContainerConfig {
     #[serde(default)]
@@ -82,7 +82,7 @@ pub(super) struct MachineContainerConfig {
     pub(super) surfaces: Vec<BrowserSurface>,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct SshJumpConfig {
     pub(super) host: String,
@@ -95,7 +95,7 @@ pub(super) struct SshJumpConfig {
     pub(super) ssh_credential_id: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct RemoteContainerServer {
     pub(super) id: String,
@@ -154,7 +154,7 @@ pub(super) struct RemoteContainerServer {
     pub(super) containers: Vec<MachineContainerConfig>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct DiscoveredContainer {
     pub(super) id: String,
     pub(super) kind: ManagedContainerKind,
@@ -279,7 +279,7 @@ pub(super) fn detect_os_from_uname(uname_output: &str) -> MachineOs {
     } else if trimmed.is_empty() {
         MachineOs::Auto
     } else {
-        MachineOs::Linux // default for other Unix (FreeBSD, etc.)
+        MachineOs::Linux
     }
 }
 

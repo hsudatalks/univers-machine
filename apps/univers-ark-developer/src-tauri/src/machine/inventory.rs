@@ -1,16 +1,19 @@
 use super::{
     discovery::{
-        cached_remote_server_inventory, discover_remote_server_inventory,
-        inventory_from_scanned_containers, scan_server_containers,
+        cached_remote_server_inventory, inventory_from_discovered_containers,
+        inventory_from_scan_error, scan_server_containers,
     },
-    fs_store::{read_targets_file_content, sanitize_targets_json_content, targets_file_path},
     profiles::{apply_profile_defaults_to_remote_server, ContainerProfiles},
-    repository::{read_raw_targets_file, save_targets_config},
-    CachedResolvedInventory, DiscoveredContainer, MachineContainerConfig, RawTargetsFile,
+    repository::{
+        read_machine_inventory_snapshot, read_raw_targets_file, save_machine_inventory_snapshot,
+    },
+    CachedResolvedInventory, DiscoveredContainer, MachineContainerConfig,
     RemoteContainerServer, ResolvedInventory,
 };
-use crate::models::{DeveloperTarget, ManagedContainerKind, ManagedServer, TargetsFile};
-use serde_json::{json, Value};
+use crate::models::{
+    ContainerWorkspace, DeveloperService, DeveloperTarget, ManagedContainerKind, ManagedServer,
+    TargetsFile,
+};
 use std::sync::{Mutex, OnceLock};
 
 fn targets_cache() -> &'static Mutex<Option<CachedResolvedInventory>> {
@@ -51,9 +54,17 @@ pub(super) fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, S
             .map(|server| {
                 scope.spawn(|| {
                     if force_refresh {
-                        discover_remote_server_inventory(server)
+                        match scan_server_containers(server) {
+                            Ok(containers) => {
+                                let effective =
+                                    effective_discovered_containers(server, &containers);
+                                let _ = save_machine_inventory_snapshot(&server.id, &containers);
+                                inventory_from_discovered_containers(server, effective, true)
+                            }
+                            Err(error) => inventory_from_scan_error(server, error),
+                        }
                     } else {
-                        cached_remote_server_inventory(server)
+                        load_cached_server_inventory(server)
                     }
                 })
             })
@@ -88,11 +99,41 @@ pub(super) fn load_inventory(force_refresh: bool) -> Result<ResolvedInventory, S
     Ok(inventory)
 }
 
-pub(super) fn discovered_container_to_manual_value(
+fn has_workspace_override(workspace: &ContainerWorkspace) -> bool {
+    !workspace.profile.trim().is_empty()
+        || !workspace.default_tool.trim().is_empty()
+        || !workspace.project_path.trim().is_empty()
+        || !workspace.files_root.trim().is_empty()
+        || !workspace.primary_web_service_id.trim().is_empty()
+        || !workspace.tmux_command_service_id.trim().is_empty()
+}
+
+fn merged_container_services(
+    discovered: &DiscoveredContainer,
+    existing: Option<&MachineContainerConfig>,
+) -> Vec<DeveloperService> {
+    existing
+        .filter(|item| !item.services.is_empty())
+        .map(|item| item.services.clone())
+        .unwrap_or_else(|| discovered.services.clone())
+}
+
+fn merged_container_workspace(
+    discovered: &DiscoveredContainer,
+    existing: Option<&MachineContainerConfig>,
+) -> Option<ContainerWorkspace> {
+    if let Some(existing) = existing.filter(|item| has_workspace_override(&item.workspace)) {
+        return Some(existing.workspace.clone());
+    }
+
+    discovered.workspace.clone()
+}
+
+pub(super) fn merge_discovered_container_with_manual_config(
     server: &RemoteContainerServer,
     container: &DiscoveredContainer,
     existing: Option<&MachineContainerConfig>,
-) -> Value {
+) -> DiscoveredContainer {
     let id = if container.id.trim().is_empty() {
         existing
             .map(|item| item.id.clone())
@@ -100,18 +141,6 @@ pub(super) fn discovered_container_to_manual_value(
     } else {
         container.id.clone()
     };
-    let label = container
-        .label
-        .as_ref()
-        .cloned()
-        .or_else(|| existing.map(|item| item.label.clone()))
-        .unwrap_or_default();
-    let description = container
-        .description
-        .as_ref()
-        .cloned()
-        .or_else(|| existing.map(|item| item.description.clone()))
-        .unwrap_or_default();
     let source = if matches!(container.kind, ManagedContainerKind::Host) {
         String::from("host")
     } else if let Some(existing) = existing {
@@ -123,24 +152,6 @@ pub(super) fn discovered_container_to_manual_value(
     } else {
         container.source.clone()
     };
-    let enabled = if matches!(container.kind, ManagedContainerKind::Host) {
-        true
-    } else if let Some(existing) = existing {
-        existing.enabled
-    } else if server.container_name_suffix.trim().is_empty() {
-        true
-    } else {
-        container.name.ends_with(&server.container_name_suffix)
-    };
-    let workspace = existing
-        .map(|item| serde_json::to_value(&item.workspace).unwrap_or_else(|_| json!({})))
-        .unwrap_or_else(|| json!({}));
-    let services = existing
-        .map(|item| serde_json::to_value(&item.services).unwrap_or_else(|_| json!([])))
-        .unwrap_or_else(|| json!([]));
-    let surfaces = existing
-        .map(|item| serde_json::to_value(&item.surfaces).unwrap_or_else(|_| json!([])))
-        .unwrap_or_else(|| json!([]));
     let ssh_user = if matches!(container.kind, ManagedContainerKind::Host) {
         server.ssh_user.clone()
     } else if !container.ssh_user.trim().is_empty() {
@@ -172,33 +183,78 @@ pub(super) fn discovered_container_to_manual_value(
         !candidate.is_empty() && seen_ssh_users.insert(candidate.to_string())
     });
 
-    json!({
-        "id": id,
-        "name": container.name,
-        "kind": container.kind,
-        "enabled": enabled,
-        "source": source,
-        "sshUser": ssh_user,
-        "sshUserCandidates": ssh_user_candidates,
-        "label": label,
-        "description": description,
-        "ipv4": container.ipv4,
-        "status": container.status,
-        "workspace": workspace,
-        "services": services,
-        "surfaces": surfaces
-    })
+    DiscoveredContainer {
+        id,
+        kind: container.kind,
+        name: container.name.clone(),
+        source,
+        ssh_user,
+        ssh_user_candidates,
+        status: container.status.clone(),
+        ipv4: container.ipv4.clone(),
+        label: existing
+            .filter(|item| !item.label.trim().is_empty())
+            .map(|item| item.label.clone())
+            .or_else(|| container.label.clone()),
+        description: existing
+            .filter(|item| !item.description.trim().is_empty())
+            .map(|item| item.description.clone())
+            .or_else(|| container.description.clone()),
+        workspace: merged_container_workspace(container, existing),
+        services: merged_container_services(container, existing),
+        surfaces: existing
+            .filter(|item| !item.surfaces.is_empty())
+            .map(|item| item.surfaces.clone())
+            .unwrap_or_else(|| container.surfaces.clone()),
+    }
+}
+
+fn effective_discovered_containers(
+    server: &RemoteContainerServer,
+    discovered: &[DiscoveredContainer],
+) -> Vec<DiscoveredContainer> {
+    discovered
+        .iter()
+        .map(|container| {
+            let existing = server
+                .containers
+                .iter()
+                .find(|item| item.name == container.name);
+            merge_discovered_container_with_manual_config(server, container, existing)
+        })
+        .filter(|container| {
+            matches!(container.kind, ManagedContainerKind::Host) || {
+                server
+                    .containers
+                    .iter()
+                    .find(|item| item.name == container.name)
+                    .map(|item| item.enabled)
+                    .unwrap_or_else(|| {
+                        server.container_name_suffix.trim().is_empty()
+                            || container.name.ends_with(&server.container_name_suffix)
+                    })
+            }
+        })
+        .collect()
+}
+
+fn load_cached_server_inventory(server: &RemoteContainerServer) -> crate::machine::DiscoveredServerInventory {
+    if let Some(discovered) = read_machine_inventory_snapshot(&server.id)
+        .ok()
+        .flatten()
+    {
+        return inventory_from_discovered_containers(
+            server,
+            effective_discovered_containers(server, &discovered),
+            false,
+        );
+    }
+
+    cached_remote_server_inventory(server)
 }
 
 pub(crate) fn scan_and_store_server_inventory(server_id: &str) -> Result<ManagedServer, String> {
-    let config_path = targets_file_path();
-    let raw_content = read_targets_file_content()?;
-    let sanitized_content = sanitize_targets_json_content(&raw_content)?;
-    let mut raw_json: Value = serde_json::from_str(&sanitized_content)
-        .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))?;
-    let mut raw_targets_file: RawTargetsFile = serde_json::from_str(&sanitized_content)
-        .map_err(|error| format!("Failed to parse {}: {}", config_path.display(), error))?;
-
+    let mut raw_targets_file = read_raw_targets_file()?;
     let profiles: ContainerProfiles = raw_targets_file.profiles.clone();
     let default_profile = raw_targets_file.default_profile.clone();
     raw_targets_file.machines.iter_mut().for_each(|server| {
@@ -210,38 +266,17 @@ pub(crate) fn scan_and_store_server_inventory(server_id: &str) -> Result<Managed
         .iter()
         .position(|server| server.id == server_id)
     else {
-        return Err(format!("Unknown server: {server_id}"));
+        return Err(format!("Unknown server: {}", server_id));
     };
 
     let server = raw_targets_file.machines[server_index].clone();
     let discovered = scan_server_containers(&server)?;
-    let inventory = inventory_from_scanned_containers(&server, discovered.clone());
-    let existing_manual = raw_targets_file.machines[server_index].containers.clone();
-    let manual_values = discovered
-        .iter()
-        .map(|container| {
-            let existing = existing_manual
-                .iter()
-                .find(|item| item.name == container.name);
-            discovered_container_to_manual_value(&server, container, existing)
-        })
-        .collect::<Vec<_>>();
-
-    let Some(remote_servers) = raw_json.get_mut("machines").and_then(Value::as_array_mut) else {
-        return Err(String::from("Config is missing machines."));
-    };
-
-    let Some(server_json) = remote_servers
-        .iter_mut()
-        .find(|server_json| server_json.get("id").and_then(Value::as_str) == Some(server_id))
-    else {
-        return Err(format!("Unknown server: {server_id}"));
-    };
-
-    server_json["containers"] = Value::Array(manual_values);
-    let next_content = serde_json::to_string_pretty(&raw_json)
-        .map_err(|error| format!("Failed to serialize updated config: {error}"))?;
-    save_targets_config(&next_content)?;
+    save_machine_inventory_snapshot(server_id, &discovered)?;
+    let inventory = inventory_from_discovered_containers(
+        &server,
+        effective_discovered_containers(&server, &discovered),
+        false,
+    );
 
     Ok(inventory.server)
 }
@@ -264,7 +299,7 @@ pub(crate) fn resolve_raw_target(target_id: &str) -> Result<DeveloperTarget, Str
     {
         return Ok(target);
     }
-    Err(format!("Unknown target: {target_id}"))
+    Err(format!("Unknown target: {}", target_id))
 }
 
 pub(crate) fn read_bootstrap_data(
