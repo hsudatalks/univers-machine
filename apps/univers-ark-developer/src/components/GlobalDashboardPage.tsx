@@ -189,6 +189,8 @@ export function GlobalDashboardPage({
   const dashboardGridStyle = dashboardGridRows
     ? ({ gridTemplateRows: dashboardGridRows } satisfies CSSProperties)
     : undefined;
+  const hasWorkbenchEntries =
+    overviewContainers.length > 0 || standaloneTargets.length > 0;
 
   return (
     <section className="page-section global-dashboard-page">
@@ -260,54 +262,63 @@ export function GlobalDashboardPage({
               className="server-dashboard-list dashboard-card-list dashboard-card-content dashboard-card-scroll"
               ref={providersContentRef}
             >
-              {machines.map((machine) => {
-                const managedContainers = visibleContainers(machine.containers);
-                const reachable = managedContainers.filter((item) => item.sshReachable).length;
-                const machineMeta = managedContainers.length
-                  ? `${machine.host} · ${managedContainers.length} container(s) · ${reachable} ssh ready`
-                  : `${machine.host} · ${hostAvailabilityLabel(machine.state)}`;
+              {machines.length > 0 ? (
+                machines.map((machine) => {
+                  const managedContainers = visibleContainers(machine.containers);
+                  const reachable = managedContainers.filter((item) => item.sshReachable).length;
+                  const machineMeta = managedContainers.length
+                    ? `${machine.host} · ${managedContainers.length} container(s) · ${reachable} ssh ready`
+                    : `${machine.host} · ${hostAvailabilityLabel(machine.state)}`;
 
-                return (
-                  <div className="server-dashboard-row dashboard-card-row" key={machine.id}>
-                    <div className="server-dashboard-row-copy">
-                      <span className="server-dashboard-row-title">{machine.label}</span>
-                      <span className="server-dashboard-row-meta">
-                        {machineMeta}
-                      </span>
-                    </div>
+                  return (
+                    <div className="server-dashboard-row dashboard-card-row" key={machine.id}>
+                      <div className="server-dashboard-row-copy">
+                        <span className="server-dashboard-row-title">{machine.label}</span>
+                        <span className="server-dashboard-row-meta">
+                          {machineMeta}
+                        </span>
+                      </div>
 
-                    <div className="server-dashboard-row-actions">
-                      <ConnectionStatusLight className="dashboard-row-status" state={machine.state} />
-                      <Badge className="dashboard-row-badge" variant="neutral">
-                        Machine provider
-                      </Badge>
-                      <Button
-                        aria-label={`Edit ${machine.label}`}
-                        className="dashboard-row-icon-button"
-                        onClick={() => {
-                          onEditMachine(machine.id);
-                        }}
-                        size="icon"
-                        title="Machine settings"
-                        variant="ghost"
-                      >
-                        <Settings2 size={14} />
-                      </Button>
-                      <Button
-                        className="dashboard-row-open-button"
-                        onClick={() => {
-                          onOpenMachine(machine.id);
-                        }}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        <Server size={14} />
-                        Open
-                      </Button>
+                      <div className="server-dashboard-row-actions">
+                        <ConnectionStatusLight className="dashboard-row-status" state={machine.state} />
+                        <Badge className="dashboard-row-badge" variant="neutral">
+                          Machine provider
+                        </Badge>
+                        <Button
+                          aria-label={`Edit ${machine.label}`}
+                          className="dashboard-row-icon-button"
+                          onClick={() => {
+                            onEditMachine(machine.id);
+                          }}
+                          size="icon"
+                          title="Machine settings"
+                          variant="ghost"
+                        >
+                          <Settings2 size={14} />
+                        </Button>
+                        <Button
+                          className="dashboard-row-open-button"
+                          onClick={() => {
+                            onOpenMachine(machine.id);
+                          }}
+                          size="sm"
+                          variant="ghost"
+                        >
+                          <Server size={14} />
+                          Open
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              ) : (
+                <div className="dashboard-empty-state">
+                  <span className="dashboard-empty-title">No providers yet</span>
+                  <p className="dashboard-empty-copy">
+                    Add a provider to bring machine hosts and workbenches into the dashboard.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -322,45 +333,80 @@ export function GlobalDashboardPage({
               className="server-dashboard-list dashboard-card-list dashboard-card-content dashboard-card-scroll"
               ref={workbenchesContentRef}
             >
-              {overviewContainers.map(({ container, machine, target }) => {
-                const primary = target ? primaryBrowserSurface(target) : undefined;
-                const webState = primary && target
-                  ? serviceStatuses[serviceKey(target.id, primary.id)]?.state
-                  : undefined;
+              {hasWorkbenchEntries ? (
+                <>
+                  {overviewContainers.map(({ container, machine, target }) => {
+                    const primary = target ? primaryBrowserSurface(target) : undefined;
+                    const webState = primary && target
+                      ? serviceStatuses[serviceKey(target.id, primary.id)]?.state
+                      : undefined;
 
-                return (
-                  <div className="server-dashboard-row dashboard-card-row" key={container.targetId}>
-                    <div className="server-dashboard-row-copy">
-                      <span className="server-dashboard-row-title">{container.label}</span>
-                      <span className="server-dashboard-row-meta">
-                        {machine.label} · {container.ipv4 || "no ip"} · web {webState ?? "unknown"}
-                      </span>
+                    return (
+                      <div className="server-dashboard-row dashboard-card-row" key={container.targetId}>
+                        <div className="server-dashboard-row-copy">
+                          <span className="server-dashboard-row-title">{container.label}</span>
+                          <span className="server-dashboard-row-meta">
+                            {machine.label} · {container.ipv4 || "no ip"} · web {webState ?? "unknown"}
+                          </span>
+                        </div>
+
+                        <div className="server-dashboard-row-actions">
+                          <ConnectionStatusLight
+                            className="dashboard-row-status"
+                            state={container.sshState}
+                            title={container.sshState}
+                          />
+                          {primary ? (
+                            <Badge className="dashboard-row-badge" variant="neutral">
+                              {primary.label}
+                            </Badge>
+                          ) : null}
+                          <Button
+                            aria-label={`Edit ${container.label}`}
+                            className="dashboard-row-icon-button"
+                            onClick={() => {
+                              onEditWorkbench(machine.id);
+                            }}
+                            size="icon"
+                            title="Container settings"
+                            variant="ghost"
+                          >
+                            <Settings2 size={14} />
+                          </Button>
+                          {target ? (
+                            <Button
+                              className="dashboard-row-open-button"
+                              onClick={() => {
+                                onOpenWorkspace(target.id);
+                              }}
+                              size="sm"
+                              variant="ghost"
+                            >
+                              <SquareTerminal size={14} />
+                              Open
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {standaloneTargets.length > 0 ? (
+                    <div className="dashboard-global-section-label">
+                      Standalone
                     </div>
+                  ) : null}
 
-                    <div className="server-dashboard-row-actions">
-                      <ConnectionStatusLight
-                        className="dashboard-row-status"
-                        state={container.sshState}
-                        title={container.sshState}
-                      />
-                      {primary ? (
-                        <Badge className="dashboard-row-badge" variant="neutral">
-                          {primary.label}
-                        </Badge>
-                      ) : null}
-                        <Button
-                          aria-label={`Edit ${container.label}`}
-                          className="dashboard-row-icon-button"
-                          onClick={() => {
-                            onEditWorkbench(machine.id);
-                          }}
-                          size="icon"
-                          title="Container settings"
-                        variant="ghost"
-                      >
-                        <Settings2 size={14} />
-                      </Button>
-                      {target ? (
+                  {standaloneTargets.map((target) => (
+                    <div className="server-dashboard-row dashboard-card-row" key={target.id}>
+                      <div className="server-dashboard-row-copy">
+                        <span className="server-dashboard-row-title">{target.label}</span>
+                        <span className="server-dashboard-row-meta">
+                          Standalone target
+                        </span>
+                      </div>
+
+                      <div className="server-dashboard-row-actions">
                         <Button
                           className="dashboard-row-open-button"
                           onClick={() => {
@@ -372,42 +418,18 @@ export function GlobalDashboardPage({
                           <SquareTerminal size={14} />
                           Open
                         </Button>
-                      ) : null}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-
-              {standaloneTargets.length > 0 ? (
-                <div className="dashboard-global-section-label">
-                  Standalone
+                  ))}
+                </>
+              ) : (
+                <div className="dashboard-empty-state">
+                  <span className="dashboard-empty-title">No workbenches yet</span>
+                  <p className="dashboard-empty-copy">
+                    Host-only providers are already usable. Add container discovery when you want workbench panels here.
+                  </p>
                 </div>
-              ) : null}
-
-              {standaloneTargets.map((target) => (
-                <div className="server-dashboard-row dashboard-card-row" key={target.id}>
-                  <div className="server-dashboard-row-copy">
-                    <span className="server-dashboard-row-title">{target.label}</span>
-                    <span className="server-dashboard-row-meta">
-                      Standalone target
-                    </span>
-                  </div>
-
-                  <div className="server-dashboard-row-actions">
-                    <Button
-                      className="dashboard-row-open-button"
-                      onClick={() => {
-                        onOpenWorkspace(target.id);
-                      }}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      <SquareTerminal size={14} />
-                      Open
-                    </Button>
-                  </div>
-                </div>
-              ))}
+              )}
             </CardContent>
           </Card>
         </div>

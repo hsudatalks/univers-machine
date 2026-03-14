@@ -322,6 +322,29 @@
   margin-top: 0.25rem;
 }
 
+.dashboard-empty-state {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.8rem;
+  border: 1px dashed color-mix(in srgb, var(--border) 74%, transparent);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--secondary) 18%, transparent);
+}
+
+.dashboard-empty-title {
+  color: var(--foreground);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.dashboard-empty-copy {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
 .server-terminals-panel {
   min-height: 0;
   overflow: hidden;
