@@ -3,7 +3,7 @@ use crate::models::{MachineTransport, ManagedContainer, ManagedServer};
 
 use super::super::super::ssh::ssh_destination;
 use super::super::super::{DiscoveredContainer, DiscoveredServerInventory, RemoteContainerServer};
-use super::super::sources::{cached_server_containers, scan_server_containers};
+use super::super::sources::cached_server_containers;
 use super::super::ssh_users::resolve_container_ssh_user;
 use super::target::{build_machine_host_target, build_target_from_container};
 
@@ -213,7 +213,7 @@ fn server_state_for_machine(
     )
 }
 
-fn build_server_inventory(
+pub(crate) fn inventory_from_discovered_containers(
     server: &RemoteContainerServer,
     containers: Vec<DiscoveredContainer>,
     probe_ssh: bool,
@@ -266,48 +266,38 @@ fn build_server_inventory(
     }
 }
 
-pub(crate) fn inventory_from_scanned_containers(
+pub(crate) fn inventory_from_scan_error(
     server: &RemoteContainerServer,
-    containers: Vec<DiscoveredContainer>,
+    error: String,
 ) -> DiscoveredServerInventory {
-    build_server_inventory(server, containers, false)
-}
+    let host_target = build_machine_host_target(server);
+    let (host_reachable, _, host_message) = machine_host_state(server, &host_target.id, true);
+    let message = if host_reachable {
+        format!(
+            "Machine host is ready, but container discovery failed: {}",
+            error
+        )
+    } else {
+        format!(
+            "Machine host is unreachable: {} Container discovery failed: {}",
+            host_message, error
+        )
+    };
 
-pub(crate) fn discover_remote_server_inventory(
-    server: &RemoteContainerServer,
-) -> DiscoveredServerInventory {
-    match scan_server_containers(server) {
-        Ok(containers) => build_server_inventory(server, containers, true),
-        Err(error) => {
-            let host_target = build_machine_host_target(server);
-            let (host_reachable, _, host_message) =
-                machine_host_state(server, &host_target.id, true);
-            let message = if host_reachable {
-                format!(
-                    "Machine host is ready, but container discovery failed: {error}"
-                )
-            } else {
-                format!(
-                    "Machine host is unreachable: {host_message} Container discovery failed: {error}"
-                )
-            };
-
-            DiscoveredServerInventory {
-                server: ManagedServer {
-                    id: server.id.clone(),
-                    host_target_id: host_target.id.clone(),
-                    label: server.label.clone(),
-                    transport: server.transport,
-                    host: server.host.clone(),
-                    description: server.description.clone(),
-                    os: String::from(server.os.as_str()),
-                    state: String::from("error"),
-                    message,
-                    containers: Vec::new(),
-                },
-                available_targets: vec![host_target],
-            }
-        }
+    DiscoveredServerInventory {
+        server: ManagedServer {
+            id: server.id.clone(),
+            host_target_id: host_target.id.clone(),
+            label: server.label.clone(),
+            transport: server.transport,
+            host: server.host.clone(),
+            description: server.description.clone(),
+            os: String::from(server.os.as_str()),
+            state: String::from("error"),
+            message,
+            containers: Vec::new(),
+        },
+        available_targets: vec![host_target],
     }
 }
 
@@ -315,5 +305,5 @@ pub(crate) fn cached_remote_server_inventory(
     server: &RemoteContainerServer,
 ) -> DiscoveredServerInventory {
     let containers = cached_server_containers(server);
-    build_server_inventory(server, containers, false)
+    inventory_from_discovered_containers(server, containers, false)
 }

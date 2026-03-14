@@ -7,7 +7,6 @@ use crate::models::{
     BrowserServiceType, BrowserSurface, ContainerWorkspace, MachineTransport, ManagedContainer,
     ManagedContainerKind,
 };
-use serde_json::Value;
 
 fn fixture_server() -> RemoteContainerServer {
     RemoteContainerServer {
@@ -195,29 +194,20 @@ fn scan_prefers_detected_container_user_over_stale_saved_user() {
         surfaces: vec![],
     };
 
-    let value = super::inventory::discovered_container_to_manual_value(
+    let value = super::inventory::merge_discovered_container_with_manual_config(
         &server,
         &discovered,
         Some(&existing),
     );
 
-    assert_eq!(value.get("sshUser").and_then(Value::as_str), Some("ubuntu"));
+    assert_eq!(value.ssh_user, "ubuntu");
     assert_eq!(
-        value
-            .get("sshUserCandidates")
-            .and_then(Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(ToOwned::to_owned)
-                    .collect::<Vec<_>>()
-            }),
-        Some(vec![
+        value.ssh_user_candidates,
+        vec![
             String::from("ubuntu"),
             String::from("root"),
             String::from("david"),
-        ])
+        ]
     );
 }
 

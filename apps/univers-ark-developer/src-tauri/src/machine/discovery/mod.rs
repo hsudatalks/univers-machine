@@ -6,8 +6,8 @@ use super::RemoteContainerContext;
 use crate::models::{BrowserServiceType, BrowserSurface, ContainerWorkspace, DeveloperService};
 
 pub(super) use self::projection::{
-    cached_remote_server_inventory, discover_remote_server_inventory,
-    inventory_from_scanned_containers,
+    cached_remote_server_inventory, inventory_from_discovered_containers,
+    inventory_from_scan_error,
 };
 pub(super) use self::sources::scan_server_containers;
 #[cfg(test)]

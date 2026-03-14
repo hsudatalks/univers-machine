@@ -2,8 +2,8 @@ mod inventory;
 mod target;
 
 pub(crate) use self::inventory::{
-    cached_remote_server_inventory, discover_remote_server_inventory,
-    inventory_from_scanned_containers,
+    cached_remote_server_inventory, inventory_from_discovered_containers,
+    inventory_from_scan_error,
 };
 #[cfg(test)]
 pub(crate) use self::{

@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ManagedMachine } from "../types";
 import { visibleContainers } from "../lib/container-visibility";
-import { loadTargetsConfig, scanMachineInventory, updateTargetsConfig } from "../lib/tauri";
+import {
+  deleteMachineConfig,
+  loadMachineConfigState,
+  scanMachineInventory,
+  upsertMachineConfig,
+} from "../lib/tauri";
 import {
   createEmptyMachine,
   createEmptyMachineContainer,
   createEmptySshJump,
-  parseTargetsConfig,
-  stringifyTargetsConfig,
   type ContainerDiscoveryMode,
   type MachineConfig,
   type TargetsConfigDocument,
@@ -53,8 +56,7 @@ export function ServerDialog({
 
   const loadMachineFromDisk = useCallback(
     async (machineId?: string | null) => {
-      const raw = await loadTargetsConfig();
-      const parsed = parseTargetsConfig(raw);
+      const parsed = await loadMachineConfigState();
       setConfig(parsed);
 
       if (machineId) {
@@ -144,12 +146,14 @@ export function ServerDialog({
       nextConfig.machines.push(nextServer);
     }
 
-    await updateTargetsConfig(stringifyTargetsConfig(nextConfig));
-    setConfig(nextConfig);
-    setOriginalId(nextServer.id);
-    setForm(nextServer);
+    const persistedConfig = await upsertMachineConfig(nextServer, originalId);
+    const persistedServer =
+      persistedConfig.machines.find((entry) => entry.id === nextServer.id) ?? nextServer;
+    setConfig(persistedConfig);
+    setOriginalId(persistedServer.id);
+    setForm(persistedServer);
 
-    return { nextConfig, nextServer, isNewServer };
+    return { nextConfig: persistedConfig, nextServer: persistedServer, isNewServer };
   };
 
   const updateField = <K extends keyof MachineConfig>(field: K, value: MachineConfig[K]) => {
@@ -309,12 +313,7 @@ export function ServerDialog({
     setSaveMessage(null);
 
     try {
-      const nextConfig: TargetsConfigDocument = {
-        ...config,
-        machines: config.machines.filter((entry) => entry.id !== originalId),
-      };
-
-      await updateTargetsConfig(stringifyTargetsConfig(nextConfig));
+      await deleteMachineConfig(originalId);
       onSaved({ close: true });
       onClose();
     } catch (deleteError) {

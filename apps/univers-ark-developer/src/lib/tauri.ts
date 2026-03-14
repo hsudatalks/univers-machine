@@ -35,6 +35,7 @@ import type {
   TunnelStatusBatch,
   TunnelStatus,
 } from "../types";
+import type { MachineConfig, TargetsConfigDocument } from "./targets-config";
 import { browserSurfaceById } from "./target-services";
 
 const SURFACE_PORT_START = import.meta.env.DEV ? 43000 : 45000;
@@ -641,6 +642,41 @@ export async function updateTargetsConfig(content: string): Promise<void> {
   }
 
   return invoke<void>("update_targets_config", { content });
+}
+
+export async function loadMachineConfigState(): Promise<TargetsConfigDocument> {
+  if (!isTauri()) {
+    return {
+      selectedTargetId: null,
+      defaultProfile: null,
+      profiles: {},
+      machines: [],
+    };
+  }
+
+  return invoke<TargetsConfigDocument>("load_machine_config_state");
+}
+
+export async function upsertMachineConfig(
+  machine: MachineConfig,
+  previousMachineId?: string | null,
+): Promise<TargetsConfigDocument> {
+  if (!isTauri()) {
+    throw new Error("Machine configuration requires the Tauri backend.");
+  }
+
+  return invoke<TargetsConfigDocument>("upsert_machine_config", {
+    machine,
+    previousMachineId: previousMachineId ?? null,
+  });
+}
+
+export async function deleteMachineConfig(machineId: string): Promise<TargetsConfigDocument> {
+  if (!isTauri()) {
+    throw new Error("Machine configuration requires the Tauri backend.");
+  }
+
+  return invoke<TargetsConfigDocument>("delete_machine_config", { machineId });
 }
 
 export async function loadSecretInventory(): Promise<SecretInventory> {
