@@ -154,7 +154,7 @@ pub(crate) fn default_terminal_startup_command() -> String {
 }
 
 fn windows_terminal_startup_command() -> String {
-    String::from("powershell")
+    String::new()
 }
 
 pub(crate) fn host_terminal_startup_command(server: &RemoteContainerServer) -> String {
