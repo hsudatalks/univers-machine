@@ -5,13 +5,17 @@ use crate::{
 use std::{
     fs,
     path::PathBuf,
-    process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(target_os = "macos")]
+use std::process::Command;
+
 #[derive(Debug, Clone)]
 pub(crate) struct BrowserScreenshotRect {
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) x: i32,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) y: i32,
     pub(crate) width: u32,
     pub(crate) height: u32,
