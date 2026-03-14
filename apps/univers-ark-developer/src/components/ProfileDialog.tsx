@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
+import { loadMachineConfigState, upsertProfileConfig } from "../lib/tauri";
 import {
   createDefaultCommandService,
   createDefaultEndpointService,
   createDefaultWebService,
   createEmptyProfile,
-  parseTargetsConfig,
-  stringifyTargetsConfig,
   type ContainerProfileConfig,
   type EditableDeveloperService,
   type TargetsConfigDocument,
@@ -97,8 +95,7 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
   useEffect(() => {
     void (async () => {
       try {
-        const raw = await loadTargetsConfig();
-        const parsed = parseTargetsConfig(raw);
+        const parsed = await loadMachineConfigState();
         setConfig(parsed);
 
         if (profileId && parsed.profiles[profileId]) {
@@ -214,24 +211,17 @@ export function ProfileDialog({ onClose, onSaved, profileId }: ProfileDialogProp
     setSaveMessage(null);
 
     try {
-      const nextConfig = { ...config, profiles: { ...config.profiles } };
-      if (profileId && profileId !== nextProfileId) {
-        delete nextConfig.profiles[profileId];
-      }
-
-      nextConfig.profiles[nextProfileId] = {
+      const persistedConfig = await upsertProfileConfig(nextProfileId, {
         ...form,
         extends: form.extends?.trim() ?? "",
         workspace: {
           ...form.workspace,
           profile: nextProfileId,
         },
-      };
-
-      await updateTargetsConfig(stringifyTargetsConfig(nextConfig));
-      setConfig(nextConfig);
+      }, profileId);
+      setConfig(persistedConfig);
       setCurrentProfileId(nextProfileId);
-      setForm(nextConfig.profiles[nextProfileId]);
+      setForm(persistedConfig.profiles[nextProfileId]);
       setSaveMessage("Saved successfully.");
       onSaved();
     } catch (saveError) {

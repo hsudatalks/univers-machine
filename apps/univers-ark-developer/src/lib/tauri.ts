@@ -35,7 +35,11 @@ import type {
   TunnelStatusBatch,
   TunnelStatus,
 } from "../types";
-import type { MachineConfig, TargetsConfigDocument } from "./targets-config";
+import type {
+  ContainerProfileConfig,
+  MachineConfig,
+  TargetsConfigDocument,
+} from "./targets-config";
 import { browserSurfaceById } from "./target-services";
 
 const SURFACE_PORT_START = import.meta.env.DEV ? 43000 : 45000;
@@ -677,6 +681,58 @@ export async function deleteMachineConfig(machineId: string): Promise<TargetsCon
   }
 
   return invoke<TargetsConfigDocument>("delete_machine_config", { machineId });
+}
+
+export async function importMachineConfigs(
+  machines: MachineConfig[],
+): Promise<TargetsConfigDocument> {
+  if (!isTauri()) {
+    throw new Error("Machine configuration requires the Tauri backend.");
+  }
+
+  return invoke<TargetsConfigDocument>("import_machine_configs", { machines });
+}
+
+export async function upsertProfileConfig(
+  profileId: string,
+  profile: ContainerProfileConfig,
+  previousProfileId?: string | null,
+): Promise<TargetsConfigDocument> {
+  if (!isTauri()) {
+    throw new Error("Profile configuration requires the Tauri backend.");
+  }
+
+  return invoke<TargetsConfigDocument>("upsert_profile_config", {
+    profileId,
+    profile,
+    previousProfileId: previousProfileId ?? null,
+  });
+}
+
+export async function updateDefaultProfile(
+  profileId: string | null,
+): Promise<TargetsConfigDocument> {
+  if (!isTauri()) {
+    throw new Error("Profile configuration requires the Tauri backend.");
+  }
+
+  return invoke<TargetsConfigDocument>("update_default_profile", {
+    profileId,
+  });
+}
+
+export async function moveMachineConfig(
+  machineId: string,
+  direction: -1 | 1,
+): Promise<TargetsConfigDocument> {
+  if (!isTauri()) {
+    throw new Error("Machine configuration requires the Tauri backend.");
+  }
+
+  return invoke<TargetsConfigDocument>("move_machine_config", {
+    machineId,
+    direction,
+  });
 }
 
 export async function loadSecretInventory(): Promise<SecretInventory> {

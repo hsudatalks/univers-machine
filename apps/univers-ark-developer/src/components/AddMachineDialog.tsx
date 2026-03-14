@@ -2,15 +2,13 @@ import { Cloud, Network, Server } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { MachineImportCandidate } from "../types";
 import {
-  loadTargetsConfig,
+  importMachineConfigs,
+  loadMachineConfigState,
   scanSshConfigMachineCandidates,
   scanTailscaleMachineCandidates,
-  updateTargetsConfig,
 } from "../lib/tauri";
 import {
   createEmptyMachine,
-  parseTargetsConfig,
-  stringifyTargetsConfig,
   type MachineConfig,
 } from "../lib/targets-config";
 import { Badge } from "./ui/badge";
@@ -179,19 +177,15 @@ export function AddMachineDialog({
     setScanError(null);
 
     try {
-      const raw = await loadTargetsConfig();
-      const parsed = parseTargetsConfig(raw);
+      const parsed = await loadMachineConfigState();
       const profileId = parsed.defaultProfile ?? Object.keys(parsed.profiles)[0] ?? "";
       const existingIds = new Set(parsed.machines.map((machine) => machine.id));
 
-      parsed.machines = [
-        ...parsed.machines,
-        ...selectedCandidates.map((candidate) =>
+      await importMachineConfigs(
+        selectedCandidates.map((candidate) =>
           importedCandidateToMachine(candidate, profileId, existingIds),
         ),
-      ];
-
-      await updateTargetsConfig(stringifyTargetsConfig(parsed));
+      );
       onImported();
       onClose();
     } catch (error) {

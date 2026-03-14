@@ -8,8 +8,12 @@ import type {
 } from "../types";
 import { visibleContainers } from "../lib/container-visibility";
 import { listBrowserFrameSnapshots } from "../lib/browser-cache";
-import { loadAppDiagnostics, loadTargetsConfig, updateTargetsConfig } from "../lib/tauri";
-import { parseTargetsConfig, stringifyTargetsConfig } from "../lib/targets-config";
+import {
+  loadAppDiagnostics,
+  loadMachineConfigState,
+  moveMachineConfig,
+  updateDefaultProfile as updateDefaultProfileConfig,
+} from "../lib/tauri";
 import { ConnectionStatusLight } from "./ConnectionStatusLight";
 import { ProfileDialog } from "./ProfileDialog";
 import { SecretSettingsSection } from "./SecretSettingsSection";
@@ -59,9 +63,8 @@ export function SettingsPage({
   const [movingMachineId, setMovingMachineId] = useState<string | null>(null);
 
   const refreshProfiles = () => {
-    void loadTargetsConfig()
-      .then((raw) => {
-        const parsed = parseTargetsConfig(raw);
+    void loadMachineConfigState()
+      .then((parsed) => {
         setProfileIds(Object.keys(parsed.profiles).sort());
         setDefaultProfileId(parsed.defaultProfile ?? null);
       })
@@ -72,12 +75,9 @@ export function SettingsPage({
   };
 
   const updateDefaultProfile = (profileId: string | null) => {
-    void loadTargetsConfig()
-      .then(async (raw) => {
-        const parsed = parseTargetsConfig(raw);
-        parsed.defaultProfile = profileId;
-        await updateTargetsConfig(stringifyTargetsConfig(parsed));
-        setDefaultProfileId(profileId);
+    void updateDefaultProfileConfig(profileId)
+      .then((parsed) => {
+        setDefaultProfileId(parsed.defaultProfile ?? null);
         onConfigSaved();
       })
       .catch(() => {});
@@ -90,32 +90,8 @@ export function SettingsPage({
 
     setMovingMachineId(machineId);
 
-    void loadTargetsConfig()
-      .then(async (raw) => {
-        const parsed = parseTargetsConfig(raw);
-        const currentIndex = parsed.machines.findIndex((machine) => machine.id === machineId);
-
-        if (currentIndex < 0) {
-          return;
-        }
-
-        const nextIndex = currentIndex + direction;
-
-        if (nextIndex < 0 || nextIndex >= parsed.machines.length) {
-          return;
-        }
-
-        const nextMachines = [...parsed.machines];
-        const [movedMachine] = nextMachines.splice(currentIndex, 1);
-
-        if (!movedMachine) {
-          return;
-        }
-
-        nextMachines.splice(nextIndex, 0, movedMachine);
-        parsed.machines = nextMachines;
-
-        await updateTargetsConfig(stringifyTargetsConfig(parsed));
+    void moveMachineConfig(machineId, direction)
+      .then(() => {
         onConfigSaved();
       })
       .catch(() => {})

@@ -16,8 +16,10 @@ mod types;
 pub(crate) use self::{
     actions::restart_container,
     application::{
-        delete_machine_config_view, load_bootstrap_view, load_machine_config_document_view,
-        load_machine_inventory_view, scan_machine_inventory_view, upsert_machine_config_view,
+        delete_machine_config_view, import_machine_configs_view, load_bootstrap_view,
+        load_machine_config_document_view, load_machine_inventory_view, move_machine_config_view,
+        scan_machine_inventory_view, update_default_profile_view, upsert_machine_config_view,
+        upsert_profile_config_view,
     },
     chain::resolve_target_ssh_chain,
     config_document::{read_targets_config, save_targets_config},
