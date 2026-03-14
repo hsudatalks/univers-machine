@@ -259,3 +259,13 @@ pub(crate) fn terminal_command_for_server(
         )
     })
 }
+
+/// Expose base ssh flags for the host to the probe module (auto-deploy).
+pub(super) fn base_ssh_flags_for_server(server: &RemoteContainerServer) -> Vec<String> {
+    base_ssh_flags(server, &machine_host_key_alias(server))
+}
+
+/// Expose proxy_jump_for_host to the probe module (auto-deploy).
+pub(super) fn proxy_jump_for_host_pub(server: &RemoteContainerServer) -> Option<String> {
+    proxy_jump_for_host(server)
+}

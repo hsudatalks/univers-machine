@@ -122,6 +122,7 @@ pub(super) fn probe_target_snapshot<R: Runtime>(
     ready_message: &str,
 ) -> ProbeOutcome {
     if active_terminal_target(app, target_id) {
+        eprintln!("[connectivity] {target_id} → active terminal found, marking ready");
         return ProbeOutcome {
             snapshot: ready_snapshot(format!(
                 "Active terminal session is connected. {ready_message}"

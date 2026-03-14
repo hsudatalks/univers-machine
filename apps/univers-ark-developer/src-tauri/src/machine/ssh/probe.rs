@@ -1,10 +1,9 @@
-use crate::infra::shell;
 use crate::machine::{inventory::resolve_raw_target, repository::read_raw_targets_file};
 use crate::models::ManagedContainerKind;
 use std::{fs, path::PathBuf};
 
 use super::super::{ContainerManagerType, RemoteContainerServer};
-use super::{build_host_ssh_command, shell_single_quote};
+use super::shell_single_quote;
 
 fn local_public_key() -> Option<String> {
     let home = if cfg!(windows) {
@@ -29,14 +28,8 @@ fn local_public_key() -> Option<String> {
     None
 }
 
-fn deploy_key_command(
-    server: &RemoteContainerServer,
-    manager_type: ContainerManagerType,
-    container_name: &str,
-    ssh_user: &str,
-    public_key: &str,
-) -> String {
-    let inject_script = format!(
+fn deploy_key_inject_script(ssh_user: &str, public_key: &str) -> String {
+    format!(
         "target_home=$(getent passwd {user} 2>/dev/null | cut -d: -f6); \
 if [ -z \"$target_home\" ]; then \
   if [ {user} = 'root' ]; then \
@@ -51,26 +44,7 @@ grep -Fqx {key} \"$target_home/.ssh/authorized_keys\" || echo {key} >> \"$target
 chmod 600 \"$target_home/.ssh/authorized_keys\"",
         user = shell_single_quote(ssh_user),
         key = shell_single_quote(public_key),
-    );
-
-    let is_orbstack = matches!(manager_type, ContainerManagerType::Orbstack);
-
-    if is_orbstack {
-        format!(
-            "{} \"orb run -m {} -u {} bash -c {}\"",
-            build_host_ssh_command(server, &[], None),
-            container_name,
-            ssh_user,
-            shell_single_quote(&inject_script),
-        )
-    } else {
-        format!(
-            "{} \"lxc exec {} -- bash -c {}\"",
-            build_host_ssh_command(server, &[], None),
-            container_name,
-            shell_single_quote(&inject_script),
-        )
-    }
+    )
 }
 
 fn deploy_key_managers(server: &RemoteContainerServer) -> Vec<ContainerManagerType> {
@@ -84,16 +58,66 @@ fn deploy_key_managers(server: &RemoteContainerServer) -> Vec<ContainerManagerTy
     }
 }
 
+fn deploy_key_remote_command(
+    manager_type: ContainerManagerType,
+    container_name: &str,
+    ssh_user: &str,
+    inject_script: &str,
+) -> String {
+    let is_orbstack = matches!(manager_type, ContainerManagerType::Orbstack);
+    if is_orbstack {
+        format!(
+            "orb run -m {} -u {} bash -c {}",
+            container_name,
+            ssh_user,
+            shell_single_quote(inject_script),
+        )
+    } else {
+        format!(
+            "lxc exec {} -- bash -c {}",
+            container_name,
+            shell_single_quote(inject_script),
+        )
+    }
+}
+
 fn auto_deploy_public_key(
     server: &RemoteContainerServer,
     container_name: &str,
     ssh_user: &str,
 ) -> Option<String> {
     let public_key = local_public_key()?;
+    let inject_script = deploy_key_inject_script(ssh_user, &public_key);
+
     for manager_type in deploy_key_managers(server) {
-        let command =
-            deploy_key_command(server, manager_type, container_name, ssh_user, &public_key);
-        let Ok(output) = shell::shell_command(&command).output() else {
+        let remote_command =
+            deploy_key_remote_command(manager_type, container_name, ssh_user, &inject_script);
+
+        // Build the SSH command directly with proper arg separation to avoid
+        // Windows shell tokenization issues with nested quoting.
+        let ssh_flags = super::build::base_ssh_flags_for_server(server);
+        let mut command = std::process::Command::new("ssh");
+        for flag in &ssh_flags {
+            command.arg(flag);
+        }
+        if let Some(proxy_jump) = super::build::proxy_jump_for_host_pub(server) {
+            command.arg("-J").arg(&proxy_jump);
+        }
+        command.arg("-p").arg(server.port.to_string());
+        command.arg(format!("{}@{}", server.ssh_user, server.host));
+        // Wrap in login shell so PATH includes orb/lxc on macOS (non-interactive SSH
+        // doesn't source login profiles where OrbStack adds its PATH entries).
+        let wrapped_remote = format!("bash -lc {}", shell_single_quote(&remote_command));
+        command.arg(&wrapped_remote);
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        let Ok(output) = command.output() else {
             continue;
         };
 
@@ -110,7 +134,9 @@ fn auto_deploy_public_key(
 
 fn looks_like_auth_failure(error: &str) -> bool {
     let normalized = error.to_ascii_lowercase();
-    normalized.contains("authentication failed") || normalized.contains("permission denied")
+    normalized.contains("authentication failed")
+        || normalized.contains("permission denied")
+        || normalized.contains("disconnected")
 }
 
 pub(crate) fn maybe_auto_deploy_target_public_key(
