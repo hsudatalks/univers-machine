@@ -85,8 +85,10 @@ fn default_import_ssh_user() -> String {
 }
 
 fn scan_ssh_config_machine_candidates_inner() -> Result<Vec<MachineImportCandidate>, String> {
-    let resolver = SshConfigResolver::from_default_path()
-        .map_err(|error| format!("Failed to read ~/.ssh/config: {error}"))?;
+    let resolver = match SshConfigResolver::from_default_path() {
+        Ok(resolver) => resolver,
+        Err(_) => return Ok(Vec::new()),
+    };
 
     let mut candidates = resolver
         .aliases()
