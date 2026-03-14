@@ -6,6 +6,7 @@ mod pty;
 mod sftp;
 mod ssh_config;
 mod types;
+mod vnc_forward;
 
 pub use exec::{execute_chain, probe_http_chain, probe_pty_shell_chain};
 pub use files::{list_directory_chain, read_file_preview_chain, write_file_chain};
@@ -15,7 +16,9 @@ pub use ssh_config::{ResolvedEndpoint, ResolvedEndpointChain, SshConfigResolver}
 pub use types::{
     ClientOptions, ExecOutput, HttpProbeOutput, LocalForward, PtySession, PtySessionEvent,
     PtyShellProbeOutput, RemoteDirectoryListing, RemoteFileEntry, RemoteFilePreview, RusshError,
+    VncForward,
 };
+pub use vnc_forward::start_vnc_ws_forward_chain;
 
 pub async fn execute_alias(
     resolver: &SshConfigResolver,

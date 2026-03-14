@@ -1,4 +1,4 @@
-import { LayoutDashboard, Settings2, SquareTerminal } from "lucide-react";
+import { LayoutDashboard, Monitor, Settings2, SquareTerminal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useHorizontalPanelTrack } from "../hooks/useHorizontalPanelTrack";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -7,6 +7,7 @@ import type { DeveloperTarget, ManagedMachine } from "../types";
 import { TerminalPane } from "./TerminalPane";
 import { Button } from "./ui/button";
 import { ServerDashboardPane } from "./ServerDashboardPane";
+import { ServerDesktopPane } from "./ServerDesktopPane";
 import { ServerTerminalsPane } from "./ServerTerminalsPane";
 
 interface ServerPageProps {
@@ -17,7 +18,7 @@ interface ServerPageProps {
   server: ManagedMachine;
 }
 
-type ServerToolPanel = "dashboard" | "terminals";
+type ServerToolPanel = "dashboard" | "terminals" | "desktop";
 type MobileServerPanel = "terminal" | ServerToolPanel;
 const IS_MAC = navigator.platform.toUpperCase().includes("MAC");
 
@@ -74,7 +75,7 @@ export function ServerPage({
   );
   const isMobileLayout = useMediaQuery("(max-width: 960px)");
   const mobilePanelIds = useMemo<MobileServerPanel[]>(
-    () => ["terminal", "dashboard", "terminals"],
+    () => ["terminal", "dashboard", "terminals", "desktop"],
     [],
   );
   const {
@@ -207,7 +208,7 @@ export function ServerPage({
       const nextIndex =
         event.key === "ArrowLeft"
           ? (currentIndex + focusableTerminalTargetIds.length - 1) %
-            focusableTerminalTargetIds.length
+          focusableTerminalTargetIds.length
           : (currentIndex + 1) % focusableTerminalTargetIds.length;
 
       event.preventDefault();
@@ -290,6 +291,18 @@ export function ServerPage({
               >
                 <Settings2 size={16} />
               </Button>
+              <Button
+                aria-label="Remote desktop"
+                isActive={activeTool === "desktop"}
+                onClick={() => {
+                  setActiveTool("desktop");
+                }}
+                size="icon"
+                title="Remote desktop (VNC)"
+                variant={activeTool === "desktop" ? "default" : "ghost"}
+              >
+                <Monitor size={16} />
+              </Button>
             </div>
           </div>
 
@@ -334,6 +347,20 @@ export function ServerPage({
             >
               <SquareTerminal size={14} />
               Containers
+            </Button>
+            <Button
+              className="content-panel-rail-button"
+              isActive={activeMobilePanel === "desktop"}
+              onClick={() => {
+                setActiveTool("desktop");
+                setActivePanel("desktop");
+                scrollToPanel("desktop");
+              }}
+              size="sm"
+              variant={activeMobilePanel === "desktop" ? "default" : "outline"}
+            >
+              <Monitor size={14} />
+              Desktop
             </Button>
           </div>
         </header>
@@ -381,6 +408,18 @@ export function ServerPage({
             >
               <SquareTerminal size={16} />
             </Button>
+            <Button
+              aria-label="Remote desktop"
+              isActive={activeTool === "desktop"}
+              onClick={() => {
+                setActiveTool("desktop");
+              }}
+              size="icon"
+              title="Remote desktop (VNC)"
+              variant={activeTool === "desktop" ? "default" : "ghost"}
+            >
+              <Monitor size={16} />
+            </Button>
           </div>
         </header>
       )}
@@ -395,9 +434,8 @@ export function ServerPage({
                 ref={registerPanel("terminal")}
               >
                 <article
-                  className={`panel terminal-panel mobile-panel-card ${
-                    focusedTerminalTargetId === terminalTarget?.id ? "is-grid-focused" : ""
-                  }`}
+                  className={`panel terminal-panel mobile-panel-card ${focusedTerminalTargetId === terminalTarget?.id ? "is-grid-focused" : ""
+                    }`}
                   onFocusCapture={() => {
                     if (terminalTarget) {
                       setFocusedTerminalTargetId(terminalTarget.id);
@@ -460,14 +498,25 @@ export function ServerPage({
                   server={server}
                 />
               </div>
+
+              <div
+                className="mobile-panel-slide"
+                data-mobile-panel="desktop"
+                ref={registerPanel("desktop")}
+              >
+                <ServerDesktopPane
+                  active={pageVisible && activeMobilePanel === "desktop"}
+                  targetId={server.hostTargetId}
+                  serverLabel={server.label}
+                />
+              </div>
             </div>
           </div>
         ) : (
           <div className="server-workspace">
             <article
-              className={`panel terminal-panel ${
-                focusedTerminalTargetId === terminalTarget?.id ? "is-grid-focused" : ""
-              }`}
+              className={`panel terminal-panel ${focusedTerminalTargetId === terminalTarget?.id ? "is-grid-focused" : ""
+                }`}
               onFocusCapture={() => {
                 if (terminalTarget) {
                   setFocusedTerminalTargetId(terminalTarget.id);
@@ -526,6 +575,14 @@ export function ServerPage({
                 }}
                 resolveTarget={resolveTarget}
                 server={server}
+              />
+            </div>
+
+            <div className={`server-pane-slot ${activeTool === "desktop" ? "" : "is-hidden"}`}>
+              <ServerDesktopPane
+                active={pageVisible && activeTool === "desktop"}
+                targetId={server.hostTargetId}
+                serverLabel={server.label}
               />
             </div>
           </div>

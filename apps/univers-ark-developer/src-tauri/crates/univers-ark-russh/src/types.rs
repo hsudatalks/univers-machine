@@ -191,3 +191,33 @@ pub(crate) struct LocalForwardInner {
     pub(crate) running: AtomicBool,
     pub(crate) error: Mutex<Option<String>>,
 }
+
+#[derive(Clone)]
+pub struct VncForward {
+    pub(crate) inner: Arc<VncForwardInner>,
+}
+
+impl VncForward {
+    pub fn local_port(&self) -> u16 {
+        self.inner.local_port
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.inner.running.load(Ordering::Acquire)
+    }
+
+    pub fn request_stop(&self) {
+        if let Ok(mut shutdown) = self.inner.shutdown.lock() {
+            if let Some(sender) = shutdown.take() {
+                let _ = sender.send(());
+            }
+        }
+    }
+}
+
+pub(crate) struct VncForwardInner {
+    pub(crate) local_port: u16,
+    pub(crate) shutdown: Mutex<Option<oneshot::Sender<()>>>,
+    pub(crate) running: AtomicBool,
+    pub(crate) error: Mutex<Option<String>>,
+}

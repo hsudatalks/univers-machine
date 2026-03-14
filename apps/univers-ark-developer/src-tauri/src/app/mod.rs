@@ -69,7 +69,9 @@ pub(crate) fn run() {
             commands::secrets::upsert_secret_assignment,
             commands::secrets::delete_secret_assignment,
             commands::settings::save_app_settings,
-            commands::runtime::misc::update_runtime_activity
+            commands::runtime::misc::update_runtime_activity,
+            commands::runtime::vnc::start_vnc_session,
+            commands::runtime::vnc::stop_vnc_session
         ])
         .build(tauri::generate_context!())
         .expect("error while building univers-ark-developer")

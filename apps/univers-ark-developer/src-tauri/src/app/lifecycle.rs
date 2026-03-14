@@ -2,7 +2,7 @@ use crate::{
     machine::initialize_targets_file_path,
     models::{
         ConnectivityState, DashboardState, RuntimeActivityState, SchedulerState, ServiceState,
-        TerminalState, TunnelState,
+        TerminalState, TunnelState, VncState,
     },
     runtime::{
         dashboard::stop_all_dashboard_monitors,
@@ -23,6 +23,7 @@ pub(super) fn manage_app_state<R: Runtime>(builder: tauri::Builder<R>) -> tauri:
         .manage(RuntimeActivityState::default())
         .manage(SchedulerState::default())
         .manage(SecretManagementState::new().expect("failed to initialize secret management"))
+        .manage(VncState::default())
 }
 
 pub(super) fn setup_app<R: Runtime>(app: &mut App<R>) -> Result<(), Box<dyn std::error::Error>> {

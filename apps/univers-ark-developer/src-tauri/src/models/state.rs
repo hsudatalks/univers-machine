@@ -110,3 +110,13 @@ impl Default for RuntimeActivityState {
         }
     }
 }
+
+pub(crate) struct VncSession {
+    pub(crate) forward: univers_ark_russh::VncForward,
+    pub(crate) local_ws_port: u16,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct VncState {
+    pub(crate) sessions: Arc<Mutex<HashMap<String, VncSession>>>,
+}

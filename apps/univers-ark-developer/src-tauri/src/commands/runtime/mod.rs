@@ -3,6 +3,7 @@ pub(crate) mod dashboard;
 pub(crate) mod misc;
 pub(crate) mod terminal;
 pub(crate) mod tunnel;
+pub(crate) mod vnc;
 
 use serde::Deserialize;
 

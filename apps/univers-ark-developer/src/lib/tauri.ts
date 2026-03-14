@@ -352,16 +352,16 @@ function resolveFallbackTarget(target: DeveloperTarget): DeveloperTarget {
   const resolvedServices =
     target.services.length > 0
       ? target.services.map((service) => ({
-          ...service,
-          web: service.web
-            ? resolveFallbackSurface(target.id, service.web)
-            : service.web,
-        }))
+        ...service,
+        web: service.web
+          ? resolveFallbackSurface(target.id, service.web)
+          : service.web,
+      }))
       : resolvedSurfacesToServices(resolvedSurfaces);
 
   return {
     ...target,
-      workspace:
+    workspace:
       target.workspace ?? {
         profile: "",
         defaultTool: "dashboard",
@@ -1185,4 +1185,30 @@ export async function mergeGithubPullRequest(
   }
 
   await invoke("merge_github_pull_request", { method, number });
+}
+
+// ── VNC ────────────────────────────────────────────────────
+
+export interface VncSessionInfo {
+  targetId: string;
+  wsPort: number;
+}
+
+export async function startVncSession(
+  targetId: string,
+  vncPort?: number,
+): Promise<VncSessionInfo> {
+  if (!isTauri()) {
+    throw new Error("VNC requires the Tauri backend.");
+  }
+
+  return invoke<VncSessionInfo>("start_vnc_session", { targetId, vncPort: vncPort ?? null });
+}
+
+export async function stopVncSession(targetId: string): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("VNC requires the Tauri backend.");
+  }
+
+  await invoke("stop_vnc_session", { targetId });
 }
