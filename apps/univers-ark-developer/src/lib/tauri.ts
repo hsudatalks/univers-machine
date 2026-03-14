@@ -63,6 +63,7 @@ const fallbackBootstrapSeed: AppBootstrap = {
       id: "local",
       hostTargetId: "local::host",
       label: "Local",
+      os: "macos",
       transport: "local",
       host: "localhost",
       description: "Local machine.",
@@ -195,6 +196,7 @@ function normalizeManagedContainer(container: RawManagedContainer): ManagedConta
 function normalizeManagedMachine(machine: RawManagedMachine): ManagedMachine {
   return {
     ...machine,
+    os: machine.os ?? "unknown",
     hostTargetId: machine.hostTargetId ?? `${machine.id}::host`,
     containers: machine.containers.map(normalizeManagedContainer),
   };
