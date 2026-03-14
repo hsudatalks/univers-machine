@@ -5,7 +5,7 @@ use std::{
     path::Path,
 };
 use tauri::async_runtime;
-use univers_ark_russh::SshConfigResolver;
+use univers_infra_ssh::SshConfigResolver;
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]

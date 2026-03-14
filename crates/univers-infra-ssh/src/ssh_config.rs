@@ -334,7 +334,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let path = std::env::temp_dir().join(format!("univers-ark-russh-test-{suffix}.config"));
+        let path = std::env::temp_dir().join(format!("univers-infra-ssh-test-{suffix}.config"));
         fs::write(
             &path,
             r#"

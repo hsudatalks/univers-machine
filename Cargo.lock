@@ -6389,7 +6389,7 @@ dependencies = [
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-global-shortcut",
  "tokio",
- "univers-ark-russh",
+ "univers-infra-ssh",
  "url",
 ]
 
@@ -6400,20 +6400,6 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "univers-ark-russh"
-version = "0.1.0"
-dependencies = [
- "futures-util",
- "russh",
- "russh-sftp",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-tungstenite",
 ]
 
 [[package]]
@@ -6465,6 +6451,20 @@ dependencies = [
  "chrono",
  "rusqlite",
  "univers-ark-kernel",
+]
+
+[[package]]
+name = "univers-infra-ssh"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "russh",
+ "russh-sftp",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]

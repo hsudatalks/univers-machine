@@ -21,7 +21,7 @@ tauri = { version = "2.1.1", features = [] }
 tauri-plugin-clipboard-manager = "2"
 tokio = { version = "1", features = ["rt"] }
 url = "2.5"
-univers-ark-russh = { path = "crates/univers-ark-russh" }
+univers-infra-ssh = { path = "../../../crates/univers-infra-ssh" }
 
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
 tauri-plugin-global-shortcut = "2"

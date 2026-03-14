@@ -1,5 +1,5 @@
 [package]
-name = "univers-ark-russh"
+name = "univers-infra-ssh"
 version = "0.1.0"
 edition = "2021"
 

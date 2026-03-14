@@ -1,6 +1,6 @@
-# univers-ark-russh
+# univers-infra-ssh
 
-Standalone `russh` transport proof-of-concept for `univers-ark-developer`.
+Workspace SSH infrastructure crate built on `russh`.
 
 Current scope:
 
@@ -15,21 +15,21 @@ Current scope:
 Smoke examples:
 
 ```bash
-cargo run --manifest-path apps/univers-ark-developer/src-tauri/crates/univers-ark-russh/Cargo.toml \
+cargo run --manifest-path crates/univers-infra-ssh/Cargo.toml \
   --example smoke -- exec automation-dev hostname
 
-cargo run --manifest-path apps/univers-ark-developer/src-tauri/crates/univers-ark-russh/Cargo.toml \
+cargo run --manifest-path crates/univers-infra-ssh/Cargo.toml \
   --example smoke -- http-probe automation-dev 3432 /
 
-cargo run --manifest-path apps/univers-ark-developer/src-tauri/crates/univers-ark-russh/Cargo.toml \
+cargo run --manifest-path crates/univers-infra-ssh/Cargo.toml \
   --example smoke -- local-forward-self-test automation-dev 3432 /
 
-cargo run --manifest-path apps/univers-ark-developer/src-tauri/crates/univers-ark-russh/Cargo.toml \
+cargo run --manifest-path crates/univers-infra-ssh/Cargo.toml \
   --example smoke -- pty-shell-probe automation-dev "hostname"
 
-cargo run --manifest-path apps/univers-ark-developer/src-tauri/crates/univers-ark-russh/Cargo.toml \
+cargo run --manifest-path crates/univers-infra-ssh/Cargo.toml \
   --example smoke -- list-dir automation-dev ~/repos/hvac-workbench
 
-cargo run --manifest-path apps/univers-ark-developer/src-tauri/crates/univers-ark-russh/Cargo.toml \
+cargo run --manifest-path crates/univers-infra-ssh/Cargo.toml \
   --example smoke -- preview-file automation-dev ~/repos/hvac-workbench/package.json
 ```

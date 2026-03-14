@@ -12,7 +12,7 @@ use std::{
     time::Duration,
 };
 use tauri::{AppHandle, Emitter};
-use univers_ark_russh::{
+use univers_infra_ssh::{
     start_pty_session_chain, ClientOptions as RusshClientOptions, PtySessionEvent,
     ResolvedEndpointChain,
 };

@@ -4,7 +4,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
 };
-use univers_ark_russh::{
+use univers_infra_ssh::{
     execute_alias, list_directory_alias, probe_http_alias, probe_pty_shell_alias,
     read_file_preview_alias, start_local_forward_alias, ClientOptions, SshConfigResolver,
 };

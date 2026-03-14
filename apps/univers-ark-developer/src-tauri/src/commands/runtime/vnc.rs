@@ -4,7 +4,7 @@ use crate::{
 };
 use serde::Serialize;
 use tauri::State;
-use univers_ark_russh::{start_vnc_ws_forward_chain, ClientOptions as RusshClientOptions};
+use univers_infra_ssh::{start_vnc_ws_forward_chain, ClientOptions as RusshClientOptions};
 
 const DEFAULT_VNC_PORT: u16 = 5900;
 

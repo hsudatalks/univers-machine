@@ -11,7 +11,7 @@ use super::{
 use crate::models::{MachineTransport, ManagedContainerKind};
 use crate::secrets::load_secret_credential_value;
 use std::path::PathBuf;
-use univers_ark_russh::{ResolvedEndpoint, ResolvedEndpointChain};
+use univers_infra_ssh::{ResolvedEndpoint, ResolvedEndpointChain};
 
 fn identity_paths(paths: &[String]) -> Vec<PathBuf> {
     paths.iter()

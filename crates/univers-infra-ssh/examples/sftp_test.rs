@@ -1,7 +1,7 @@
 //! Quick SFTP test
-//! Run with: cargo run -p univers-ark-russh --example sftp_test
+//! Run with: cargo run -p univers-infra-ssh --example sftp_test
 //!
-//! Usage: cargo run -p univers-ark-russh --example sftp_test -- <host-alias>
+//! Usage: cargo run -p univers-infra-ssh --example sftp_test -- <host-alias>
 
 use std::env;
 
@@ -16,7 +16,7 @@ fn main() {
 
 async fn test_sftp(host_alias: Option<&str>) {
     // Use default SSH config
-    let resolver = match univers_ark_russh::SshConfigResolver::from_default_path() {
+    let resolver = match univers_infra_ssh::SshConfigResolver::from_default_path() {
         Ok(r) => r,
         Err(e) => {
             println!("Failed to load SSH config: {e}");
@@ -26,7 +26,7 @@ async fn test_sftp(host_alias: Option<&str>) {
 
     println!("Available hosts: use -- to specify one");
 
-    let options = univers_ark_russh::ClientOptions::default();
+    let options = univers_infra_ssh::ClientOptions::default();
 
     // Use provided host or ask user
     let host = match host_alias {
@@ -38,7 +38,7 @@ async fn test_sftp(host_alias: Option<&str>) {
     };
 
     println!("\n=== Testing list_directory ===");
-    match univers_ark_russh::list_directory_alias(&resolver, &host, None, &options).await {
+    match univers_infra_ssh::list_directory_alias(&resolver, &host, None, &options).await {
         Ok(listing) => {
             println!("✓ Connected successfully!");
             println!("  Path: {}", listing.path);
@@ -56,7 +56,7 @@ async fn test_sftp(host_alias: Option<&str>) {
     println!("\n=== Testing read_file_preview ===");
     // Try to read .bashrc
     let file_path = ".bashrc";
-    match univers_ark_russh::read_file_preview_alias(&resolver, &host, file_path, &options).await {
+    match univers_infra_ssh::read_file_preview_alias(&resolver, &host, file_path, &options).await {
         Ok(preview) => {
             println!("✓ File preview loaded!");
             println!("  Path: {}", preview.path);

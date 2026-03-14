@@ -6,7 +6,7 @@ use std::{
     sync::{atomic::AtomicBool, Arc, Mutex},
     time::{Duration, Instant},
 };
-use univers_ark_russh::{LocalForward, PtySession};
+use univers_infra_ssh::{LocalForward, PtySession};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

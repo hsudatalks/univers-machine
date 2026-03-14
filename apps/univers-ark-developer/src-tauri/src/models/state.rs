@@ -112,7 +112,7 @@ impl Default for RuntimeActivityState {
 }
 
 pub(crate) struct VncSession {
-    pub(crate) forward: univers_ark_russh::VncForward,
+    pub(crate) forward: univers_infra_ssh::VncForward,
     pub(crate) local_ws_port: u16,
 }
 

@@ -5382,12 +5382,12 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-global-shortcut",
  "tokio",
- "univers-ark-russh",
+ "univers-infra-ssh",
  "url",
 ]
 
 [[package]]
-name = "univers-ark-russh"
+name = "univers-infra-ssh"
 version = "0.1.0"
 dependencies = [
  "russh",
