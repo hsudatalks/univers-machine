@@ -154,8 +154,7 @@ pub(crate) fn default_terminal_startup_command() -> String {
 }
 
 fn windows_terminal_startup_command() -> String {
-    // Ensures user profile is loaded (PATH from Scoop etc.) and suppresses banner
-    String::from("powershell -NoLogo")
+    String::new()
 }
 
 pub(crate) fn host_terminal_startup_command(server: &RemoteContainerServer) -> String {
