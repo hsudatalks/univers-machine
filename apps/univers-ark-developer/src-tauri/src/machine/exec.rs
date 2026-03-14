@@ -10,11 +10,11 @@ use super::{
     RawTargetsFile,
 };
 use crate::{
-    infra::russh::execute_chain_blocking,
+    infra::ssh::execute_chain_blocking,
     models::{DeveloperTarget, ManagedContainerKind},
 };
 use std::process::Output;
-use univers_ark_russh::{ClientOptions as RusshClientOptions, ExecOutput as RusshExecOutput};
+use univers_infra_ssh::{ClientOptions as RusshClientOptions, ExecOutput as RusshExecOutput};
 
 pub(crate) fn execute_target_command_via_russh(
     target_id: &str,

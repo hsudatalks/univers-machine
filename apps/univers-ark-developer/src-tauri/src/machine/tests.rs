@@ -217,12 +217,12 @@ fn live_russh_exec_uses_configured_identity_file() {
     let target_id =
         std::env::var("UNIVERS_ARK_SSH_TARGET").unwrap_or_else(|_| String::from("domain-dev::host"));
     let output =
-        super::execute_target_command_via_russh(&target_id, "printf univers-ark-russh-ok")
+        super::execute_target_command_via_russh(&target_id, "printf univers-infra-ssh-ok")
             .unwrap_or_else(|error| panic!("live russh exec failed for {target_id}: {error}"));
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("univers-ark-russh-ok"),
+        stdout.contains("univers-infra-ssh-ok"),
         "unexpected stdout for {target_id}: {stdout}"
     );
 }

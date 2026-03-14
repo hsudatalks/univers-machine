@@ -1,11 +1,11 @@
 use crate::{
-    infra::russh::{
+    infra::ssh::{
         list_directory_chain_blocking, read_file_preview_chain_blocking, write_file_chain_blocking,
     },
     machine::resolve_target_ssh_chain,
     models::{RemoteDirectoryListing, RemoteFileEntry, RemoteFilePreview},
 };
-use univers_ark_russh::{
+use univers_infra_ssh::{
     ClientOptions as RusshClientOptions, RemoteDirectoryListing as RusshDirectoryListing,
     RemoteFilePreview as RusshFilePreview,
 };

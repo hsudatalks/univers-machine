@@ -4,7 +4,7 @@ use super::{
     LOCAL_MACHINE_DESCRIPTION, LOCAL_MACHINE_HOST, LOCAL_MACHINE_ID, LOCAL_MACHINE_LABEL,
 };
 use crate::infra::{
-    russh::execute_chain_blocking,
+    ssh::execute_chain_blocking,
     sqlite::SqliteStore,
     storage_paths::univers_config_dir,
 };
@@ -19,7 +19,7 @@ use crate::machine::{
 };
 use std::{path::PathBuf, time::Duration};
 use tauri::{AppHandle, Runtime};
-use univers_ark_russh::{
+use univers_infra_ssh::{
     ClientOptions as RusshClientOptions, ResolvedEndpoint, ResolvedEndpointChain,
 };
 

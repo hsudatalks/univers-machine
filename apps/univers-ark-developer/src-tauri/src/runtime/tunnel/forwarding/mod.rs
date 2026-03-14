@@ -2,7 +2,7 @@ mod targets;
 mod vite;
 
 use crate::{
-    infra::russh::start_local_forward_chain_blocking,
+    infra::ssh::start_local_forward_chain_blocking,
     machine::{resolve_raw_target, resolve_target_ssh_chain},
     models::{
         BrowserServiceType, BrowserSurface, MachineTransport, RusshTunnelForward, TunnelState,
@@ -11,7 +11,7 @@ use crate::{
     services::runtime::{surface_key, surface_local_port},
 };
 use tauri::{AppHandle, Runtime};
-use univers_ark_russh::{ClientOptions as RusshClientOptions, ResolvedEndpointChain};
+use univers_infra_ssh::{ClientOptions as RusshClientOptions, ResolvedEndpointChain};
 
 use self::{targets::remote_forward_target, vite::spawn_vite_proxy_session};
 use super::{

@@ -6,7 +6,7 @@ use super::{
     CONNECTIVITY_READY_RECHECK_INTERVAL,
 };
 use crate::{
-    infra::russh::execute_chain_blocking,
+    infra::ssh::execute_chain_blocking,
     machine::{maybe_auto_deploy_target_public_key, resolve_raw_target, resolve_target_ssh_chain},
     models::{
         ConnectivitySnapshot, ConnectivityState, ConnectivityStatusEvent, MachineTransport,
@@ -19,7 +19,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Manager, Runtime};
-use univers_ark_russh::ClientOptions as RusshClientOptions;
+use univers_infra_ssh::ClientOptions as RusshClientOptions;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum ProbeMode {

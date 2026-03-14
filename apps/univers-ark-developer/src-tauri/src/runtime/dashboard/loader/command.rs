@@ -1,10 +1,10 @@
 use crate::{
-    infra::russh::execute_chain_blocking,
+    infra::ssh::execute_chain_blocking,
     machine::{resolve_raw_target, resolve_target_ssh_chain, run_target_shell_command},
     models::DeveloperTarget,
     services::health::dashboard_probe_command,
 };
-use univers_ark_russh::ClientOptions as RusshClientOptions;
+use univers_infra_ssh::ClientOptions as RusshClientOptions;
 
 const DEFAULT_PROJECT_PATH: &str = "~/repos";
 
