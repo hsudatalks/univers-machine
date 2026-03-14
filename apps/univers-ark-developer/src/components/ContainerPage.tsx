@@ -104,6 +104,8 @@ export function ContainerPage({
         : activeTool === "files"
           ? "files"
           : "browser";
+  const isMobileTerminalFocused = isMobileLayout && activeMobilePanel === "terminal";
+  const showBrowserRailAction = Boolean(browserSurface && browserPanel);
 
   useEffect(() => {
     if (!isMobileLayout) {
@@ -121,7 +123,11 @@ export function ContainerPage({
   return (
     <>
       {isMobileLayout ? (
-        <header className="content-header content-header-mobile">
+        <header
+          className={`content-header content-header-mobile ${
+            isMobileTerminalFocused ? "content-header-mobile-terminal" : ""
+          }`}
+        >
           <div className="content-header-mobile-topline">
             <div className="content-header-copy">
               <span className="panel-title">Container</span>
@@ -229,7 +235,7 @@ export function ContainerPage({
               <FolderOpen size={14} />
               Files
             </Button>
-            {browserSurface ? (
+            {showBrowserRailAction ? (
               <Button
                 className="content-panel-rail-button"
                 isActive={activeMobilePanel === "browser"}
@@ -247,6 +253,21 @@ export function ContainerPage({
                 {primaryBrowserSurface?.label ?? "Browser"}
               </Button>
             ) : null}
+          </div>
+          <div className="content-panel-rail-meta">
+            <span className="content-panel-rail-hint">
+              Swipe between panels
+            </span>
+            <div aria-hidden="true" className="content-panel-rail-dots">
+              {mobilePanelIds.map((panelId) => (
+                <span
+                  className={`content-panel-rail-dot ${
+                    activeMobilePanel === panelId ? "is-active" : ""
+                  }`}
+                  key={panelId}
+                />
+              ))}
+            </div>
           </div>
         </header>
       ) : (
@@ -413,6 +434,7 @@ export function ContainerPage({
                 <article className="panel terminal-panel mobile-panel-card">
                   <TerminalPane
                     active={pageVisible && activeMobilePanel === "terminal"}
+                    chromeMode="compact"
                     target={target}
                   />
                 </article>

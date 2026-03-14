@@ -14,6 +14,7 @@ interface TerminalPaneProps {
   active?: boolean;
   actions?: ReactNode;
   autoFocus?: boolean;
+  chromeMode?: "full" | "compact";
   fontScale?: number;
   isFocused?: boolean;
   target: DeveloperTarget;
@@ -37,6 +38,7 @@ export function TerminalPane({
   active = true,
   actions,
   autoFocus = true,
+  chromeMode = "full",
   fontScale = 1,
   isFocused = false,
   target,
@@ -50,6 +52,7 @@ export function TerminalPane({
     () => "Connecting",
   );
   const compactStatus = status === "Connected" || status === "Running";
+  const isCompactChrome = chromeMode === "compact";
 
   useEffect(() => {
     const mountElement = mountRef.current;
@@ -98,10 +101,16 @@ export function TerminalPane({
 
   return (
     <>
-      <header className="panel-header terminal-header">
-        <div className="terminal-copy">
-          <span className="panel-title">{title}</span>
-        </div>
+      <header
+        className={`panel-header terminal-header ${
+          isCompactChrome ? "terminal-header-minimal" : ""
+        }`}
+      >
+        {!isCompactChrome ? (
+          <div className="terminal-copy">
+            <span className="panel-title">{title}</span>
+          </div>
+        ) : null}
 
         <div className="terminal-meta">
           {actions}

@@ -91,6 +91,7 @@ export function ServerPage({
     panelIds: mobilePanelIds,
   });
   const hasSyncedMobilePanelRef = useRef(false);
+  const isMobileTerminalFocused = isMobileLayout && activeMobilePanel === "terminal";
 
   useEffect(() => {
     if (!isMobileLayout) {
@@ -271,7 +272,11 @@ export function ServerPage({
   return (
     <>
       {isMobileLayout ? (
-        <header className="content-header content-header-mobile">
+        <header
+          className={`content-header content-header-mobile ${
+            isMobileTerminalFocused ? "content-header-mobile-terminal" : ""
+          }`}
+        >
           <div className="content-header-mobile-topline">
             <div className="content-header-copy">
               <span className="panel-title">Provider</span>
@@ -363,6 +368,21 @@ export function ServerPage({
               Desktop
             </Button>
           </div>
+          <div className="content-panel-rail-meta">
+            <span className="content-panel-rail-hint">
+              Swipe between host, dashboard, and container terminals
+            </span>
+            <div aria-hidden="true" className="content-panel-rail-dots">
+              {mobilePanelIds.map((panelId) => (
+                <span
+                  className={`content-panel-rail-dot ${
+                    activeMobilePanel === panelId ? "is-active" : ""
+                  }`}
+                  key={panelId}
+                />
+              ))}
+            </div>
+          </div>
         </header>
       ) : (
         <header className="content-header">
@@ -450,6 +470,7 @@ export function ServerPage({
                   {terminalTarget ? (
                     <TerminalPane
                       active={pageVisible && activeMobilePanel === "terminal"}
+                      chromeMode="compact"
                       isFocused={focusedTerminalTargetId === terminalTarget.id}
                       target={terminalTarget}
                       title={`${server.label} host`}
