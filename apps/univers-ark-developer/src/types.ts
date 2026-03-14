@@ -90,6 +90,7 @@ export interface ManagedMachine {
   transport: MachineTransport;
   host: string;
   description: string;
+  os: string;
   state: string;
   message: string;
   containers: ManagedContainer[];

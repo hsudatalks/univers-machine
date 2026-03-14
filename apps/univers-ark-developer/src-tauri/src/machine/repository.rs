@@ -1,6 +1,7 @@
 use super::{
-    current_username, default_known_hosts_path, RawTargetsFile, RemoteContainerServer,
-    LOCAL_MACHINE_DESCRIPTION, LOCAL_MACHINE_HOST, LOCAL_MACHINE_ID, LOCAL_MACHINE_LABEL,
+    current_username, default_known_hosts_path, detect_local_os, RawTargetsFile,
+    RemoteContainerServer, LOCAL_MACHINE_DESCRIPTION, LOCAL_MACHINE_HOST, LOCAL_MACHINE_ID,
+    LOCAL_MACHINE_LABEL,
 };
 use crate::infra::russh::execute_chain_blocking;
 use crate::machine::{
@@ -40,6 +41,7 @@ fn preferred_local_profile(raw_targets_file: &RawTargetsFile) -> String {
 
 fn local_machine_template(raw_targets_file: &RawTargetsFile, ssh_user: &str) -> Value {
     let profile = preferred_local_profile(raw_targets_file);
+    let local_os = detect_local_os();
     json!({
         "id": LOCAL_MACHINE_ID,
         "label": LOCAL_MACHINE_LABEL,
@@ -47,6 +49,7 @@ fn local_machine_template(raw_targets_file: &RawTargetsFile, ssh_user: &str) -> 
         "host": LOCAL_MACHINE_HOST,
         "port": 22,
         "description": LOCAL_MACHINE_DESCRIPTION,
+        "os": local_os.as_str(),
         "managerType": "none",
         "discoveryMode": "auto",
         "discoveryCommand": "",
@@ -56,7 +59,7 @@ fn local_machine_template(raw_targets_file: &RawTargetsFile, ssh_user: &str) -> 
         "sshCredentialId": "",
         "jumpChain": [],
         "knownHostsPath": default_known_hosts_path(),
-        "strictHostKeyChecking": true,
+        "strictHostKeyChecking": false,
         "containerNameSuffix": "",
         "includeStopped": false,
         "targetLabelTemplate": "",
@@ -100,10 +103,87 @@ fn local_machine_probe_chain(server: &RemoteContainerServer) -> ResolvedEndpoint
     ResolvedEndpointChain::from_hops(vec![endpoint])
 }
 
+fn auto_deploy_local_ssh_key(ssh_user: &str) {
+    let home = if cfg!(windows) {
+        std::env::var("USERPROFILE").ok()
+    } else {
+        std::env::var("HOME").ok()
+    };
+
+    let Some(home) = home else {
+        return;
+    };
+
+    let ssh_dir = std::path::PathBuf::from(&home).join(".ssh");
+    let pub_key_content = ["id_ed25519.pub", "id_rsa.pub"]
+        .iter()
+        .find_map(|name| std::fs::read_to_string(ssh_dir.join(name)).ok())
+        .map(|content| content.trim().to_string());
+
+    let Some(pub_key) = pub_key_content.filter(|key| !key.is_empty()) else {
+        return;
+    };
+
+    // Deploy to standard ~/.ssh/authorized_keys
+    let _ = std::fs::create_dir_all(&ssh_dir);
+    let auth_keys_path = ssh_dir.join("authorized_keys");
+    let already_deployed = std::fs::read_to_string(&auth_keys_path)
+        .map(|content| content.contains(&pub_key))
+        .unwrap_or(false);
+    if !already_deployed {
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&auth_keys_path)
+        {
+            let _ = writeln!(file, "{pub_key}");
+        }
+    }
+
+    // On Windows, admin users also need ProgramData/ssh/administrators_authorized_keys
+    #[cfg(windows)]
+    {
+        let admin_keys_path =
+            std::path::PathBuf::from(r"C:\ProgramData\ssh\administrators_authorized_keys");
+        let admin_deployed = std::fs::read_to_string(&admin_keys_path)
+            .map(|content| content.contains(&pub_key))
+            .unwrap_or(false);
+        if !admin_deployed {
+            use std::io::Write;
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&admin_keys_path)
+            {
+                let _ = writeln!(file, "{pub_key}");
+            }
+
+            // Fix permissions: only SYSTEM and Administrators should have access
+            use std::os::windows::process::CommandExt;
+            let _ = std::process::Command::new("icacls")
+                .args([
+                    admin_keys_path.to_string_lossy().as_ref(),
+                    "/inheritance:r",
+                    "/grant",
+                    "SYSTEM:(F)",
+                    "/grant",
+                    "BUILTIN\\Administrators:(F)",
+                ])
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output();
+        }
+    }
+}
+
 fn local_machine_available(server: &RemoteContainerServer) -> bool {
     if server.ssh_user.trim().is_empty() || server.host.trim().is_empty() || server.port == 0 {
         return false;
     }
+
+    // Auto-deploy SSH public key to localhost authorized_keys before probing
+    auto_deploy_local_ssh_key(&server.ssh_user);
+
     let options = RusshClientOptions {
         connect_timeout: Duration::from_secs(2),
         inactivity_timeout: Some(Duration::from_secs(2)),

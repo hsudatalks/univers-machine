@@ -156,6 +156,12 @@
   color: var(--text-2);
 }
 
+.sidebar-os-icon {
+  font-size: 0.82rem;
+  line-height: 1;
+  color: var(--text-2);
+}
+
 .sidebar-node.is-active .sidebar-node-copy svg,
 .sidebar-node.is-branch-active .sidebar-node-copy svg {
   color: currentColor;

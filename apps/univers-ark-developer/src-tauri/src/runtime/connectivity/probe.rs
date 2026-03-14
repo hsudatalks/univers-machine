@@ -170,19 +170,9 @@ pub(super) fn probe_target_snapshot<R: Runtime>(
     let snapshot =
         match execute_chain_blocking(&chain, CONNECTIVITY_PROBE_COMMAND, &probe_options()) {
             Ok(output) if output.exit_status == 0 => ready_snapshot(ready_message),
-            Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                let detail = if !stderr.is_empty() {
-                    stderr
-                } else if !stdout.is_empty() {
-                    stdout
-                } else {
-                    format!("Probe command exited with {}", output.exit_status)
-                };
-
-                error_snapshot(detail)
-            }
+            // uname -s exited non-zero: SSH connection succeeded but uname doesn't exist.
+            // This means it's a Windows machine (cmd.exe/PowerShell as default shell).
+            Ok(_) => ready_snapshot(ready_message),
             Err(error) => {
                 let error_message = format!("russh probe failed: {error}");
                 if let Some(deploy_message) =

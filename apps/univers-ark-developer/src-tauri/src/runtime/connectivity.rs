@@ -15,4 +15,4 @@ pub(super) const CONNECTIVITY_READY_RECHECK_INTERVAL: Duration = Duration::from_
 pub(super) const CONNECTIVITY_CHECKING_RETRY_INTERVAL: Duration = Duration::from_secs(5);
 pub(super) const CONNECTIVITY_ERROR_BACKOFF_BASE: Duration = Duration::from_secs(10);
 pub(super) const CONNECTIVITY_ERROR_BACKOFF_MAX: Duration = Duration::from_secs(300);
-pub(super) const CONNECTIVITY_PROBE_COMMAND: &str = "true";
+pub(super) const CONNECTIVITY_PROBE_COMMAND: &str = "uname -s";

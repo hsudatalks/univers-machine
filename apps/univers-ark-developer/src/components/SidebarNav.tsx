@@ -119,7 +119,15 @@ export function SidebarNav({
                       type="button"
                     >
                       <span className="sidebar-node-copy">
-                        <Server size={14} />
+                        {machine.os === "windows" ? (
+                          <span className="sidebar-os-icon" title="Windows">⊞</span>
+                        ) : machine.os === "macos" ? (
+                          <span className="sidebar-os-icon" title="macOS">⌘</span>
+                        ) : machine.os === "linux" ? (
+                          <span className="sidebar-os-icon" title="Linux">🐧</span>
+                        ) : (
+                          <Server size={14} />
+                        )}
                         <span className="sidebar-node-label">{machine.label}</span>
                       </span>
 

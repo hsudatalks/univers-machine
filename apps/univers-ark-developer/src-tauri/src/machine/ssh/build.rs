@@ -153,11 +153,19 @@ pub(crate) fn default_terminal_startup_command() -> String {
     String::from("exec /bin/zsh -l || exec /bin/bash -l || exec /bin/sh -l")
 }
 
+fn windows_terminal_startup_command() -> String {
+    String::from("powershell")
+}
+
 pub(crate) fn host_terminal_startup_command(server: &RemoteContainerServer) -> String {
-    if server.host_terminal_startup_command.trim().is_empty() {
-        default_terminal_startup_command()
+    if !server.host_terminal_startup_command.trim().is_empty() {
+        return server.host_terminal_startup_command.trim().to_string();
+    }
+
+    if server.os.is_windows() {
+        windows_terminal_startup_command()
     } else {
-        server.host_terminal_startup_command.trim().to_string()
+        default_terminal_startup_command()
     }
 }
 

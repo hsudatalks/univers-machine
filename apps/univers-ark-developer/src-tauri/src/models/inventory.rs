@@ -46,6 +46,7 @@ pub(crate) struct ManagedServer {
     pub(crate) transport: MachineTransport,
     pub(crate) host: String,
     pub(crate) description: String,
+    pub(crate) os: String,
     pub(crate) state: String,
     pub(crate) message: String,
     pub(crate) containers: Vec<ManagedContainer>,

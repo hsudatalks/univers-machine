@@ -2,7 +2,7 @@ use crate::models::{
     BrowserSurface, ContainerWorkspace, DeveloperService, DeveloperTarget, MachineTransport,
     ManagedContainerKind, ManagedServer, TargetsFile,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::profiles::ContainerProfileConfig;
@@ -36,6 +36,17 @@ pub(super) enum ContainerDiscoveryMode {
     #[default]
     Auto,
     Manual,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum MachineOs {
+    #[default]
+    #[serde(alias = "")]
+    Auto,
+    Linux,
+    Macos,
+    Windows,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -94,6 +105,8 @@ pub(super) struct RemoteContainerServer {
     #[serde(default = "default_ssh_port")]
     pub(super) port: u16,
     pub(super) description: String,
+    #[serde(default)]
+    pub(super) os: MachineOs,
     #[serde(default)]
     pub(super) manager_type: ContainerManagerType,
     #[serde(default)]
@@ -245,5 +258,41 @@ pub(super) fn targets_file_name() -> &'static str {
         "univers-ark-developer.dev.json"
     } else {
         "univers-ark-developer.json"
+    }
+}
+
+pub(super) fn detect_local_os() -> MachineOs {
+    match std::env::consts::OS {
+        "windows" => MachineOs::Windows,
+        "macos" => MachineOs::Macos,
+        _ => MachineOs::Linux,
+    }
+}
+
+pub(super) fn detect_os_from_uname(uname_output: &str) -> MachineOs {
+    let trimmed = uname_output.trim();
+    if trimmed.eq_ignore_ascii_case("darwin") {
+        MachineOs::Macos
+    } else if trimmed.eq_ignore_ascii_case("linux") {
+        MachineOs::Linux
+    } else if trimmed.is_empty() {
+        MachineOs::Auto
+    } else {
+        MachineOs::Linux // default for other Unix (FreeBSD, etc.)
+    }
+}
+
+impl MachineOs {
+    pub(super) fn is_windows(self) -> bool {
+        matches!(self, MachineOs::Windows)
+    }
+
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            MachineOs::Auto => "auto",
+            MachineOs::Linux => "linux",
+            MachineOs::Macos => "macos",
+            MachineOs::Windows => "windows",
+        }
     }
 }
