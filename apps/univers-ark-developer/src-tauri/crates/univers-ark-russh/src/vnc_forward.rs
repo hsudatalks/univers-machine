@@ -138,7 +138,7 @@ async fn handle_vnc_ws_connection(
             Ok::<_, RusshError>(())
         } => { let _ = result; }
         result = async {
-            let mut buf = vec![0u8; 65536];
+            let mut buf = vec![0u8; 131_072];
             loop {
                 let n = ssh_read.read(&mut buf).await.map_err(RusshError::Io)?;
                 if n == 0 {

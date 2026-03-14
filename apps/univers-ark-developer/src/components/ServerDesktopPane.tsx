@@ -189,9 +189,13 @@ export function ServerDesktopPane({
                         resizeSession
                         focusOnClick
                         autoConnect
+                        qualityLevel={2}
+                        compressionLevel={9}
+                        showDotCursor
                         style={{
                             width: "100%",
                             height: "100%",
+                            cursor: "default",
                             display: (active && state.kind !== "credentials") ? "block" : "none",
                         }}
                         onCredentialsRequired={() => {
