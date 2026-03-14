@@ -139,6 +139,9 @@ fn client_config(options: &ClientOptions) -> Arc<client::Config> {
         inactivity_timeout: options.inactivity_timeout,
         keepalive_interval: options.keepalive_interval,
         keepalive_max: options.keepalive_max,
+        // Larger window for high-throughput channels (VNC framebuffer data)
+        window_size: 4 * 1024 * 1024,
+        maximum_packet_size: 128 * 1024,
         preferred: Preferred {
             kex: std::borrow::Cow::Owned(vec![
                 russh::kex::CURVE25519_PRE_RFC_8731,

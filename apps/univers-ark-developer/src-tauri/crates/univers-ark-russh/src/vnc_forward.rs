@@ -98,14 +98,14 @@ async fn handle_vnc_ws_connection(
     remote_host: &str,
     remote_port: u16,
 ) -> Result<(), RusshError> {
-    eprintln!("[vnc] ws connection accepted, upgrading to websocket...");
+    // Disable Nagle's algorithm for lower latency on the local WS connection
+    let _ = tcp_stream.set_nodelay(true);
+
     let ws_stream = tokio_tungstenite::accept_async(tcp_stream)
         .await
         .map_err(|error| {
-            eprintln!("[vnc] websocket handshake failed: {error}");
             RusshError::ForwardTask(format!("websocket handshake failed: {error}"))
         })?;
-    eprintln!("[vnc] websocket handshake OK, opening SSH channel to {remote_host}:{remote_port}...");
 
     let channel = handle
         .channel_open_direct_tcpip(
@@ -116,10 +116,8 @@ async fn handle_vnc_ws_connection(
         )
         .await
         .map_err(|error| {
-            eprintln!("[vnc] SSH channel_open_direct_tcpip failed: {error}");
             error
         })?;
-    eprintln!("[vnc] SSH channel opened OK, starting VNC data relay...");
     let ssh_stream = channel.into_stream();
     let (mut ssh_read, mut ssh_write) = tokio::io::split(ssh_stream);
     let (mut ws_write, mut ws_read) = ws_stream.split();
@@ -130,6 +128,7 @@ async fn handle_vnc_ws_connection(
                 match msg {
                     Ok(Message::Binary(data)) => {
                         ssh_write.write_all(&data).await.map_err(RusshError::Io)?;
+                        ssh_write.flush().await.map_err(RusshError::Io)?;
                     }
                     Ok(Message::Close(_)) | Err(_) => break,
                     _ => {}
