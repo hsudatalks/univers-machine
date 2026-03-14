@@ -25,12 +25,23 @@ fn default_discovery_command_for_manager(manager_type: ContainerManagerType) -> 
 }
 
 fn discovery_managers(server: &RemoteContainerServer) -> Vec<ContainerManagerType> {
+    use super::super::MachineOs;
+
     match server.manager_type {
-        ContainerManagerType::None => vec![
-            ContainerManagerType::Orbstack,
-            ContainerManagerType::Docker,
-            ContainerManagerType::Lxd,
-        ],
+        ContainerManagerType::None => {
+            let mut managers = Vec::new();
+            // OrbStack is macOS-only
+            if matches!(server.os, MachineOs::Macos | MachineOs::Auto) {
+                managers.push(ContainerManagerType::Orbstack);
+            }
+            // Docker is available on all platforms
+            managers.push(ContainerManagerType::Docker);
+            // LXD is Linux-only
+            if matches!(server.os, MachineOs::Linux | MachineOs::Auto) {
+                managers.push(ContainerManagerType::Lxd);
+            }
+            managers
+        }
         manager_type => vec![manager_type],
     }
 }
@@ -102,6 +113,9 @@ fn is_ignorable_discovery_error(error: &str) -> bool {
         || normalized.contains("no such file or directory")
         || normalized.contains("not installed")
         || normalized.contains("unknown command")
+        || normalized.contains("not recognized")
+        || normalized.contains("eof while parsing")
+        || normalized.contains("is not recognized as")
 }
 
 fn manager_type_label(manager_type: ContainerManagerType) -> &'static str {
