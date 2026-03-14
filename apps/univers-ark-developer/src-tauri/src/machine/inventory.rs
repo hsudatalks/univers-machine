@@ -155,16 +155,10 @@ pub(super) fn merge_discovered_container_with_manual_config(
     };
     let ssh_user = if matches!(container.kind, ManagedContainerKind::Host) {
         server.ssh_user.clone()
+    } else if let Some(existing) = existing.filter(|item| !item.ssh_user.trim().is_empty()) {
+        existing.ssh_user.clone()
     } else if !container.ssh_user.trim().is_empty() {
         container.ssh_user.clone()
-    } else if let Some(existing) = existing {
-        if !existing.ssh_user.trim().is_empty() {
-            existing.ssh_user.clone()
-        } else if !server.container_ssh_user.trim().is_empty() {
-            server.container_ssh_user.clone()
-        } else {
-            server.ssh_user.clone()
-        }
     } else if !server.container_ssh_user.trim().is_empty() {
         server.container_ssh_user.clone()
     } else {
