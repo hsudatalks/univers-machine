@@ -237,7 +237,9 @@ fn remove_known_host_line(path: &PathBuf, host: &str, port: u16) {
 
 fn default_identity_files() -> Vec<PathBuf> {
     let mut paths = Vec::new();
-    let home = env::var("HOME").ok();
+    let home = env::var("HOME")
+        .or_else(|_| env::var("USERPROFILE"))
+        .ok();
     let Some(home) = home else {
         return paths;
     };
